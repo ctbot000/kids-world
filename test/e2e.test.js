@@ -22,7 +22,8 @@ import { latestNews, NEWS } from '../public/js/news.js';
 import { CHAPTERS, firstStage, stagesOf } from '../public/js/shared/isle-story.js';
 import { MONSTER_LOG } from '../public/js/shared/stickers.js';
 import { CLASS_SIZE } from '../public/js/shared/school.js';
-import { LEARNT_AFTER, QUESTION_BANKS, QUIZ_LEVELS } from '../public/js/shared/quiz.js';
+import { QUESTION_BANKS, questionKey, QUIZ_LEVELS } from '../public/js/shared/quiz.js';
+import { LEARNT_AFTER } from '../public/js/shared/quizbook.js';
 import { GOLDEN, RECIPES } from '../public/js/shared/cooking.js';
 import { VESSEL } from '../public/js/render/kitchen.js';
 import { STUDY_SIZE } from '../public/js/shared/study.js';
@@ -4493,6 +4494,172 @@ test('a login made on one device logs in another: what each made comes along, th
   }
 });
 
+// For openPlayer: a device that has been logged in on before (as the keeper's
+// store says it: { player, token, username }), with these things of its
+// player's on it, by their storage keys.
+function loggedIn({ player, token, username }, things = {}) {
+  const profile = { name: 'Sunny Otter', look: { animal: 'fox' }, seenHelp: true, settings: { studs: false, music: 0, sound: 0, quality: 'low' } };
+  const kept = [['kidsworld.who', { player, token, username }], ...Object.entries({ profile, ...things }).map(([key, value]) => [`kidsworld.@${player}.${key}`, value])];
+  return `if (!localStorage.getItem('kidsworld.who')) for (const [key, value] of ${JSON.stringify(kept)}) localStorage.setItem(key, JSON.stringify(value));`;
+}
+// What of a quiz book is on a page's device.
+const quizKeys = (page) => page.evaluate(() => Object.keys(localStorage).filter((key) => key.includes('quiz')).sort());
+
+test('your quiz book is kept by the keeper, one for all your devices and on none of them: the ones they had go into it, and answers wait for it while it is away', { skip }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
+  const identity = await createIdentity(dir);
+  let keeper = await keeperOnline(identity, dir);
+  const games = createGameServer({ log: () => {}, keeperConfig: publicConfig(identity, signal) });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const url = `http://127.0.0.1:${games.address().port}/?p2p=1&signal=${encodeURIComponent(signal)}`;
+  const made = await keeper.store.makeLogin(KeeperStore.deviceId('a1'.repeat(16)), 'rocket-apple7', { name: 'Sunny Otter', look: { animal: 'fox' } }, { username: 'otter' });
+  const again = await keeper.store.login('otter', 'rocket-apple7');
+  // From when each device kept a book of its own: on the tablet, every Year 2
+  // question is learnt but a class of them, the first of those right twice in
+  // a row; on the phone, the second is.
+  const bank = QUESTION_BANKS.junior.map(questionKey);
+  const left = bank.slice(0, CLASS_SIZE);
+  const onTablet = Object.fromEntries([[left[0], LEARNT_AFTER - 1], ...bank.slice(CLASS_SIZE).map((q) => [q, LEARNT_AFTER])]);
+  const tablet = await openPlayer(url, { name: 'Guest One' }, loggedIn(made, { quizbook: { junior: onTablet } }));
+  const phone = await openPlayer(url, { name: 'Guest Two' }, loggedIn(again, { quizbook: { junior: { [left[1]]: LEARNT_AFTER - 1 } } }));
+  // How many times in a row each question of the class has been right, in the
+  // book at the keeper, and as a page has it, with nothing waiting there.
+  const atKeeper = (want) =>
+    eventually(async () => {
+      const { book } = await keeper.store.openQuizBook(made.player);
+      return left.map((q) => book.junior?.[q] ?? 0).join() === want;
+    });
+  const onPage = (page, want) =>
+    until(
+      page,
+      ([left, want]) => {
+        const { here, pages, answers } = window.kidsWorld.quizBook;
+        return here && !answers.length && left.map((q) => pages.junior[q] ?? 0).join() === want;
+      },
+      [left, want],
+    );
+  // What the window to pick a class says: under Year 2, and whether the book has not come.
+  const picker = (page) => page.evaluate(() => [document.querySelector('#modal [data-level="junior"] .quiz-sub').textContent, !document.querySelector('#modal .quiz-book-note').hidden]);
+  try {
+    // Both go into the one at the keeper, which comes to both, and off the devices.
+    await atKeeper('2,2,0');
+    for (const page of [tablet, phone]) {
+      await onPage(page, '2,2,0');
+      assert.deepEqual(await quizKeys(page), []);
+    }
+
+    // A class on the tablet, of the three questions not learnt yet, all right.
+    await makeIsland(tablet, { online: false, theme: 'Flat Land' });
+    await tablet.evaluate(() => window.kidsWorld.game.startClass('junior'));
+    assert.deepEqual((await tablet.evaluate(() => window.kidsWorld.game.quiz.questions.map((ask) => ask.key))).sort(), [...left].sort());
+    for (let i = 0; i < CLASS_SIZE; i++) {
+      const right = await tablet.evaluate((i) => window.kidsWorld.game.quiz.questions[i].answer, i);
+      await clickSwitch(tablet, `.quiz-answer:nth-child(${right + 1}):not(:disabled)`);
+      await until(tablet, () => document.querySelector('.quiz-verdict'));
+      await clickSwitch(tablet, '.quiz-box button.green');
+    }
+    await until(tablet, () => document.querySelector('.quiz-result.perfect'));
+    // Filed at the keeper, and on the phone at once, with nothing on either.
+    await atKeeper('3,3,1');
+    for (const page of [tablet, phone]) {
+      await onPage(page, '3,3,1');
+      assert.deepEqual(await quizKeys(page), []);
+    }
+    await makeIsland(phone, { online: false, theme: 'Flat Land' });
+    await phone.evaluate(() => window.kidsWorld.ui.classDialog());
+    assert.deepEqual(await picker(phone), [`🏅 ${bank.length - 1} learnt`, false]);
+    await phone.keyboard.press('Escape');
+
+    // The keeper goes away: the phone asks the one question left, and the
+    // answer waits there, over a reload, which says the book has not come.
+    await keeper.stop();
+    await until(phone, () => window.kidsWorld.keeper.state !== 'ready');
+    const asked = await phone.evaluate(() => {
+      const g = window.kidsWorld.game;
+      g.startClass('junior');
+      const keys = g.quiz.questions.map((ask) => ask.key);
+      g.quizAnswer(g.quiz.questions[0].answer);
+      return keys;
+    });
+    assert.deepEqual(asked, [left[2]]);
+    assert.equal(await phone.evaluate((q) => window.kidsWorld.quizBook.pages.junior[q], left[2]), 2);
+    assert.deepEqual(await quizKeys(phone), [`kidsworld.@${made.player}.quizanswers`], 'only what the keeper does not have');
+    await reloadsAfter(phone, () => phone.reload());
+    await makeIsland(phone, { online: false, theme: 'Flat Land' });
+    await phone.evaluate(() => window.kidsWorld.ui.classDialog());
+    assert.deepEqual(await picker(phone), ['', true], 'the quizzes wait for nobody');
+    assert.equal(await phone.evaluate(() => window.kidsWorld.quizBook.answers.length), 1);
+
+    // Back (and started again, so out of its folder), it has the answer, and
+    // the phone the book, in the window that is open too.
+    keeper = await keeperOnline(identity, dir);
+    for (const page of [tablet, phone]) {
+      await until(page, () => ['away', 'ready'].includes(window.kidsWorld.keeper.state));
+      await page.evaluate(() => window.dispatchEvent(new Event('online')));
+    }
+    await atKeeper('3,3,2');
+    await until(phone, (n) => document.querySelector('#modal .quiz-book-note').hidden && document.querySelector('#modal [data-level="junior"] .quiz-sub').textContent === `🏅 ${n} learnt`, bank.length - 1);
+    for (const page of [tablet, phone]) {
+      await onPage(page, '3,3,2');
+      assert.deepEqual(await quizKeys(page), []);
+    }
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await tablet.browserContext().close();
+    await phone.browserContext().close();
+    await keeper.stop();
+    await games.shutdown();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('a keeper running code from before quiz books: the quizzes go by what the device has, the rest goes on, and all of it goes in the book once the keeper is updated', { skip }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
+  const identity = await createIdentity(dir);
+  const keeper = await keeperOnline(identity, dir);
+  const said = [];
+  keeper.log = (line) => said.push(String(line));
+  const handle = keeper.handle.bind(keeper);
+  keeper.handle = async (conn, msg) => {
+    if (conn.folder && ['quizbook', 'quiz'].includes(msg.t)) {
+      keeper.unknown(msg.t);
+      throw new KeepError('bad', 'The keeper does not know that message.');
+    }
+    return handle(conn, msg);
+  };
+  const games = createGameServer({ log: () => {}, keeperConfig: publicConfig(identity, signal) });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const made = await keeper.store.makeLogin(KeeperStore.deviceId('a1'.repeat(16)), 'rocket-apple7', { name: 'Sunny Otter', look: { animal: 'fox' } }, { username: 'otter' });
+  const [first, second] = QUESTION_BANKS.junior.map(questionKey);
+  const page = await openPlayer(`http://127.0.0.1:${games.address().port}/?p2p=1&signal=${encodeURIComponent(signal)}`, { name: 'Guest' }, loggedIn(made, { quizbook: { junior: { [first]: LEARNT_AFTER } } }));
+  try {
+    // Its copies come and go as ever.
+    await until(page, () => window.kidsWorld.keeper.listed && !window.kidsWorld.keeper.syncing && window.kidsWorld.keeper.data.profile);
+    const has = () => page.evaluate(() => ({ here: window.kidsWorld.quizBook.here, junior: window.kidsWorld.quizBook.pages.junior }));
+    assert.deepEqual(await has(), { here: false, junior: { [first]: LEARNT_AFTER } });
+    await page.evaluate((q) => window.kidsWorld.quizBook.file('junior', q, true), second);
+    assert.deepEqual(await has(), { here: false, junior: { [first]: LEARNT_AFTER, [second]: 1 } });
+    assert.deepEqual(await quizKeys(page), [`kidsworld.@${made.player}.quizanswers`, `kidsworld.@${made.player}.quizbook`]);
+    await eventually(async () => (await keeper.store.list(made.player)).profile?.name === 'Sunny Otter');
+    assert.deepEqual((await keeper.store.openQuizBook(made.player)).book, {});
+
+    // Updated, and started again: the page finds it so on its next connection.
+    keeper.handle = handle;
+    for (const conn of [...keeper.conns.values()]) keeper.drop(conn);
+    await until(page, () => window.kidsWorld.quizBook.here && !window.kidsWorld.quizBook.answers.length);
+    assert.deepEqual((await keeper.store.openQuizBook(made.player)).book, { junior: { [first]: LEARNT_AFTER, [second]: 1 } });
+    assert.deepEqual(await has(), { here: true, junior: { [first]: LEARNT_AFTER, [second]: 1 } });
+    assert.deepEqual(await quizKeys(page), []);
+    assert.deepEqual(said, ['keeper: a page asked for "quizbook", which this keeper does not know: the game is newer than it. Update it with git pull, then restart npm start.']);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
+    await keeper.stop();
+    await games.shutdown();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('nobody plays without a login: the title screen has only the way to log in, and once logged in the islands are there', { skip }, async () => {
   const noGuests = () => delete window.kidsWorldGuests;
   const visible = (page, id) => page.evaluate((id) => document.getElementById(id).offsetParent !== null, id);
@@ -6985,7 +7152,9 @@ test('a school: Q by a chalkboard opens the classes, a class of questions answer
     junior: Object.fromEntries(QUESTION_BANKS.junior.map((b, i) => [b.q, i < CLASS_SIZE ? (i < 2 ? LEARNT_AFTER - 1 : 0) : LEARNT_AFTER]).filter(([, n]) => n)),
     elementary3: Object.fromEntries(QUESTION_BANKS.elementary3.map((b) => [b.q, LEARNT_AFTER])),
   };
-  const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } }, `localStorage.setItem('kidsworld.quizbook', ${JSON.stringify(JSON.stringify(book))})`);
+  const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
+  // (Brought by the keeper, for a player with a login: see the test of that.)
+  await page.evaluate((book) => window.kidsWorld.quizBook.came(book), book);
   await makeIsland(page, { online: false, theme: 'Flat Land' });
   // A chalkboard on a wall beside the start, on level ground, and nothing
   // rideable near it to take the button.
@@ -7044,8 +7213,9 @@ test('a school: Q by a chalkboard opens the classes, a class of questions answer
     await page.click('.quiz-box button.green');
   }
   assert.deepEqual(learnt.sort(), left.slice(0, 2).sort());
-  const kept = await page.evaluate(() => JSON.parse(localStorage.getItem('kidsworld.quizbook')).junior);
-  assert.deepEqual([kept[left[0]], kept[left[1]], kept[left[2]]], [LEARNT_AFTER, LEARNT_AFTER, 1], 'filed in the quiz book on this device');
+  const kept = await page.evaluate(() => window.kidsWorld.quizBook.pages.junior);
+  assert.deepEqual([kept[left[0]], kept[left[1]], kept[left[2]]], [LEARNT_AFTER, LEARNT_AFTER, 1], 'filed in the quiz book');
+  assert.deepEqual(await page.evaluate(() => Object.keys(localStorage).filter((k) => k.includes('quiz'))), [], 'and not on this device');
   await until(page, (n) => document.querySelector('.quiz-result')?.textContent.includes(`${n} of ${n} right`), CLASS_SIZE);
   const after = await page.evaluate(() => ({ coins: window.kidsWorld.profile.data.coins, stats: window.kidsWorld.profile.data.stats, stickers: window.kidsWorld.profile.data.stickers }));
   assert.equal(after.coins, at.coins + CLASS_SIZE, 'a coin for each right answer');
@@ -8924,6 +9094,20 @@ test('treasure chest keys on Adventure Isle come only from a quiz after a camp i
   // One quiz, at the level picked: one question.
   await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('A key quiz'), { timeout: 15000 });
   assert.equal(await page.evaluate(() => document.getElementById('key-quiz').hidden), false, 'the 🔑 button while it waits');
+  // The levels to pick from keep up with your quiz book, come from the keeper
+  // or filed in on another of your devices while they are up.
+  const seniors = QUESTION_BANKS.senior.map((b) => ({ level: 'senior', q: questionKey(b) }));
+  for (const n of [LEARNT_AFTER, 0]) {
+    const shown = await page.evaluate(
+      (changes) => {
+        window.kidsWorld.quizBook.heard(changes);
+        const b = document.querySelector('#modal .quiz-picker [data-level="senior"]');
+        return [b.disabled, b.textContent.includes('🏅 All learnt')];
+      },
+      seniors.map((c) => ({ ...c, n })),
+    );
+    assert.deepEqual(shown, [n > 0, n > 0]);
+  }
   await clickQuiz(page, 'thinker');
   await until(page, () => window.kidsWorld.game.quiz?.keyQuiz && document.querySelector('#modal .quiz-answer'));
   assert.equal(await page.evaluate(() => window.kidsWorld.game.quiz.questions.length), 1);

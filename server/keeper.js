@@ -12,6 +12,8 @@
 //                                                   the ranking and the players list
 //   <data>/devices/<device>/login.json              its login, if it made one: the username, the
 //                                                   password's hash, the logged-in devices' tokens' hashes
+//   <data>/devices/<device>/quizbook.json           a login's quiz book (see shared/quizbook.js), which is
+//                                                   kept nowhere else, and the answers filed in it last
 //   <data>/devices/<device>/islands/<id>/info.json  the island's name, theme, code, times
 //   <data>/devices/<device>/islands/<id>/<day>.json the island as it was at the end of that day
 //   <data>/reports/<id>.json                        a problem a player told of: what they wrote,
@@ -85,6 +87,7 @@ import { cleanOnAir, sameOnAir } from '../public/js/shared/station.js';
 import { cleanInvite, isFriendId, sortPlayers } from '../public/js/shared/friends.js';
 import { progressOf } from '../public/js/shared/levels.js';
 import { cleanListing, sortListings } from '../public/js/shared/listing.js';
+import { cleanAnswers, fileAnswer, joinQuizBook, keptQuizBook, QUIZ_BOOK_MAX, timesRight } from '../public/js/shared/quizbook.js';
 import { boardsOf, RANKING_TOP, rankBoards } from '../public/js/shared/ranking.js';
 import { lookWithGear } from '../public/js/shared/shop.js';
 import { signWatch, trustWatchKey } from '../public/js/shared/watch.js';
@@ -301,6 +304,9 @@ const HOUR_TRIES = 200;
 const HOUR_MS = 3600000;
 // The devices one login can be on at once; the one unused longest is logged out.
 const MAX_SESSIONS = 20;
+// How many of the answers filed last in a quiz book are remembered, to know
+// one sent again: far more than a page can have sent and not heard back about.
+const ANSWERS_FILED = 200;
 
 // A kept profile with the look as friends see the player (see shownLook in
 // profile.js): the toy weapon worn, and the level worked out from what they
@@ -541,6 +547,61 @@ export class KeeperStore extends EventEmitter {
     return { device, player: profile.name, onlyStats };
   }
 
+  // ------------------------------------------------ quiz books
+
+  // A player's quiz book (quizbook.js), and the ids of the answers filed in
+  // it last: a page that never heard its answer was filed sends it again,
+  // and it counts once. One there that cannot be read is an error, not an
+  // empty book to write over it: there is no other copy.
+  async readQuizBook(device) {
+    let kept = null;
+    try {
+      kept = JSON.parse(await readFile(this.path(device, 'quizbook.json'), 'utf8'));
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+    return { book: keptQuizBook(kept?.book), filed: Array.isArray(kept?.filed) ? kept.filed : [] };
+  }
+
+  async writeQuizBook(device, { book, filed }) {
+    const text = JSON.stringify({ book, filed: filed.slice(-ANSWERS_FILED) });
+    if (text.length > QUIZ_BOOK_MAX) throw new KeepError('full', 'That quiz book is too big to keep.');
+    this.room(text.length);
+    await mkdir(this.path(device), { recursive: true, mode: 0o700 });
+    await this.write(this.path(device, 'quizbook.json'), text);
+  }
+
+  // The player's quiz book, put together first with one a device of theirs
+  // kept of its own (from when each did), if it brought one. Returns { book,
+  // changes }: changes, what that one changed.
+  openQuizBook(device, own = null) {
+    if (!isDeviceId(device)) return Promise.reject(new KeepError('bad', 'Unknown device.'));
+    return this.serial(async () => {
+      const kept = await this.readQuizBook(device);
+      const changes = joinQuizBook(kept.book, own);
+      if (changes.length) await this.writeQuizBook(device, kept);
+      return { book: kept.book, changes };
+    });
+  }
+
+  // A player's answers, filed in their quiz book. Returns the questions they
+  // answer, as the book has them now: [{ level, q, n }].
+  fileAnswers(device, raw) {
+    if (!isDeviceId(device)) return Promise.reject(new KeepError('bad', 'Unknown device.'));
+    const answers = cleanAnswers(raw);
+    return this.serial(async () => {
+      const { book, filed } = await this.readQuizBook(device);
+      const ids = new Set(filed);
+      for (const { id, level, q, right } of answers) {
+        if (ids.has(id)) continue;
+        ids.add(id);
+        fileAnswer(book, level, q, right);
+      }
+      if (ids.size > filed.length) await this.writeQuizBook(device, { book, filed: [...ids] });
+      return answers.map(({ level, q }) => ({ level, q, n: timesRight(book, level, q) }));
+    });
+  }
+
   // ------------------------------------------------ logins
 
   async readLogin(device) {
@@ -703,14 +764,18 @@ export class KeeperStore extends EventEmitter {
   // A device's copies from before it logged in (or from a device that is
   // gone, from the admin pages) become a player's: its islands move into the
   // player's folder, where the newer copy of an island both have stays; its
-  // stickers and what it did join the player's profile (the most of each);
-  // and its folder goes. Returns how many islands moved.
+  // stickers and what it did join the player's profile (the most of each),
+  // and its quiz book, if it was a login's, the player's; and its folder
+  // goes. Returns how many islands moved.
   adoptDevice(device, player) {
     if (!isDeviceId(device) || !isPlayerId(player) || device === player) return Promise.reject(new KeepError('bad', 'That cannot be moved there.'));
     return this.serial(async () => {
       if (!(await this.readLogin(player))) throw new KeepError('bad', 'That player has no login.');
       if (await this.readLogin(device)) throw new KeepError('bad', 'Those copies are a player with a login of their own.');
       if (!(await stat(this.path(device)).catch(() => null))) return 0;
+      // First, as one that cannot be read stops the move before it has begun.
+      const quizzes = await this.readQuizBook(player);
+      if (joinQuizBook(quizzes.book, (await this.readQuizBook(device)).book).length) await this.writeQuizBook(player, quizzes);
       await mkdir(this.path(player, 'islands'), { recursive: true, mode: 0o700 });
       let moved = 0;
       for (const id of await readdir(this.path(device, 'islands')).catch(() => [])) {
@@ -1680,7 +1745,7 @@ export class Keeper extends EventEmitter {
   // A page's connection: who it is once it says so (see from()), and its limits.
   connection(fields) {
     const now = this.now();
-    return { dc: null, hello: false, device: null, player: null, token: null, folder: null, pieces: new Reassembler(MAX_PARTS, 2), started: now, lastSeen: now, tokens: 20, busy: false, closed: false, watching: false, rankingSent: '', island: null, online: false, ...fields };
+    return { dc: null, hello: false, device: null, player: null, token: null, folder: null, pieces: new Reassembler(MAX_PARTS, 2), started: now, lastSeen: now, tokens: 20, busy: false, closed: false, watching: false, rankingSent: '', island: null, online: false, quiz: false, ...fields };
   }
 
   answer(peer, id, sdp) {
@@ -1848,6 +1913,8 @@ export class Keeper extends EventEmitter {
       conn.onAir = msg.onair === true;
       // And one that knows screen time, whether it is locked.
       conn.lock = msg.lock === true;
+      // And one that knows quiz books, what its player's other pages file.
+      conn.quiz = msg.quiz === true;
       this.reply(conn, {
         t: 'me',
         ...(ok ? { player, username: login?.username ?? '' } : {}),
@@ -1891,6 +1958,21 @@ export class Keeper extends EventEmitter {
         const { device, player, onlyStats } = await this.store.keepAdventureIn(conn.folder, msg.profile);
         this.reply(conn, { t: 'kept', what: 'adventure' });
         if (!onlyStats) this.note({ device, what: 'adventure', player });
+        break;
+      }
+      case 'quizbook': {
+        // The player's quiz book, kept here for all their devices; with this
+        // device's own, from when each kept one, put together with it.
+        const { book, changes } = await this.store.openQuizBook(mine('open your quiz book'), msg.book);
+        this.reply(conn, { t: 'quizbook', book });
+        this.tellQuizBook(conn, changes);
+        break;
+      }
+      case 'quiz': {
+        // Answers of theirs, filed in it.
+        const changes = await this.store.fileAnswers(mine('file your answers'), msg.answers);
+        this.reply(conn, { t: 'kept', what: 'quiz', changes });
+        this.tellQuizBook(conn, changes);
         break;
       }
       case 'visit': {
@@ -2056,6 +2138,13 @@ export class Keeper extends EventEmitter {
         this.unknown(msg.t);
         throw new KeepError('bad', 'The keeper does not know that message.');
     }
+  }
+
+  // What a page just filed in its player's quiz book, for their other pages
+  // open now (that know quiz books): it is one book on all of them.
+  tellQuizBook(conn, changes) {
+    if (!changes.length) return;
+    for (const page of this.conns.values()) if (page !== conn && page.quiz && page.player === conn.player && !page.closed) this.reply(page, { t: 'quiz-news', changes });
   }
 
   // A worker's answer to an idea: kept, and told to the pages of the player

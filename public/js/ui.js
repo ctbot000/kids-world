@@ -36,7 +36,8 @@ import { bodyOf, maxHp } from './shared/monsters.js';
 import { isBoss } from './shared/bosses.js';
 import { isBeast } from './shared/beasts.js';
 import { towerTop } from './shared/defense.js';
-import { LEARNT_AFTER, OLYMPIADS, QUIZ_LEVELS, quizCoins, quizProgress, SCHOOLS } from './shared/quiz.js';
+import { OLYMPIADS, QUIZ_LEVELS, quizCoins, quizProgress, SCHOOLS } from './shared/quiz.js';
+import { LEARNT_AFTER } from './shared/quizbook.js';
 import { isChest } from './shared/treasure.js';
 import { CLASS_BREAK_MS, CLASS_SIZE } from './shared/school.js';
 import { COOK_BREAK_MS, cookCoins, doneness, RECIPES, recipeByKey } from './shared/cooking.js';
@@ -2872,7 +2873,7 @@ export class UI {
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
           card('⚔️', 'Freeing camps', ['On 🌟 Adventure Isle, pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. Out of HP? Sit tight until a friend taps you to help you up. A 👾 Monster Gashapon turns up now and then: follow its beam of light, and turn it for a figure of a real monster — the higher the stage, the likelier a rare one! Locked 🧰 treasure chests lie about the isle too: each camp you help free offers a quiz for a 🔑 key, and a stage won one for a 👑 golden key, which opens the golden chest.']),
           card('🎨', 'Drawing boards', ['Put down a Drawing Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Draw). Draw with your finger or the mouse: pick a colour and a brush, 🪣 fill a patch, or 🧽 rub out. 🖼️ Save your picture to your own gallery (in ⭐ Stickers too) to look at again or put up on a board again, or 💾 save it as a file! Friends at the same board draw with you, and everyone sees your picture on the board — it stays there when the island is saved!']),
-          card('🏫', 'School', ['Stamp a 🏫 School, or put down school desks and a chalkboard (on a wall) from the toy box\'s 🛋️ Home tab. Walk up to the chalkboard and press ', h('kbd', {}, 'Q'), ' (or tap Class), and pick a class: any year of elementary school (Years 1 to 6), middle school or high school (Years 1 to 3), an Olympiad (the hardest of all, in maths, science, logic, coding, chess, the world or English), Thinking Math or English Words. ' + CLASS_SIZE + ' questions, and every answer you get right is a coin or more! After a class, the next one of that kind is after a little break. Get a question right ' + LEARNT_AFTER + ' times in a row and it is learnt 🏅: it will not come again.']),
+          card('🏫', 'School', ['Stamp a 🏫 School, or put down school desks and a chalkboard (on a wall) from the toy box\'s 🛋️ Home tab. Walk up to the chalkboard and press ', h('kbd', {}, 'Q'), ' (or tap Class), and pick a class: any year of elementary school (Years 1 to 6), middle school or high school (Years 1 to 3), an Olympiad (the hardest of all, in maths, science, logic, coding, chess, the world or English), Thinking Math or English Words. ' + CLASS_SIZE + ' questions, and every answer you get right is a coin or more! After a class, the next one of that kind is after a little break. Get a question right ' + LEARNT_AFTER + ' times in a row and it is learnt 🏅: it will not come again. The island keeper keeps your quiz book, so what you learn on one device is learnt on all of them.']),
           card('🍳', 'Cooking class', ['Walk up to a stove (the toy box\'s 🛋️ Home tab, or stamp a 🍳 Cooking School) and press ', h('kbd', {}, 'Q'), ' (or tap Cook). Pick a recipe — pancakes, pizza, salad, cookies, soup or a sandwich — and cook it with your own hands: take what comes next off the shelf, then drag eggs into the bowl, hold the milk over it to pour, stir round and round, tap the knife to chop, rub to spread the sauce, and take it off the heat when it is golden. A coin for every step done just right!']),
           card('⚫', 'Go', ['Put down a Go Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Play Go). You play black and go first. A friend at the board can play white, or tap 🤖 Play with Pip and the AI friend comes over to play and teaches you how as you go. Put stones on the crossings; surround a stone so it has no breathing spaces left and you capture it! Tap 📖 How to play to learn the rules a step at a time.']),
           card('⭕', 'Gomoku', ['At a Go Board, tap ⭕ Gomoku for five in a row: take turns, and the first to get five stones in a row — across, down or slanting — wins! Block your friend when they have three in a row with both ends open. Pip plays Gomoku with you too.']),
@@ -7472,22 +7473,26 @@ export class UI {
   // button for each subject; and after them the other quizzes (Thinking
   // Math, English Words). state(level) says whether a quiz is shut now
   // (off) and the little line under its name (sub); pays, whether to say
-  // what an answer right earns. A tap picks the quiz.
+  // what an answer right earns. A tap picks the quiz. Over them, until your
+  // quiz book has come from the island keeper (quizbook.js), that it has not.
+  // Returns { list, update }: the buttons are made once and kept up to date
+  // (update), so a tap never lands on one just taken away.
   quizPicker({ state, pick, pays = false }) {
+    const g = this.game;
     const levels = Object.values(QUIZ_LEVELS);
+    const updates = [];
+    const update = () => updates.forEach((fn) => fn());
     const button = (l) => {
-      const { off = false, sub = '' } = state(l);
       // A year or an Olympiad is named short, its group's heading saying
       // the rest; the whole name is what is read out.
       const short = l.school ? `Year ${l.year}` : l.short;
-      return h(
+      const under = h('span', { class: 'quiz-sub' });
+      const b = h(
         'button',
         {
           class: `big ${l.color} ${l.school ? 'quiz-year' : 'quiz-other'}`,
           type: 'button',
-          disabled: off,
           'data-level': l.key,
-          'aria-label': short ? [l.name, sub].filter(Boolean).join(', ') : undefined,
           onclick: () => {
             this.sound.unlock();
             this.sound.play('ui');
@@ -7495,9 +7500,19 @@ export class UI {
           },
         },
         l.school ? '' : h('span', { class: 'emoji' }, l.icon),
-        h('span', { class: 'quiz-level' }, h('span', {}, short ?? l.name), sub ? h('span', { class: 'quiz-sub' }, sub) : ''),
+        h('span', { class: 'quiz-level' }, h('span', {}, short ?? l.name), under),
       );
+      updates.push(() => {
+        const { off = false, sub = '' } = state(l);
+        b.disabled = off;
+        under.hidden = !sub;
+        if (under.textContent !== sub) under.textContent = sub;
+        if (short) b.setAttribute('aria-label', [l.name, sub].filter(Boolean).join(', '));
+      });
+      return b;
     };
+    const note = h('p', { class: 'muted quiz-book-note' }, '📖 Your quiz book is still on its way from the island keeper, so a question you have learnt may come up again. What you answer now goes in it!');
+    updates.push(() => (note.hidden = g.quizBook.here));
     // Three to a row, or two when that comes out even (two or four).
     const group = (title, list, note = '') =>
       h(
@@ -7506,9 +7521,10 @@ export class UI {
         h('h3', {}, title, note ? h('span', { class: 'quiz-pays' }, note) : ''),
         h('div', { class: `quiz-years${list.length % 3 && list.length % 2 === 0 ? ' two' : ''}` }, list.map(button)),
       );
-    return h(
+    const list = h(
       'div',
       { class: 'quiz-picker' },
+      note,
       SCHOOLS.map((s) =>
         group(
           `${s.icon} ${s.name}`,
@@ -7526,14 +7542,16 @@ export class UI {
         levels.filter((l) => !l.school && !l.olympiad),
       ),
     );
+    update();
+    return { list, update };
   }
 
-  // A quiz's button in a picker, as your quiz book has it (game.js
-  // quizBook): shut, its questions all learnt, or how many are learnt, after
+  // A quiz's button in a picker, as your quiz book has it (quizbook.js
+  // pages): shut, its questions all learnt, or how many are learnt, after
   // what it pays (said only for a quiz in no group: a school's or the
   // Olympiads' heading says it for theirs).
-  quizState(book, l, pays = false) {
-    const { learnt, left } = quizProgress(book, l.key);
+  quizState(pages, l, pays = false) {
+    const { learnt, left } = quizProgress(pages, l.key);
     if (!left) return { off: true, sub: '🏅 All learnt' };
     return { sub: [pays && !l.school && !l.olympiad ? `🪙 ${l.coins}` : '', learnt ? `🏅 ${learnt} learnt` : ''].filter(Boolean).join(' · ') };
   }
@@ -7657,26 +7675,19 @@ export class UI {
     let timer = 0;
     this.openModal(
       (root) => {
-        const list = h('div');
-        const render = () => {
-          const book = g.quizBook;
-          list.replaceChildren(
-            this.quizPicker({
-              pays: true,
-              state: (l) => {
-                const shown = this.quizState(book, l, true);
-                const wait = shown.off ? 0 : g.classBreak(l.key);
-                if (wait <= 0) return shown;
-                const s = Math.ceil(wait / 1000);
-                return { off: true, sub: `🔔 Break ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` };
-              },
-              pick: (key) => g.startClass(key),
-            }),
-          );
-        };
+        const { list, update } = this.quizPicker({
+          pays: true,
+          state: (l) => {
+            const shown = this.quizState(g.quizBook.pages, l, true);
+            const wait = shown.off ? 0 : g.classBreak(l.key);
+            if (wait <= 0) return shown;
+            const s = Math.ceil(wait / 1000);
+            return { off: true, sub: `🔔 Break ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` };
+          },
+          pick: (key) => g.startClass(key),
+        });
         root.append(h('h2', {}, '🏫 School'), h('p', {}, `Take a seat — class is about to begin! Pick a class of ${CLASS_SIZE} questions, and every right answer earns coins.`), list);
-        render();
-        timer = setInterval(render, 1000);
+        timer = setInterval(update, 1000);
       },
       { narrow: true, onClose: () => clearInterval(timer) },
     );
@@ -8513,10 +8524,11 @@ export class UI {
       g.startKeyQuiz(offer.quiz.level);
       return;
     }
-    const book = g.quizBook;
     this.openModal(
       (root) => {
-        const list = this.quizPicker({ state: (l) => this.quizState(book, l), pick: (key) => g.startKeyQuiz(key) });
+        const { list, update } = this.quizPicker({ state: (l) => this.quizState(g.quizBook.pages, l), pick: (key) => g.startKeyQuiz(key) });
+        // Come from the keeper, say, or filed in on another of your devices.
+        this.quizBookChanged = update;
         root.append(
           h('div', { class: 'chest-pic', 'aria-hidden': 'true' }, offer.gold ? '👑' : '🔑'),
           h('h2', {}, offer.gold ? '👑 A golden key quiz!' : '🔑 A key quiz!'),
@@ -8525,7 +8537,7 @@ export class UI {
           list,
         );
       },
-      { narrow: true },
+      { narrow: true, onClose: () => (this.quizBookChanged = null) },
     );
   }
 

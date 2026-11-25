@@ -30,6 +30,10 @@
 //   { t: 'list' }                         → { t: 'list', profile, adventure?, islands, forgotten }
 //   { t: 'fetch', id }                    → { t: 'island', id, save }
 //   { t: 'forget', id }                   → { t: 'kept', what: 'forget', id }
+// And it has its player's quiz book there, and nowhere else (see quizbook.js):
+//   { t: 'quizbook', book? }              → { t: 'quizbook', book }
+//   { t: 'quiz', answers }                → { t: 'kept', what: 'quiz', changes }
+//   keeper → page   { t: 'quiz-news', changes }   (unasked, to a page whose 'me' said quiz: true)
 // The ranking of the players with a login (see ranking.js), for any page:
 //   { t: 'ranking', watch?, world? }      → { t: 'ranking', players, boards, shown? }
 //                                           (world: 'isle' for the isle's own boards;

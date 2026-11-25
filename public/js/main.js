@@ -14,6 +14,7 @@ import { LockScreen } from './lock-screen.js';
 import { GuestLink, HostLink, signalingOptions, WsLink } from './net.js';
 import { latestNews, newsSince } from './news.js';
 import { Profile } from './profile.js';
+import { QuizBook } from './quizbook.js';
 import { canStepDown, RUNGS, startRung } from './quality.js';
 import { watchErrors } from './report.js';
 import { Sound } from './sound.js';
@@ -117,8 +118,11 @@ const input = new Input(canvas, document.getElementById('joystick'));
 const ui = new UI({ profile, isle, sound, atlas, input });
 // Copies of your islands and of you go to the keeper whenever it is online,
 // and logged in, what your other devices sent comes back — the isle's own
-// world of you among them, kept and brought back the same way.
-const keeper = new KeeperClient({ profile, isle, login: who });
+// world of you among them, kept and brought back the same way. Your quiz
+// book is there and nowhere else (quizbook.js).
+const quizBook = new QuizBook({ kept: Boolean(who) });
+quizBook.addEventListener('change', () => ui.quizBookChanged?.());
+const keeper = new KeeperClient({ profile, isle, quizBook, login: who });
 keeper.addEventListener('unlimited', () => {
   for (const p of [profile, isle]) p.setUnlimited(keeper.unlimited);
 });
@@ -421,7 +425,7 @@ function tokenKey(kind, id) {
 // island unseen (watchIsland), or looks round a copy of it (lookAtCopy).
 function startSession({ link, mode, islandId = null, key, loadingText, first = (game) => game.joinMessage(), visit = '', passcode = '', pass = '', watching = false }) {
   endSession(false);
-  const game = new Game({ link, renderer, sound, profile, mode });
+  const game = new Game({ link, renderer, sound, profile, quizBook, mode });
   game.watching = Boolean(watching);
   game.watchLabel = watching || '';
   game.token = profile.token(key);
@@ -1190,6 +1194,7 @@ window.kidsWorld = {
   market,
   profile,
   isle,
+  quizBook,
   renderer,
   ui,
   input,

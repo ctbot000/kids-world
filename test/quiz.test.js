@@ -12,7 +12,8 @@ import { test } from 'node:test';
 import { XP_FOR } from '../public/js/shared/levels.js';
 import { spawnSync } from 'node:child_process';
 import { Chess } from 'chess.js';
-import { cleanQuizBook, fileQuizAnswer, isLearnt, LEARNT_AFTER, makeQuiz, OLYMPIADS, QUESTION_BANKS, questionKey, QUIZ_LEVELS, QUIZ_SIZE, quizCoins, quizProgress, SCHOOLS } from '../public/js/shared/quiz.js';
+import { cleanQuizBook, makeQuiz, OLYMPIADS, QUESTION_BANKS, questionKey, QUIZ_LEVELS, QUIZ_SIZE, quizCoins, quizProgress, SCHOOLS } from '../public/js/shared/quiz.js';
+import { fileAnswer, isLearnt, LEARNT_AFTER } from '../public/js/shared/quizbook.js';
 import { STAT_KEYS, STICKERS } from '../public/js/shared/stickers.js';
 
 test('a quiz for every school year, from elementary school to high school, seven Olympiads and two more, each with questions to spare', () => {
@@ -628,10 +629,10 @@ test('a program to read comes with its question, and each program’s question i
   const [first, second] = coded;
   assert.equal(first.q, second.q);
   const book = cleanQuizBook({});
-  for (let i = 0; i < LEARNT_AFTER; i++) fileQuizAnswer(book, 'coding', questionKey(first), true);
+  for (let i = 0; i < LEARNT_AFTER; i++) fileAnswer(book, 'coding', questionKey(first), true);
   assert.ok(isLearnt(book, 'coding', questionKey(first)));
   assert.ok(!isLearnt(book, 'coding', questionKey(second)));
-  assert.deepEqual(cleanQuizBook(book).coding, { [questionKey(first)]: LEARNT_AFTER }, 'kept on the device as it is');
+  assert.deepEqual(cleanQuizBook(book).coding, { [questionKey(first)]: LEARNT_AFTER }, 'kept as it is');
 });
 
 test('a quiz asks its bank’s questions, the right answer somewhere among the answers', () => {
@@ -700,27 +701,24 @@ test('a question answered right three times in a row is learnt, and a wrong answ
   assert.equal(LEARNT_AFTER, 3);
   const [first, second] = QUESTION_BANKS.junior;
   const book = cleanQuizBook({});
-  assert.equal(fileQuizAnswer(book, 'junior', first.q, true), false);
-  assert.equal(fileQuizAnswer(book, 'junior', first.q, true), false);
+  assert.equal(fileAnswer(book, 'junior', first.q, true), false);
+  assert.equal(fileAnswer(book, 'junior', first.q, true), false);
   assert.equal(book.junior[first.q], 2);
   // A miss in between: back to none, and three more in a row to learn it.
-  assert.equal(fileQuizAnswer(book, 'junior', first.q, false), false);
+  assert.equal(fileAnswer(book, 'junior', first.q, false), false);
   assert.ok(!(first.q in book.junior), 'a miss starts it over');
-  assert.equal(fileQuizAnswer(book, 'junior', first.q, true), false);
-  assert.equal(fileQuizAnswer(book, 'junior', first.q, true), false);
+  assert.equal(fileAnswer(book, 'junior', first.q, true), false);
+  assert.equal(fileAnswer(book, 'junior', first.q, true), false);
   assert.equal(isLearnt(book, 'junior', first.q), false);
-  assert.equal(fileQuizAnswer(book, 'junior', first.q, true), true, 'the third in a row learns it');
+  assert.equal(fileAnswer(book, 'junior', first.q, true), true, 'the third in a row learns it');
   assert.equal(isLearnt(book, 'junior', first.q), true);
   // Learnt stays learnt: it is never asked again, so nothing undoes it.
-  assert.equal(fileQuizAnswer(book, 'junior', first.q, false), false);
-  assert.equal(fileQuizAnswer(book, 'junior', first.q, true), false);
+  assert.equal(fileAnswer(book, 'junior', first.q, false), false);
+  assert.equal(fileAnswer(book, 'junior', first.q, true), false);
   assert.equal(isLearnt(book, 'junior', first.q), true);
-  // Each question on its own, and each quiz too: the same words in another
-  // quiz's bank, or no bank's at all, are not filed.
+  // Each question on its own, and each quiz too.
   assert.equal(isLearnt(book, 'junior', second.q), false);
   assert.equal(isLearnt(book, 'senior', first.q), false);
-  assert.equal(fileQuizAnswer(book, 'junior', 'What is the meaning of life?', true), false);
-  assert.equal(fileQuizAnswer(book, 'nonsense', first.q, true), false);
   assert.deepEqual(quizProgress(book, 'junior'), { learnt: 1, left: QUESTION_BANKS.junior.length - 1, total: QUESTION_BANKS.junior.length });
 });
 
@@ -749,7 +747,7 @@ test('a quiz never asks a question you have learnt, and asks nothing once you ha
   assert.deepEqual(makeQuiz('senior', 7, 3, cleanQuizBook({})), makeQuiz('senior', 7, 3));
 });
 
-test('a quiz book kept on a device is tidied: only real questions of real quizzes, counted right', () => {
+test('a quiz book is tidied for the quizzes: only real questions of real quizzes, counted right', () => {
   const [a, b, c] = QUESTION_BANKS.high1;
   const kept = {
     high1: { [a.q]: 2, [b.q]: 7, [c.q]: 0, 'A question nobody asks': 3 },

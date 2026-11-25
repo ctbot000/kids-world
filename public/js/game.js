@@ -64,7 +64,7 @@ import { cleanRace, COUNT_MS, lapStep, lapTime, ordinal, raceTrack } from './sha
 import { doorOpen, escapeHouse, puzzleNear, roomAt } from './shared/escape.js';
 import { underTent } from './shared/tents.js';
 import { applyCells, buildEdit, doorEdit, drillEdit, harvestEdit, hillEdit, mowEdit, paintEdit, paintVanEdit, pickEdit, REACH, stampEdit, waterEdit } from './shared/tools.js';
-import { cleanQuizBook, fileQuizAnswer, makeQuiz, quizCoins, QUIZ_LEVELS, quizProgress, WIN_OFFER_MS } from './shared/quiz.js';
+import { makeQuiz, quizCoins, QUIZ_LEVELS, quizProgress, WIN_OFFER_MS } from './shared/quiz.js';
 import { chestNear, chestTreasure, isGoldChest } from './shared/treasure.js';
 import { CHEST_RATTLE_MS, CHEST_TAKE_MS, CHEST_TAKE_SECS, openingChest } from './render/chest-model.js';
 import { CANDLE_TOP, SLICES, SONG_MS, SURPRISES, balloonColors, balloonSpots, candleSpot, isBalloons, partyNear, presentCoins } from './shared/party.js';
@@ -370,12 +370,14 @@ const lerpAngle = (a, b, t) => {
 };
 
 export class Game extends EventTarget {
-  constructor({ link, renderer, sound, profile, mode }) {
+  constructor({ link, renderer, sound, profile, quizBook, mode }) {
     super();
     this.link = link;
     this.renderer = renderer;
     this.sound = sound;
     this.profile = profile;
+    // Your quiz book (quizbook.js): the same one on every island.
+    this.quizBook = quizBook;
     this.mode = mode; // 'host', 'guest' or 'server'
     this.world = null;
     this.pid = 0;
@@ -3556,19 +3558,10 @@ export class Game extends EventTarget {
 
   // ------------------------------------------------ quizzes
 
-  // Your quiz book (shared/quiz.js): the questions of each quiz you have
-  // been getting right, and the ones learnt, never asked of you again.
-  // Kept on this device for whoever is playing (storage.js), like the
-  // notebook, and in memory here too.
-  get quizBook() {
-    this.quizBookKept ??= cleanQuizBook(load('quizbook', {}));
-    return this.quizBookKept;
-  }
-
-  // How many of a quiz's questions are still to learn: none, and it has
-  // nothing left to ask you.
+  // How many of a quiz's questions are still to learn, by your quiz book:
+  // none, and it has nothing left to ask you.
   quizLeft(level) {
-    return quizProgress(this.quizBook, level).left;
+    return quizProgress(this.quizBook.pages, level).left;
   }
 
   // A quiz (a class at school, or a key quiz), its questions picked and shuffled by chance: { level, questions, picks (the
@@ -3587,9 +3580,7 @@ export class Game extends EventTarget {
     const right = i === ask.answer;
     q.picks.push(i);
     if (right) q.right++;
-    const book = this.quizBook;
-    if (fileQuizAnswer(book, q.level, ask.key, right)) ask.learnt = true;
-    save('quizbook', book);
+    if (this.quizBook.file(q.level, ask.key, right)) ask.learnt = true;
     if (q.picks.length < q.questions.length) {
       this.emit('quiz');
       return right;
@@ -3676,7 +3667,7 @@ export class Game extends EventTarget {
     if (!offer) return;
     if (!offer.quiz) {
       if (!QUIZ_LEVELS[level] || !this.quizLeft(level)) return;
-      offer.quiz = { level, ...makeQuiz(level, (Math.random() * 2 ** 31) | 0, undefined, this.quizBook) };
+      offer.quiz = { level, ...makeQuiz(level, (Math.random() * 2 ** 31) | 0, undefined, this.quizBook.pages) };
     }
     this.quiz = { ...offer.quiz, keyQuiz: offer, picks: [], right: 0, done: false };
     this.emit('quiz');
@@ -4225,7 +4216,7 @@ export class Game extends EventTarget {
   // opens the window on it (ui.js).
   startClass(level) {
     if (!QUIZ_LEVELS[level] || this.classBreak(level) > 0 || !this.quizLeft(level)) return;
-    this.quiz = { level, school: true, ...makeQuiz(level, (Math.random() * 2 ** 31) | 0, CLASS_SIZE, this.quizBook), picks: [], right: 0, done: false };
+    this.quiz = { level, school: true, ...makeQuiz(level, (Math.random() * 2 ** 31) | 0, CLASS_SIZE, this.quizBook.pages), picks: [], right: 0, done: false };
     this.emit('quiz');
   }
 

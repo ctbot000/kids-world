@@ -8,7 +8,7 @@
 // questions, asked out of the
 // quizzes' banks (quiz.js), for a coin or more for each one
 // right. A question answered right three times in a row is learnt, and
-// never asked of you again (quiz.js LEARNT_AFTER).
+// never asked of you again (quizbook.js LEARNT_AFTER).
 //
 // It all happens on your own page, like the quizzes: each player's class is
 // their own. After a class, the next one of that level is after a break

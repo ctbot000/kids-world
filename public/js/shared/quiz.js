@@ -15,15 +15,17 @@
 // their answers shuffled out of a bank by chance (makeQuiz), so two quizzes
 // are seldom the same.
 //
-// Every answer is filed in your quiz book (cleanQuizBook): a question
-// answered right LEARNT_AFTER times in a row, wherever it was asked, is
-// learnt, and never asked of you again.
+// Every answer is filed in your quiz book (quizbook.js), which the island
+// keeper keeps: a question answered right LEARNT_AFTER times in a row,
+// wherever it was asked and on whichever of your devices, is learnt, and
+// never asked of you again.
 //
 // The English Words quiz asks what words mean, out of the Kids Dictionary
 // (english-words.js, brought in by scripts/dictionary.mjs): each question
 // about one word, which the quiz shows with it, and its Korean meaning once
 // it is answered.
 import { ENGLISH_WORDS } from './english-words.js';
+import { isLearnt, keptQuizBook } from './quizbook.js';
 import { Rng } from './rng.js';
 
 // The schools, in order, and their years: a school year's quiz takes its
@@ -1011,10 +1013,6 @@ export const QUESTION_BANKS = {
   english: ENGLISH_WORDS.flatMap(({ word, emoji, ko, quiz }) => quiz.map(({ q, a }) => ({ q, a, word: { word, emoji, ko } }))).filter((b, i, all) => all.findIndex((o) => o.q === b.q) === i),
 };
 
-// How many times in a row a question must be answered right to be learnt:
-// after that it is never asked of you again.
-export const LEARNT_AFTER = 3;
-
 // What tells one question from another, in the quiz book: its words, and
 // its program or chess position for a question that shows one (the Coding
 // Olympiad asks “What does this program print?” of many, and the Chess
@@ -1024,40 +1022,12 @@ export const questionKey = ({ q, code, fen }) => [q, code, fen].filter(Boolean).
 // Each bank's questions, to know a question of it when one is filed.
 const ASKED = Object.fromEntries(Object.entries(QUESTION_BANKS).map(([level, bank]) => [level, new Set(bank.map(questionKey))]));
 
-// Your quiz book: each quiz's questions you have been getting right, with
-// how many times in a row, and the ones learnt (LEARNT_AFTER times):
-// { [level]: { [questionKey]: times right in a row } }. Kept on this
-// device for whoever is playing (game.js, storage.js), like the Study
-// Desk's notebook; a question no longer in its bank is let go.
+// A quiz book (quizbook.js) as this game's quizzes have it: a page for every
+// quiz, a question no longer in its bank left out.
 export function cleanQuizBook(raw) {
-  const out = {};
-  for (const level of Object.keys(QUIZ_LEVELS)) {
-    const page = raw?.[level];
-    out[level] = {};
-    if (!page || typeof page !== 'object') continue;
-    for (const [q, n] of Object.entries(page)) if (ASKED[level].has(q) && Number.isInteger(n) && n >= 1) out[level][q] = Math.min(n, LEARNT_AFTER);
-  }
-  return out;
+  const kept = keptQuizBook(raw);
+  return Object.fromEntries(Object.keys(QUIZ_LEVELS).map((level) => [level, Object.fromEntries(Object.entries(kept[level] ?? {}).filter(([q]) => ASKED[level].has(q)))]));
 }
-
-// An answer filed in the quiz book: one more time right in a row, or, got
-// wrong, back to none. Returns true when it was the answer that learnt
-// the question.
-export function fileQuizAnswer(book, level, q, right) {
-  if (!ASKED[level]?.has(q)) return false;
-  const page = (book[level] ??= {});
-  const before = page[q] ?? 0;
-  if (before >= LEARNT_AFTER) return false;
-  if (!right) {
-    delete page[q];
-    return false;
-  }
-  page[q] = before + 1;
-  return page[q] >= LEARNT_AFTER;
-}
-
-// Whether a question is learnt, never to be asked again.
-export const isLearnt = (book, level, q) => (book?.[level]?.[q] ?? 0) >= LEARNT_AFTER;
 
 // How far along a quiz is: { learnt, left, total } of its questions.
 export function quizProgress(book, level) {

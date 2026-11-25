@@ -31,6 +31,10 @@
 // It takes the problems players tell of to the keeper too (see report.js),
 // copies or not, kept in IndexedDB until the keeper has them.
 //
+// Your quiz book is the keeper's, not this browser's (see quizbook.js): logged
+// in, it brings the book here on each connection, takes each answer you give
+// to it, and hears of those given on your other devices.
+//
 // States: off (no keeper, or switched off), idle, connecting, ready, away,
 // refused, gone (the login this page was using was removed).
 
@@ -45,6 +49,7 @@ import { cleanLock } from './shared/lock.js';
 import { cleanOnAir, sameOnAir } from './shared/station.js';
 import { cleanInvite, isFriendId } from './shared/friends.js';
 import { cleanListing } from './shared/listing.js';
+import { ANSWERS_MAX } from './shared/quizbook.js';
 import { isBoardsOf } from './shared/ranking.js';
 import { cleanWish, isDeviceKey, isPeerId, isPublicKey, keptProfile, KEEPER_VERSION, KEY_ALGORITHM, planSync, randomHex, verifySignature } from './shared/keeper.js';
 
@@ -70,6 +75,8 @@ const LIST_AGAIN_MS = 60000;
 const ONLINE_AGAIN_MS = 60000;
 // Logged in, coming back to the game after this long asks the keeper for news.
 const RESYNC_MS = 2 * 60000;
+// A keeper that could not open your quiz book just then is asked again after this long.
+const BOOK_AGAIN_MS = hurried(60000);
 // Problem reports waiting for the keeper, at most: the oldest go first.
 const REPORTS_WAITING = 5;
 
@@ -111,10 +118,12 @@ export class KeeperClient extends EventTarget {
   // isle: the shared isle's own world of you (a Profile, see main.js), whose
   // copy goes to the keeper beside yours and comes back merged, and whose
   // own ranking (ranking.js) a page can watch.
-  constructor({ profile, isle = null, login = null, configUrl = 'keeper.json' }) {
+  // quizBook: your quiz book on this page (a QuizBook, see quizbook.js).
+  constructor({ profile, isle = null, quizBook = null, login = null, configUrl = 'keeper.json' }) {
     super();
     this.profile = profile;
     this.isle = isle;
+    this.quizBook = quizBook;
     this.login = login;
     // A test player, as the keeper says: coins that never run out.
     this.unlimited = false;
@@ -140,6 +149,12 @@ export class KeeperClient extends EventTarget {
     this.needsPassword = false;
     this.toFetch = [];
     this.syncedAt = 0;
+    // Whether this connection asked for your quiz book yet, and whether it
+    // came, so that answers can go (one running older code has none).
+    this.booked = false;
+    this.bookOpen = false;
+    this.bookTimer = 0;
+    quizBook?.addEventListener('answer', () => this.nudge());
     // Watching the ranking (while it is on screen), whether this connection
     // asked to yet, and whether the keeper answered with it, so that its
     // news can come (one running older code does not know it). watchWorld:
@@ -329,6 +344,14 @@ export class KeeperClient extends EventTarget {
     // Not logged in, nothing is kept: the keeper only hears that someone came
     // by, once a page. (A keeper running older code says it does not know this.)
     if (!this.login) return this.visited ? null : { msg: { t: 'visit', about: visitAbout() }, answer: () => (this.visited = true) };
+    // Your quiz book, ahead of the copies: what the quizzes ask goes by it.
+    // With this device's own, from when each kept one, while it has one.
+    if (this.quizBook && !this.booked) {
+      const { old } = this.quizBook;
+      return { msg: { t: 'quizbook', ...(old ? { book: old } : {}) }, answer: (reply) => this.bookCame(reply, old) };
+    }
+    const answers = this.bookOpen ? this.quizBook.answers.slice(0, ANSWERS_MAX) : [];
+    if (answers.length) return { msg: { t: 'quiz', answers }, answer: (reply) => this.answersFiled(answers, reply) };
     if (!this.listed) return { msg: { t: 'list' }, answer: (reply) => this.listedAs(reply) };
     const id = this.toFetch[0];
     if (id) return { msg: { t: 'fetch', id }, answer: (reply) => this.fetched(id, reply) };
@@ -700,6 +723,45 @@ export class KeeperClient extends EventTarget {
     this.nudge();
   }
 
+  // ------------------------------------------------ your quiz book
+
+  // The keeper's answer to opening your quiz book.
+  bookCame(reply, old) {
+    this.booked = true;
+    this.bookOpen = reply.t === 'quizbook';
+    if (this.bookOpen) this.quizBook.came(reply.book, old);
+    else this.bookShut(reply);
+  }
+
+  // And to answers of yours for it.
+  answersFiled(answers, reply) {
+    if (reply.t !== 'kept') {
+      this.bookShut(reply);
+      return;
+    }
+    this.data.lastKept = Date.now();
+    this.failures = 0;
+    this.store();
+    this.quizBook.filed(
+      answers.map((a) => a.id),
+      reply.changes,
+    );
+    this.emit('kept', reply);
+  }
+
+  // Not now: what you answer waits here, and all else goes on. The keeper is
+  // asked again in a while, or, one running older code, which has no quiz
+  // books, on the next connection.
+  bookShut(reply) {
+    this.bookOpen = false;
+    if (reply.code === 'bad') return;
+    clearTimeout(this.bookTimer);
+    this.bookTimer = setTimeout(() => {
+      this.booked = false;
+      this.nudge();
+    }, BOOK_AGAIN_MS);
+  }
+
   // ------------------------------------------------ bringing back
 
   listedAs(reply) {
@@ -764,6 +826,8 @@ export class KeeperClient extends EventTarget {
     if (this.peer || !this.config || this.state === 'gone' || this.halted) return;
     this.setState('connecting');
     this.listed = false;
+    this.booked = false;
+    this.bookOpen = false;
     this.watched = false;
     this.rankingLive = false;
     this.listingSent = '';
@@ -831,7 +895,7 @@ export class KeeperClient extends EventTarget {
         return;
       }
       talk.checked = true;
-      this.send({ t: 'me', device: this.data.device, tv: true, onair: true, lock: true, ...(this.login ? { login: this.login } : {}) });
+      this.send({ t: 'me', device: this.data.device, tv: true, onair: true, lock: true, quiz: Boolean(this.quizBook), ...(this.login ? { login: this.login } : {}) });
       return;
     }
     if (msg.t === 'me' && this.state === 'connecting' && talk.checked) {
@@ -888,6 +952,11 @@ export class KeeperClient extends EventTarget {
     // News of the ranking, unasked: never the answer to what is waiting.
     if (msg.t === 'ranking-news') {
       if (this.state === 'ready') this.watchedAs({ ...msg, t: 'ranking' });
+      return;
+    }
+    // What another of your devices just filed in your quiz book, unasked.
+    if (msg.t === 'quiz-news') {
+      if (this.state === 'ready') this.quizBook?.heard(msg.changes);
       return;
     }
     // A worker's answer to an idea of yours, unasked.
