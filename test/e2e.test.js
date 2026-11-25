@@ -9382,7 +9382,13 @@ test('two soul weapons are combined into one and taken apart again, and a duel s
     await clickButton(page, '⇄', '#modal');
     await until(page, () => document.querySelector('#modal .forge-fusion')?.textContent.includes('Starfall + Lullaby = Moonstar'));
     await clickButton(page, '💫 Combine them!', '#modal');
+    // (The sticker it earns is told of over the show, once the weapon has been seen.)
+    const stickers = () => page.$$eval('#toasts .sticker', (list) => list.map((el) => el.textContent));
+    await until(page, () => Boolean(window.kidsWorld.ui.soulScreen));
+    assert.deepEqual(await stickers(), []);
     await forward('Moonstar');
+    assert.ok((await stickers()).some((t) => t.includes('New sticker: Two Souls in One!')));
+    assert.ok(await page.evaluate(() => Number(getComputedStyle(document.getElementById('toasts')).zIndex) > Number(getComputedStyle(document.querySelector('.soul-show')).zIndex)));
     assert.ok(await page.$eval('.soul-show', (el) => el.textContent.includes('13 and 13 → 16')));
     assert.deepEqual((await held()).held, ['star+nod', 'bells']);
     assert.equal((await held()).pick, 'star+nod');

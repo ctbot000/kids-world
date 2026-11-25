@@ -88,8 +88,8 @@ class StageGlow extends THREE.MeshBasicMaterial {
   }
 }
 
-// Materials for one thing on the stage: set(how much of it there is, how hot).
-export function stageKit(edge = '#ffe9a0') {
+// Materials for one thing on the stage; glow: how brightly what glows of it does.
+export function stageKit(edge = '#ffe9a0', glow = 2.1) {
   const shared = { uIn: { value: 1 }, uHot: { value: 0 }, uEdge: { value: new THREE.Color(edge) } };
   const made = new Map();
   return {
@@ -97,7 +97,7 @@ export function stageKit(edge = '#ffe9a0') {
     material(finish) {
       if (!made.has(finish)) {
         let m;
-        if (finish === 'glow') m = new StageGlow({ vertexColors: true, color: new THREE.Color(2.1, 2.1, 2.1) });
+        if (finish === 'glow') m = new StageGlow({ vertexColors: true, color: new THREE.Color(glow, glow, glow) });
         else {
           const { shine, ...f } = FINISHES[finish];
           m = new StageMaterial({ ...f, envMapIntensity: (f.envMapIntensity ?? 1) * 0.9, vertexColors: true, emissive: new THREE.Color(1, 1, 1), emissiveIntensity: shine });
@@ -337,6 +337,7 @@ const RING_FRAG = /* glsl */ `
   uniform vec3 uColor;
   uniform float uThin;
   uniform float uPrism;
+  uniform float uSoft;
   vec3 hue(float h) { vec3 k = abs(fract(vec3(h, h + 2.0 / 3.0, h + 1.0 / 3.0)) * 6.0 - 3.0) - 1.0; return clamp(k, 0.0, 1.0); }
   void main() {
     vec2 q = vUv * 2.0 - 1.0;
@@ -345,10 +346,11 @@ const RING_FRAG = /* glsl */ `
     float at = uFrom + (0.94 - uFrom) * (1.0 - pow(1.0 - uK, 2.4));
     float w = uThin * (1.0 - uK * 0.6);
     float d = (r - at) / w;
-    float ring = exp(-d * d * 3.0) + 0.5 * exp(-abs(d + 1.2) * 0.9) * step(r, at);
-    float a = ring * (1.0 - uK) * (1.0 - uK);
+    // (Crisp, with only a wisp of a trail: several at once, filled, are one white blob.)
+    float ring = exp(-d * d * 3.0) + 0.16 * exp(-abs(d + 1.2) * 1.5) * step(r, at);
+    float a = ring * (1.0 - uK) * (1.0 - uK) * smoothstep(0.0, 0.07, uK) * mix(1.0, 0.34 * smoothstep(0.0, 0.22, uK), uSoft);
     vec3 c = mix(uColor, hue(atan(q.y, q.x) / 6.2831853 + uK), uPrism);
-    gl_FragColor = vec4(mix(c, vec3(1.0), exp(-d * d * 8.0) * 0.7) * a * 2.2, 1.0);
+    gl_FragColor = vec4(mix(c, vec3(1.0), exp(-d * d * 8.0) * 0.7 * (1.0 - uSoft)) * a * 1.6, 1.0);
   }
 `;
 
@@ -580,16 +582,17 @@ export class SoulStage {
 
   // ------------------------------------------------ things on it
 
-  kit(color) {
-    const k = stageKit(color);
+  kit(color, glow) {
+    const k = stageKit(color, glow);
     this.kits.push(k);
     return k;
   }
 
   // Something in its own materials, its middle at the origin of a group: { group,
   // kit, size }.
-  part(key, i, edge = null) {
-    const kit = this.kit(edge ?? soulOf(key).color);
+  // (glow: less of it for one seen close, or it is nothing but glow.)
+  part(key, i, glow) {
+    const kit = this.kit(soulOf(key).color, glow);
     const model = soulPart(key, i, kit);
     const group = new THREE.Group();
     const inner = new THREE.Group();
@@ -638,8 +641,8 @@ export class SoulStage {
     return m;
   }
 
-  ring(p, { color = '#ffffff', size = 3, secs = 0.9, thin = 0.09, flat = false, prism = 0, turn = null, from = 0.04 } = {}) {
-    const mat = new THREE.ShaderMaterial({ uniforms: { uK: { value: 0 }, uFrom: { value: from }, uColor: { value: new THREE.Color(color) }, uThin: { value: thin }, uPrism: { value: prism } }, vertexShader: PLANE_VERT, fragmentShader: RING_FRAG, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
+  ring(p, { color = '#ffffff', size = 3, secs = 0.9, thin = 0.06, flat = false, prism = 0, turn = null, from = 0.04, soft = 0 } = {}) {
+    const mat = new THREE.ShaderMaterial({ uniforms: { uK: { value: 0 }, uFrom: { value: from }, uColor: { value: new THREE.Color(color) }, uThin: { value: thin }, uPrism: { value: prism }, uSoft: { value: soft } }, vertexShader: PLANE_VERT, fragmentShader: RING_FRAG, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
     const m = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
     m.position.copy(p);
     m.scale.setScalar(size);
@@ -649,6 +652,11 @@ export class SoulStage {
     m.frustumCulled = false;
     this.scene.add(m);
     this.rings.push({ m, mat, t: 0, secs, flat: flat || Boolean(turn) });
+  }
+
+  // A faint one, round what is held up to be seen (which it must not outshine).
+  halo(color, size) {
+    this.ring(new THREE.Vector3(), { color, size, secs: 1.6, thin: 0.04, from: 0.5, soft: 1 });
   }
 
   // The circle drawn on the floor, with as many points as the weapon has parts.

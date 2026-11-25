@@ -89,7 +89,7 @@ export class PartShow extends Show {
     stage.fit();
     stage.colors(w.color, w.glow);
     stage.sky.uniforms.uPrism.value = got.key === 'rainbow' ? 0.7 : 0;
-    this.part = stage.part(got.key, got.i);
+    this.part = stage.part(got.key, got.i, 1.15);
     this.group.add(this.part.group);
     this.full = Math.min(4, 1.75 / this.part.size);
     this.part.group.scale.setScalar(0.001);
@@ -148,7 +148,7 @@ export class PartShow extends Show {
     stage.cam.dist = 3.7 + 0.5 * easeOut(s / 1.2);
     stage.cam.yaw = Math.sin(s * 0.4) * 0.12;
     stage.embers(dt, { colors: this.tones, rate: this.got.fresh ? 46 : 20 });
-    if (this.got.fresh && s > 1.6 && Math.random() < dt * 0.7) stage.ring(V(), { color: this.w.color, size: 1.9, secs: 1.5, thin: 0.04, from: 0.5 });
+    if (this.got.fresh && s > 1.6 && Math.random() < dt * 0.7) stage.halo(this.w.color, 1.9);
   }
 }
 
@@ -249,12 +249,12 @@ export class ForgeShow extends Show {
   whole() {
     const { stage, w } = this;
     this.sound('soul-forged');
-    stage.flash(1.5, WHITE, 3.4);
+    stage.flash(1.25, WHITE, 6.5);
     stage.shake(1.3);
-    stage.ring(V(), { color: WHITE, size: 5, secs: 1.1, thin: 0.12, prism: this.prism });
-    stage.ring(V(), { color: w.color, size: 3.4, secs: 1.4, thin: 0.08, prism: this.prism });
-    stage.ring(V(), { color: w.glow, size: 4.4, secs: 1.6, thin: 0.06, turn: [0.9, 0.5, 0] });
-    stage.ring(V(0, -1.1, 0), { color: w.color, size: 6, secs: 1.7, flat: true });
+    stage.ring(V(), { color: WHITE, size: 5, secs: 1.1, thin: 0.06, prism: this.prism });
+    stage.ring(V(), { color: w.color, size: 3.4, secs: 1.4, thin: 0.05, prism: this.prism });
+    stage.ring(V(), { color: w.glow, size: 4.4, secs: 1.6, thin: 0.04, turn: [0.9, 0.5, 0] });
+    stage.ring(V(0, -1.1, 0), { color: w.color, size: 6, secs: 1.7, thin: 0.04, flat: true });
     stage.burst(V(), 620, { colors: this.tones, speed: 6, life: 2, size: 0.1, drag: 2.1, gravity: 0.6 });
     stage.burst(V(), 160, { colors: [WHITE, w.color], speed: 2, life: 3.4, size: 0.12, drag: 1, swirl: 0.5 });
     for (const p of this.parts) p.kit.shared.uHot.value = 2.4;
@@ -429,10 +429,10 @@ export class WonShow extends Show {
     this.cue(this.dive - 1.4, () => this.sound('soul-rise', { secs: 1.4 }));
     this.cue(this.dive, () => {
       this.sound('soul-won');
-      stage.flash(1.4, WHITE, 3.6);
+      stage.flash(1.2, WHITE, 6.5);
       stage.shake(1);
       for (const [size, secs, c] of [[4.6, 1.2, WHITE], [3, 1.5, w.color], [3.8, 1.8, w.glow]]) stage.ring(V(), { color: c, size, secs, prism: this.prism });
-      stage.ring(V(0, -1.1, 0), { color: w.color, size: 6, secs: 1.8, flat: true });
+      stage.ring(V(0, -1.1, 0), { color: w.color, size: 6, secs: 1.8, thin: 0.04, flat: true });
       stage.burst(V(), 560, { colors: this.tones, speed: 5.4, life: 2, size: 0.1, drag: 2.1, gravity: 0.6 });
       stage.burst(V(), 160, { colors: [WHITE, w.color], speed: 1.8, life: 3.4, size: 0.12, drag: 1, swirl: 0.5 });
       this.weapon.kit.shared.uHot.value = 2.2;
@@ -540,13 +540,13 @@ export class FuseShow extends Show {
     // (Only the one to be seen now, so nearer.)
     stage.wide = 2.6;
     stage.fit();
-    stage.flash(1.8, WHITE, 3);
+    stage.flash(1.4, WHITE, 5.2);
     stage.shake(1.6);
-    stage.ring(V(), { color: WHITE, size: 6, secs: 1.2, thin: 0.14, prism: 1 });
-    stage.ring(V(), { color: this.all[0], size: 4.4, secs: 1.6, thin: 0.08, prism: 1 });
-    stage.ring(V(), { color: this.all[1 % this.all.length], size: 5.2, secs: 1.8, thin: 0.06, turn: [1.1, 0.4, 0] });
-    stage.ring(V(), { color: this.all[2 % this.all.length], size: 5.2, secs: 2, thin: 0.06, turn: [-0.9, 0.8, 0.3] });
-    stage.ring(V(0, -1.1, 0), { color: WHITE, size: 7, secs: 1.9, flat: true, prism: 1 });
+    stage.ring(V(), { color: WHITE, size: 6, secs: 1.2, thin: 0.07, prism: 1 });
+    stage.ring(V(), { color: this.all[0], size: 4.4, secs: 1.6, thin: 0.05, prism: 1 });
+    stage.ring(V(), { color: this.all[1 % this.all.length], size: 5.2, secs: 1.8, thin: 0.04, turn: [1.1, 0.4, 0] });
+    stage.ring(V(), { color: this.all[2 % this.all.length], size: 5.2, secs: 2, thin: 0.04, turn: [-0.9, 0.8, 0.3] });
+    stage.ring(V(0, -1.1, 0), { color: WHITE, size: 7, secs: 1.9, thin: 0.045, flat: true, prism: 1 });
     stage.burst(V(), 900, { colors: this.all, speed: 7, life: 2.3, size: 0.105, drag: 2, gravity: 0.5 });
     stage.burst(V(), 260, { colors: this.all, speed: 2.2, life: 3.8, size: 0.13, drag: 0.9, swirl: 0.7 });
   }
@@ -605,7 +605,7 @@ export class FuseShow extends Show {
     stage.cam.pitch = 0.08;
     stage.cam.yaw = Math.sin(s * 0.4) * 0.14;
     stage.embers(dt, { colors: this.all, rate: 64 });
-    if (s > 1.8 && Math.random() < dt * 0.8) stage.ring(V(), { color: this.all[Math.floor(Math.random() * this.all.length)], size: 2.1, secs: 1.6, thin: 0.04, from: 0.5 });
+    if (s > 1.8 && Math.random() < dt * 0.8) stage.halo(this.all[Math.floor(Math.random() * this.all.length)], 2.1);
   }
 }
 

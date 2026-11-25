@@ -3826,6 +3826,7 @@ export class Game extends EventTarget {
     if (!got) return;
     const world = this.world;
     setTimeout(() => {
+      this.profile.partSeen();
       if (this.world !== world || this.closed) return;
       this.send({ t: 'soul', op: 'part', w: got.key, i: got.i, at: [at.x, at.y, at.z].map((v) => +v.toFixed(2)), fresh: got.fresh });
       if (this.nod) this.nod.fight.safeUntil = Math.max(this.nod.fight.safeUntil, performance.now() + PART_SAFE_MS);

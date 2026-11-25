@@ -357,15 +357,19 @@ export class Profile extends EventTarget {
   // A golden chest opened on an island of the isle (place: souls.js placeOf):
   // the part it holds for you, of its episode's weapon (key), now yours —
   // { key, i, fresh, spare, have (how many of it you have now), found (how many
-  // of its parts) } — or null when it holds none for you.
+  // of its parts) } — or null when it holds none for you. (Counted once it is seen,
+  // partSeen: its sticker would give it away.)
   findPart(key, place, rand = Math.random) {
     const s = this.data.gear.souls;
     const got = drawPart(s, key, place, rand);
     if (!got) return null;
     const have = takePart(s, key, got.i, place);
     this.shopped();
-    this.count('parts');
     return { key, ...got, have, found: partsFound(s, key) };
+  }
+
+  partSeen() {
+    this.count('parts');
   }
 
   // A part you have to spare melted down into coins: whether it was.

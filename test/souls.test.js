@@ -276,6 +276,8 @@ test('yours, on the isle: found, put together, won, combined, held and melted, e
     const first = p.findPart('rainbow', place(1, 13), rand);
     assert.deepEqual({ fresh: first.fresh, have: first.have, found: first.found }, { fresh: true, have: 1, found: 1 });
     assert.equal(p.findPart('rainbow', place(1, 13), rand), null);
+    assert.equal(p.data.stats.parts, 0, 'its sticker does not give it away');
+    p.partSeen();
     assert.equal(p.data.stats.parts, 1);
     assert.equal(p.forgeSoul('rainbow'), false);
     p.data.gear.souls.parts = { rainbow: full('rainbow'), star: [3, ...full('star').slice(1)] };

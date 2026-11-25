@@ -163,7 +163,7 @@ const PARTS = {
       ['metal', hoop(0.034, 0.01, 24, 8), STAR.gold, at(0, 0.132, 0, 1, Math.PI / 2)],
     ],
     // Dawn Wing, and Dusk Wing: its guard.
-    () => starWing(-1, ['#fff7e6', '#ffe6b0', '#ffd98a']),
+    () => starWing(-1, ['#ffe0b4', '#ffc07c', '#ff9f6e']),
     () => starWing(1, ['#8f9be8', '#6f7be0', '#4f5ac9']),
     // Star Core.
     () => [

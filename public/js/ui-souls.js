@@ -75,6 +75,15 @@ class SoulScreen {
     document.body.append(this.el);
     requestAnimationFrame(() => this.el.classList.add('on'));
     this.began = performance.now();
+    // What was won only just now, by what is to be shown (a sticker, a level), is
+    // told of over it as it comes to its end: nobody would see it under this.
+    this.told = false;
+    this.later = [];
+    for (const el of document.querySelectorAll('#toasts .sticker')) {
+      if (!el.told || this.began - el.told.at > 900) continue;
+      this.later.push(el.told.what);
+      el.remove();
+    }
     ui.input.enabled = false;
     ui.input.releaseAll();
     if (ui.game) ui.game.uiBlocking = true;
@@ -124,7 +133,11 @@ class SoulScreen {
       ),
     );
     this.skipper.hidden = buttons.length > 0;
-    if (buttons.length) this.buttons.firstElementChild.focus({ preventScroll: true });
+    if (!buttons.length) return;
+    this.buttons.firstElementChild.focus({ preventScroll: true });
+    this.told = true;
+    document.body.classList.add('soul-told');
+    for (const what of this.later.splice(0)) this.ui.toast(...what);
   }
 
   close(then = null) {
@@ -133,6 +146,7 @@ class SoulScreen {
     window.removeEventListener('keydown', this.onKey, true);
     this.stage?.dispose();
     this.el.remove();
+    document.body.classList.remove('soul-told');
     const { ui } = this;
     ui.soulScreen = null;
     if (this.behind) this.behind.drawing = true;
@@ -140,6 +154,7 @@ class SoulScreen {
     ui.input.enabled = Boolean(ui.game) && !ui.modalOpen;
     then?.();
     nextScreen(ui);
+    for (const what of this.later) ui.toast(...what);
   }
 }
 
@@ -641,6 +656,8 @@ function banner(ui, w, kicker, title, ms = 3400, quote = false) {
 export function soulDuelIntro(ui) {
   const w = soulOf(ui.game?.adventure?.duel);
   if (!w) return;
+  // (Room for what is told of it, over its name.)
+  for (const el of document.querySelectorAll('#toasts .sticker')) el.remove();
   banner(ui, w, `⚔️ The soul of ${w.name}`, soulName(w), 3000);
 }
 

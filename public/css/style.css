@@ -7863,6 +7863,15 @@ body.watching :is(#toolbar, #toolopts, #hp-row, #basket, .hotrow, #talk, #btn-at
   opacity: 1;
 }
 
+/* What is won by it is told of over it, once it has been seen. */
+body.soul-told #toasts {
+  z-index: 121;
+}
+
+body.soul-told #toasts > :not(.sticker) {
+  display: none;
+}
+
 .soul-show canvas {
   position: absolute;
   inset: 0;

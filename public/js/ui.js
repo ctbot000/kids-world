@@ -413,7 +413,13 @@ export class UI {
   }
 
   toast(icon, text, kind = '') {
+    // (What is won by a soul weapon's show waits till it has been seen: ui-souls.js.)
+    if (this.soulScreen && !this.soulScreen.told && kind.includes('sticker')) {
+      this.soulScreen.later.push([icon, text, kind]);
+      return;
+    }
     const el = h('div', { class: `toast ${kind}` }, h('span', { class: 'icon' }, icon), h('span', {}, text));
+    el.told = { what: [icon, text, kind], at: performance.now() };
     $('toasts').append(el);
     while ($('toasts').children.length > 4) $('toasts').firstElementChild.remove();
     setTimeout(() => el.remove(), 4100);
