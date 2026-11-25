@@ -40,6 +40,7 @@ import { questBeaten, questFrame, questFx, readQuests, readRow } from './isle-qu
 import { battleFrame, battleFx, battleWon, fogNews, fogSeen, readBattleRow, readBattles, readFog } from './isle-battles-view.js';
 import { NodGame } from './nod/nod-game.js';
 import { NOD_BOSSES } from './shared/nod/bosses.js';
+import { duelStory } from './shared/nod/duel.js';
 import { isNodKey } from './shared/nod/worlds/index.js';
 import { BEASTS, isBeast } from './shared/beasts.js';
 import { isBoss, planOf } from './shared/bosses.js';
@@ -65,6 +66,7 @@ import { doorOpen, escapeHouse, puzzleNear, roomAt } from './shared/escape.js';
 import { underTent } from './shared/tents.js';
 import { applyCells, buildEdit, doorEdit, drillEdit, harvestEdit, hillEdit, mowEdit, paintEdit, paintVanEdit, pickEdit, REACH, stampEdit, waterEdit } from './shared/tools.js';
 import { makeQuiz, quizCoins, QUIZ_LEVELS, quizProgress, WIN_OFFER_MS } from './shared/quiz.js';
+import { partWaits, placeOf, soulOf, soulOfEpisode, soulWeapon } from './shared/souls.js';
 import { chestNear, chestTreasure, isGoldChest } from './shared/treasure.js';
 import { CHEST_RATTLE_MS, CHEST_TAKE_MS, CHEST_TAKE_SECS, openingChest } from './render/chest-model.js';
 import { CANDLE_TOP, SLICES, SONG_MS, SURPRISES, balloonColors, balloonSpots, candleSpot, isBalloons, partyNear, presentCoins } from './shared/party.js';
@@ -72,7 +74,7 @@ import { terminalNear } from './shared/stocks.js';
 import { World } from './shared/world.js';
 import { editPrice, friendPrice, isGrow, isLand, landCount, landPrice, landProblem, MANY_AT_ONCE, PAID_KINDS, raiseColumn } from './shared/grow.js';
 import { lookHair, lookTall, petKind, PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
-import { ANIM, CHARGE_SECS, CHARGE_TOLD, shirtColor, SWINGS } from './render/avatar.js';
+import { ANIM, CHARGE_SECS, CHARGE_TOLD, shirtColor, SWINGS, swingOf } from './render/avatar.js';
 import { rockedSitter, rockingAt, rockPhase } from './render/rocking-model.js';
 import { GENTLE, MOST, packSwing, PUMP, settle, swingAt, swingPhase, swungSitter, unpackSwing } from './render/swing-model.js';
 import { slashLead } from './render/effects.js';
@@ -228,6 +230,46 @@ const IMPACTS = {
   meteorstaff: { color: '#ff8a2a', stop: 150, kick: 0.03, down: 0.02, roll: 0.018, zoom: 0.04, burst: 1.6, buzz: 44, words: ['KABOOM!'], lines: true },
   punchglove: { color: '#ffd84d', stop: 145, kick: 0.028, down: 0.014, roll: 0.016, zoom: 0.042, burst: 1.55, buzz: 42, words: ['SOCK!', 'WHAM!', 'BAM!'], lines: true },
 };
+// A soul weapon's slash (souls.js), and how it lands, by the soul its form is of.
+// (Doodle's stroke of paint is slash enough.)
+const SOUL_SLASHES = {
+  star: { color: '#ffe27a', y: 1, from: -2.1, to: 1.7, secs: 0.2 },
+  rainbow: { color: '#ff9fe0', y: 0.95 },
+  wild: { color: '#a9f06a', y: 1.2, upright: true },
+  bells: { color: '#ffd84d', y: 1.25, upright: true },
+  nod: { color: '#c9b0ff', y: 0.95, from: -6.15, to: 0.13, secs: 0.46, tilt: -0.05, stars: true },
+};
+const SOUL_IMPACTS = {
+  star: { color: '#ffe27a', stop: 135, kick: 0.028, down: 0.01, roll: 0.016, zoom: 0.042, burst: 1.55, buzz: 40, words: ['STARFALL!', 'SHING!', 'TWINKLE!'], lines: true },
+  rainbow: { color: '#ff9fe0', stop: 110, kick: 0.024, roll: 0.014, zoom: 0.038, burst: 1.45, buzz: 34, words: ['WHIRRR!', 'ZOOM!', 'DAZZLE!'], lines: true },
+  wild: { color: '#a9f06a', stop: 135, kick: 0.03, down: 0.012, roll: 0.018, zoom: 0.042, burst: 1.55, buzz: 42, words: ['AWOOO!', 'CHOMP!', 'RRRAH!'], lines: true },
+  bells: { color: '#ffd84d', stop: 155, kick: 0.018, down: 0.028, roll: 0.016, zoom: 0.044, burst: 1.6, buzz: 46, words: ['DONG!', 'BONG!', 'CLANG!'], thud: true, lines: true },
+  toon: { color: '#ff5cb0', stop: 120, kick: 0.028, roll: 0.018, zoom: 0.04, burst: 1.6, buzz: 38, words: ['SPLAT!', 'SPLOSH!', 'SPLODGE!'], lines: true },
+  nod: { color: '#c9b0ff', stop: 130, kick: 0.026, down: 0.008, roll: 0.018, zoom: 0.04, burst: 1.5, buzz: 38, words: ['NIGHTY NIGHT!', 'HUSH!', 'SWISH!'], lines: true },
+};
+const slashOf = (kind = 'punch') => SLASHES[kind] ?? SOUL_SLASHES[soulWeapon(kind)?.souls[0]] ?? null;
+const impactOf = (kind) => IMPACTS[kind] ?? SOUL_IMPACTS[soulWeapon(kind)?.souls[0]] ?? IMPACTS.punch;
+// How far a swing's slash goes, of a weapon's reach: a soul weapon's only as far
+// as it sweeps (what flies off it goes further).
+const slashReach = (w) => (w?.soul ? Math.min(3, w.sweep) : (w?.reach ?? 0));
+// Whether a soul weapon swung that way (x, z) strikes what is there: in the sweep
+// of it, all the way round, or in the line of what flies off it (souls.js).
+function soulTakes(spec, hit, x, z) {
+  const d = Math.hypot(hit.dx, hit.dz) || 1;
+  const ahead = hit.dx * x + hit.dz * z;
+  const far = hit.gap - ARM_REACH;
+  if (far <= spec.sweep && (ahead / d >= spec.arc || hit.gap <= 0.25)) return true;
+  if (spec.round && far <= spec.round) return true;
+  return Boolean(spec.line) && far <= spec.line && ahead > 0 && Math.abs(hit.dx * z - hit.dz * x) <= hit.size.radius + spec.wide;
+}
+// Prisma is out of the hand this long, thrown (render/soul-fx.js RingFlight).
+const RING_SECS = 0.78;
+// A part of a soul weapon found in a golden chest comes up out of it after the rest
+// of its treasure, and is shown to whoever found it once everyone there has seen it.
+const PART_RISES_MS = 3000;
+const PART_SHOW_MS = 5900;
+// Nothing in a dream touches whoever is looking at the part they found.
+const PART_SAFE_MS = 11000;
 const STOP_MORE = 15;
 const STOP_MAX = 230;
 // The blow that takes a monster's last heart lands harder still: this much
@@ -356,6 +398,9 @@ const TREASURE_SHOW_MS = 1400;
 // What popping the Queen Mosquito pays over an ordinary monster's pop (see
 // popped): a few coins, on top of the XP her own count carries (levels.js).
 const QUEEN_POP = { coins: 5 };
+
+// Which way is up on an island.
+const UP = { x: 0, y: 1, z: 0 };
 
 // Which way (dx, dz) points, in words: north is -z (the map's top).
 function compass(dx, dz) {
@@ -773,7 +818,13 @@ export class Game extends EventTarget {
             if (this.world === world) this.shockwaveFrom(avatar);
           }, lands * 1000);
         }
-        // A friend's Rainbow Ray fires as their swing lands, the way they face.
+        // A friend's soul weapon shows as it lands, and their Rainbow Ray fires,
+        // the way they face.
+        if (soulWeapon(avatar?.weaponKind)) {
+          setTimeout(() => {
+            if (this.world === world) this.soulSwingFrom(avatar, false, this.nod ? 0.5 : 1);
+          }, lands * 1000);
+        }
         if (avatar?.weaponKind === 'rainbowray') {
           setTimeout(() => {
             if (this.world === world) this.rayFrom(avatar);
@@ -848,6 +899,18 @@ export class Game extends EventTarget {
         break;
       case 'chest':
         this.chestNews(msg);
+        break;
+      // What someone here has come by of soul weapons (souls.js).
+      case 'soul':
+        this.soulNews(msg);
+        break;
+      // A weapon's soul beaten, in a duel with it (shared/nod/duel.js).
+      case 'duel':
+        if (this.adventure?.duel && msg.won === true) {
+          this.adventure.won = true;
+          this.sound.setDuel(null);
+          this.emit('duel', { won: true, w: this.adventure.duel });
+        }
         break;
       case 'freed':
         this.campFreed(msg);
@@ -1889,7 +1952,7 @@ export class Game extends EventTarget {
       if (!mine) {
         const size = bodyOf(entry.kind);
         const kind = this.players.get(msg.by)?.avatar?.weaponKind;
-        const look = IMPACTS[kind] ?? IMPACTS.punch;
+        const look = impactOf(kind);
         fx.impact(p.x - away.x * size.radius * 0.8, p.y + size.height * 0.55, p.z - away.z * size.radius * 0.8, away.x, away.z, look.color, look.burst, false);
         this.sound.play('whack', { kind, on: HIT_ON[entry.kind], final: true, near: 0.6 });
       }
@@ -2084,7 +2147,7 @@ export class Game extends EventTarget {
     }
     // Whatever the one who bopped it has in their hand, as a friend's swing lands.
     const kind = this.players.get(msg.by)?.avatar?.weaponKind;
-    const look = IMPACTS[kind] ?? IMPACTS.punch;
+    const look = impactOf(kind);
     if (entry && !struck && away) {
       entry.stopAt = now;
       entry.stopUntil = now + look.stop;
@@ -2227,6 +2290,10 @@ export class Game extends EventTarget {
   // sitting dizzy too, up you get on your own. Says whether you drank it.
   drink() {
     if (!this.world || !this.me) return false;
+    if (this.adventure?.duel) {
+      this.emit('toast', { icon: '🧪', text: 'No potions in a duel with a soul: just you and it!' });
+      return false;
+    }
     if (this.hp >= this.maxHp && !this.dizzy) {
       this.emit('toast', { icon: '🧪', text: 'Your HP is already full up!' });
       return false;
@@ -2263,7 +2330,7 @@ export class Game extends EventTarget {
   // How long until it can (ms).
   attackWait() {
     const now = performance.now();
-    const swing = SWINGS[wornWeapon(this.profile.data.gear)?.key] ?? SWINGS.punch;
+    const swing = swingOf(wornWeapon(this.profile.data.gear)?.key);
     return Math.max((this.attackAt ?? 0) - now, (this.bopSentAt ?? -Infinity) + HIT_MS + BOP_SPACING - swing.secs * swing.strike * 1000 - now);
   }
 
@@ -2272,11 +2339,11 @@ export class Game extends EventTarget {
   // the wide golden one, and it brings a shockwave with it (shockwaveFrom) —
   // further still with the King's Punch Glove on.
   slashFrom(avatar, king = false) {
-    const look = avatar && SLASHES[king ? 'king' : avatar.weaponKind ?? 'punch'];
+    const look = avatar && slashOf(king ? 'king' : avatar.weaponKind ?? 'punch');
     if (!look) return;
     const { position: at, rotation, scale } = avatar.root;
     if (!this.near(at.x, at.y, at.z, 40)) return;
-    const reach = king ? KING_REACH + 0.6 + (avatar.weaponKind === 'punchglove' ? weaponOf('punchglove').wave : 0) : 0.3 + ARM_REACH + (weaponOf(avatar.weaponKind)?.reach ?? 0);
+    const reach = king ? KING_REACH + 0.6 + (avatar.weaponKind === 'punchglove' ? weaponOf('punchglove').wave : 0) : 0.3 + ARM_REACH + slashReach(weaponOf(avatar.weaponKind));
     const y = at.y + look.y * scale.y;
     this.renderer.effects.slash(at.x, y, at.z, rotation.y, { reach, color: look.color, upright: look.upright, tilt: look.tilt, secs: look.secs, from: look.wide ? -2.4 : look.from, to: look.wide ? 2.4 : look.to });
     if (look.stars) this.renderer.effects.starWhirl(at.x, y, at.z, rotation.y, reach, look.from, look.to, look.secs);
@@ -2285,13 +2352,26 @@ export class Game extends EventTarget {
   // The slash of a swing landing in lands seconds: it sets off that much sooner
   // than the blow, so the blade comes round to the monster just as it lands.
   slashSoon(avatar, lands, king = false) {
-    const look = avatar && SLASHES[king ? 'king' : avatar.weaponKind ?? 'punch'];
+    const look = avatar && slashOf(king ? 'king' : avatar.weaponKind ?? 'punch');
     if (!look) return;
     const world = this.world;
     const lead = slashLead({ upright: look.upright, ...(look.wide ? { from: -2.4, to: 2.4 } : {}), ...(look.from ? { from: look.from, to: look.to, secs: look.secs } : {}) });
     setTimeout(() => {
       if (this.world === world) this.slashFrom(avatar, king);
     }, Math.max(0, lands - lead) * 1000);
+  }
+
+  // The show of a soul weapon's swing as it lands (render/soul-fx.js), round
+  // whoever swung it: all its souls'. empty: it hit nothing (so Wildheart's wolf
+  // springs out by itself); near: how much of its reach it has (in a dream).
+  soulSwingFrom(avatar, empty = true, near = 1) {
+    const spec = soulWeapon(avatar?.weaponKind);
+    if (!spec) return;
+    const { position: at } = avatar.root;
+    if (!this.near(at.x, at.y, at.z, 45)) return;
+    this.renderer.soulSwing(spec, avatar.root, { empty, near });
+    if (spec.souls[0] === 'rainbow') avatar.throwIt(RING_SECS);
+    this.sound.play('soul-swing', { souls: spec.souls, near: avatar === this.players.get(this.pid)?.avatar ? 1 : 0.5 });
   }
 
   // The golden shockwave of a King Punch, whoever threw it: a ring bursting
@@ -2332,7 +2412,7 @@ export class Game extends EventTarget {
   // last heart lands harder still. Not a boss safe in its bubble: that
   // bounces.
   strike(hits, kind, dragons = []) {
-    const look = IMPACTS[kind] ?? IMPACTS.punch;
+    const look = impactOf(kind);
     const now = performance.now();
     const b = this.me.body;
     const weapon = weaponOf(kind);
@@ -2554,7 +2634,7 @@ export class Game extends EventTarget {
     const now = performance.now();
     const weapon = wornWeapon(this.profile.data.gear);
     // Not again before this swing is over.
-    this.attackAt = now + (SWINGS[weapon?.key] ?? SWINGS.punch).secs * 1000;
+    this.attackAt = now + swingOf(weapon?.key).secs * 1000;
     const b = this.me.body;
     const reach = ARM_REACH + (weapon?.reach ?? 0);
     // In front: the way you face, or, looking through your own eyes, the way
@@ -2567,14 +2647,16 @@ export class Game extends EventTarget {
     const blaster = weapon?.key === 'blaster' || bow;
     const rod = weapon?.key === 'bombrod';
     const meteor = weapon?.key === 'meteorstaff';
+    // A soul weapon strikes in every way its souls do (soulTakes).
+    const soul = weapon?.soul ? weapon : null;
     // The Thunder Spear stabs the one nearest in front (the island's bolt leaps
     // on from it), and the Rainbow Ray fires at it, through all in the line.
-    const spear = Boolean(weapon?.chain);
+    const spear = Boolean(weapon?.chain) && !soul;
     const ray = Boolean(weapon?.beam);
     // The Galaxy Blade goes right round.
     const spin = Boolean(weapon?.spin);
     const aimed = blaster || rod || meteor || spear || ray;
-    const arc = spin ? -1 : aimed ? FRONT : SWEEP;
+    const arc = spin || soul ? -1 : aimed ? FRONT : SWEEP;
     const hits = [];
     let best = null;
     for (const [id, entry] of this.monsters) {
@@ -2615,17 +2697,21 @@ export class Game extends EventTarget {
       if (!best || gap < best.gap) best = hit;
     }
     // The blaster turns to aim at its one; a sweep goes the way you face,
-    // turning only for one right up against you behind.
-    const behind = (hit) => (hit.dx * fx + hit.dz * fz) / (Math.hypot(hit.dx, hit.dz) || 1) < SWEEP;
-    if (best && (aimed || (!spin && behind(best)))) this.me.yaw = Math.atan2(best.dx, best.dz);
+    // turning only for one right up against you behind. What flies off a soul
+    // weapon goes at the nearest in front of you.
+    const toward = (hit) => (hit.dx * fx + hit.dz * fz) / (Math.hypot(hit.dx, hit.dz) || 1);
+    const behind = (hit) => toward(hit) < SWEEP;
+    if (soul) best = [...hits, ...dragons].filter((hit) => toward(hit) >= FRONT || hit.gap <= 0.6).sort((a, b) => a.gap - b.gap)[0] ?? null;
+    if (best && (aimed || soul?.line || (!spin && behind(best)))) this.me.yaw = Math.atan2(best.dx, best.dz);
     // What it lands on, of what is in reach: the spear's one, those in the ray's
     // line now it has turned to aim, and for all the others all of them.
     const aimX = Math.sin(this.me.yaw);
     const aimZ = Math.cos(this.me.yaw);
     const inLine = (hit) => hit.dx * aimX + hit.dz * aimZ > 0 && Math.abs(hit.dx * aimZ - hit.dz * aimX) <= hit.size.radius + BEAM_SIDE;
-    const takes = (hit) => (spear ? hit === best : !ray || hit === best || inLine(hit));
+    const takes = (hit) => (soul ? soulTakes(soul, hit, aimX, aimZ) : spear ? hit === best : !ray || hit === best || inLine(hit));
     const struck = hits.filter(takes);
     const struckDragons = dragons.filter(takes);
+    if (soul) best = [...struck, ...struckDragons].includes(best) ? best : (struck[0] ?? struckDragons[0] ?? null);
     // The bop (and a blaster's bubble) goes when the swing lands, a moment on;
     // the whoosh of a swing as it starts.
     const avatar = this.players.get(this.pid)?.avatar;
@@ -2675,6 +2761,7 @@ export class Game extends EventTarget {
         const aim = at && { x: at.x, y: at.y + best.size.height / 2, z: at.z };
         if (spear) this.zapFrom(avatar, aim, reach);
         else if (ray) this.rayFrom(avatar, aim);
+        else if (soul) this.soulSwingFrom(avatar, !struck.length);
         if (struck.length || struckDragons.length) this.strike(struck, weapon?.key ?? 'punch', struckDragons);
       }
       if (best) {
@@ -2732,6 +2819,15 @@ export class Game extends EventTarget {
       if (at) points.push({ x: at.x, y: at.y + bodyOf(entry.kind).height / 2, z: at.z });
     }
     if (!points.length || !this.near(points[0].x, points[0].y, points[0].z, 40)) return;
+    // (Out of a soul weapon, it is Wildheart's wolf that leaps from one to the next.)
+    const who = this.players.get(msg.pid)?.avatar;
+    if (soulWeapon(who?.weaponKind)) {
+      const { position: at } = who.root;
+      points.unshift({ x: at.x, y: at.y + 0.9, z: at.z });
+      this.renderer.spiritWolf(points, UP);
+      this.sound.play('soul-wolf', { near: msg.pid === this.pid ? 1 : 0.5 });
+      return;
+    }
     if (msg.pid !== this.pid) {
       const tip = this.players.get(msg.pid)?.avatar?.muzzle();
       if (tip) points.unshift(tip);
@@ -3115,7 +3211,13 @@ export class Game extends EventTarget {
     this.nod = null;
     // A chapter of the sixth episode: a dream of the Land of Nod, which has no
     // island at all (nod/nod-game.js).
-    if (this.shared && a?.nod && isNodKey(a.nod.key) && this.renderer.nod) {
+    if (this.shared && a?.duel && duelStory(a.duel) && a.nod && isNodKey(a.nod.key) && this.renderer.nod) {
+      // (Or a duel with a weapon's soul, which is nothing else: shared/nod/duel.js.)
+      this.adventure = { camps: new Map(), won: a.won === true, stage: 1, journey: 1, run: 0, king: null, shield: false, story: duelStory(a.duel), nod: true, duel: a.duel };
+      this.nod = new NodGame(this, { key: a.nod.key });
+      this.nod.rows(a.nod.n);
+      this.adventureNews(a);
+    } else if (this.shared && a?.nod && isNodKey(a.nod.key) && this.renderer.nod) {
       const stage = Number.isInteger(a.stage) ? Math.min(9999, Math.max(1, a.stage)) : 1;
       const journey = Number.isInteger(a.journey) && a.journey >= 1 ? a.journey : 1;
       const run = Number.isInteger(a.run) && a.run >= 1 ? a.run : 0;
@@ -3164,9 +3266,10 @@ export class Game extends EventTarget {
       this.adventure = { camps, won: a.won === true, stage, journey, run, king: null, shield: true, story: chapterOf(stage) };
       this.adventureNews(a);
     }
+    this.sound.setDuel(this.adventure?.duel ? { soul: this.adventure.duel, rage: 0 } : null);
     this.emit('adventure');
     // The chapter's story is told as you arrive (ui.js).
-    if (this.adventure) this.emit('story');
+    if (this.adventure && !this.adventure.duel) this.emit('story');
   }
 
   // What a camp of the isle is called: its name in the story ('Seaside
@@ -3691,6 +3794,7 @@ export class Game extends EventTarget {
   chestWon(gold, at) {
     this.profile.useKey(gold);
     const got = chestTreasure(Math.random, this.adventure?.story.level ?? 1, gold);
+    if (gold) this.partFound(at);
     this.profile.earn(got.coins);
     if (got.potion) got.potion = this.profile.findPotion();
     if (got.diamond) this.profile.addToBasket('diamond', 1);
@@ -3698,6 +3802,67 @@ export class Game extends EventTarget {
     this.emit('reward', { ...at, xp: XP_FOR.chests.xp });
     // What was inside, shown once the lid is up (ui.js treasurePop).
     setTimeout(() => this.emit('treasure', { ...got, gold }), TREASURE_SHOW_MS);
+  }
+
+  // ------------------------------------------------ soul weapons
+
+  // The soul weapon whose parts are in the golden chests here (souls.js), and
+  // whether there is one for you in them still: { w, place, waits }, or null where
+  // there are none.
+  soulHere() {
+    const adv = this.adventure;
+    const w = this.shared && adv && !adv.duel ? soulOfEpisode(adv.story.episode.n) : null;
+    if (!w) return null;
+    const place = placeOf({ run: adv.run, journey: adv.journey, stage: adv.stage, code: this.code });
+    return { w, place, waits: partWaits(this.profile.data.gear.souls, w.key, place) };
+  }
+
+  // A golden chest opened by you, with a part of a soul weapon in it, if it holds
+  // one for you: everyone near sees it rise out of the chest, and then you are
+  // shown it (ui-souls.js).
+  partFound(at) {
+    const here = this.soulHere();
+    const got = here?.waits ? this.profile.findPart(here.w.key, here.place) : null;
+    if (!got) return;
+    const world = this.world;
+    setTimeout(() => {
+      if (this.world !== world || this.closed) return;
+      this.send({ t: 'soul', op: 'part', w: got.key, i: got.i, at: [at.x, at.y, at.z].map((v) => +v.toFixed(2)), fresh: got.fresh });
+      if (this.nod) this.nod.fight.safeUntil = Math.max(this.nod.fight.safeUntil, performance.now() + PART_SAFE_MS);
+    }, PART_RISES_MS);
+    setTimeout(() => {
+      if (!this.closed) this.emit('soul-part', got);
+    }, PART_SHOW_MS);
+  }
+
+  // What someone here has come by, as the island tells it: a part risen out of a
+  // golden chest, a weapon put together, its soul beaten, or two combined.
+  soulNews(msg) {
+    const p = this.players.get(msg.pid);
+    const mine = msg.pid === this.pid;
+    const name = p?.name ?? 'A friend';
+    if (msg.op === 'part') {
+      const w = soulOf(msg.w);
+      const part = w?.parts[msg.i];
+      if (!part || !Array.isArray(msg.at) || msg.at.length !== 3 || !msg.at.every(Number.isFinite)) return;
+      const [x, y, z] = msg.at;
+      if (this.near(x, y, z, 60)) {
+        const up = this.nod ? this.nod.space.up(x, y, z) : UP;
+        const body = () => {
+          const root = this.players.get(msg.pid)?.avatar?.root.position;
+          return root ? { x: root.x + up.x * 0.9, y: root.y + up.y * 0.9, z: root.z + up.z * 0.9 } : null;
+        };
+        this.renderer.partBeam({ x: x - up.x * 0.6, y: y - up.y * 0.6, z: z - up.z * 0.6 }, up, w.key, msg.i, body);
+        this.sound.play('soul-beam', { near: mine ? 1 : 0.5 });
+        this.renderer.shake(mine ? 0.25 : 0.1);
+      }
+      if (!mine) this.emit('toast', { icon: part.icon, text: `${name} found the ${part.name} of ${w.name}!` });
+      return;
+    }
+    if (mine) return;
+    if (msg.op === 'forged' && soulOf(msg.w)) this.emit('toast', { icon: '⚒️', text: `${name} put ${soulOf(msg.w).name}, ${soulOf(msg.w).title}, together!` });
+    else if (msg.op === 'won' && soulOf(msg.w)) this.emit('toast', { icon: soulOf(msg.w).icon, text: `${name} beat ${soulOf(msg.w).soul.name}: ${soulOf(msg.w).name} is theirs!` });
+    else if (msg.op === 'fused' && soulWeapon(msg.key)) this.emit('toast', { icon: '💫', text: `${name} combined two soul weapons into ${soulWeapon(msg.key).name}!` });
   }
 
   // The treasure whirling up out of a chest and flying, coin after coin, to

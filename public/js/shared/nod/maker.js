@@ -42,6 +42,11 @@ const SOLIDS = {
   stand: (s, k) => [new Post(at(s, -0.2), at(s, 1.6 * k), 0.14 * k), new Block(at(s, 1.9 * k, 0, 0.1), cross(s.up, s.dir), s.up, v3(0.55 * k, 0.4 * k, 0.06 * k), 0.04)],
   lantern: (s, k) => [new Drum(at(s, 0.2 * k), s.up, 1.2 * k, 0.28 * k, 0.1 * k), new Post(at(s, 0.3 * k), at(s, 2.6 * k), 0.2 * k)],
   clawfoot: (s, k) => [new Post(at(s, -0.3), at(s, 1.4 * k), 0.4 * k)],
+  // Where the souls of weapons are fought.
+  menhir: (s, k) => [new Post(at(s, -0.5), at(s, 2.2 * k), 0.62 * k, 0.42 * k)],
+  starpost: (s, k) => [new Post(at(s, -0.3), at(s, 1.7 * k), 0.14 * k)],
+  prism: (s, k) => [new Post(at(s, -0.3), at(s, 1.3 * k), 0.32 * k, 0.1 * k)],
+  crayon: (s, k) => [new Post(at(s, -0.4), at(s, 1.7 * k), 0.28 * k, 0.24 * k)],
 };
 
 export class Maker {

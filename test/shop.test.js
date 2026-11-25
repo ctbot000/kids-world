@@ -17,6 +17,7 @@ import { ARM_REACH, BLOB_HEARTS, BOP_SLACK, HIT_MS, MONSTER_BODY } from '../publ
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { STICKERS } from '../public/js/shared/stickers.js';
 import { cleanCoins, cleanGear, COINS_MAX, fixPrice, GEAR, gearMove, SKATE_GLIDE, isBroken, lookWithGear, nextLevel, sale, sellPrice, statsOf, usesLeft, WEAPONS, wearing, weaponOf, wornWeapon } from '../public/js/shared/shop.js';
+import { emptySouls } from '../public/js/shared/souls.js';
 import { cleanLook } from '../public/js/shared/words.js';
 import { Avatar, SWINGS, swingPose } from '../public/js/render/avatar.js';
 import { World } from '../public/js/shared/world.js';
@@ -66,9 +67,9 @@ test('each level of gear costs more and makes you faster than the one before', (
 });
 
 test('gear and coins are tidied: no levels that do not exist, no made-up kinds, no silly sums', () => {
-  assert.deepEqual(cleanGear(null), { off: {}, pick: { weapon: 0 }, shoes: 0, wings: 0, skates: 0, weapon: 0, clothes: [], outfit: '', wear: {}, toys: {}, tames: 0, stocks: {} });
-  assert.deepEqual(cleanGear({ shoes: 99, wings: -1, cape: 2, off: { shoes: true, cape: true, wings: 'yes' } }), { off: { shoes: true }, pick: { weapon: 0 }, shoes: GEAR[0].levels.length, wings: 0, skates: 0, weapon: 0, clothes: [], outfit: '', wear: {}, toys: {}, tames: 0, stocks: {} });
-  assert.deepEqual(cleanGear({ shoes: 1.5 }), { off: {}, pick: { weapon: 0 }, shoes: 0, wings: 0, skates: 0, weapon: 0, clothes: [], outfit: '', wear: {}, toys: {}, tames: 0, stocks: {} });
+  assert.deepEqual(cleanGear(null), { off: {}, pick: { weapon: 0 }, shoes: 0, wings: 0, skates: 0, weapon: 0, clothes: [], outfit: '', wear: {}, toys: {}, tames: 0, stocks: {}, souls: emptySouls() });
+  assert.deepEqual(cleanGear({ shoes: 99, wings: -1, cape: 2, off: { shoes: true, cape: true, wings: 'yes' } }), { off: { shoes: true }, pick: { weapon: 0 }, shoes: GEAR[0].levels.length, wings: 0, skates: 0, weapon: 0, clothes: [], outfit: '', wear: {}, toys: {}, tames: 0, stocks: {}, souls: emptySouls() });
+  assert.deepEqual(cleanGear({ shoes: 1.5 }), { off: {}, pick: { weapon: 0 }, shoes: 0, wings: 0, skates: 0, weapon: 0, clothes: [], outfit: '', wear: {}, toys: {}, tames: 0, stocks: {}, souls: emptySouls() });
   // A chosen weapon is kept, and only one of those owned: anything else
   // falls back to the best (wornWeapon).
   assert.equal(cleanGear({ weapon: 2, pick: { weapon: 1 } }).pick.weapon, 1);
@@ -193,7 +194,7 @@ test('coins and gear are kept at the keeper, from the device that changed them l
   const theirs = { name: 'Sunny Otter', coins: 3, gear: { shoes: 2, wings: 1, off: { wings: true } }, changedAt: 200 };
   const kept = keptProfile({ ...theirs, coins: 1e12 });
   assert.equal(kept.coins, COINS_MAX);
-  assert.deepEqual(kept.gear, { off: { wings: true }, pick: { weapon: 0 }, shoes: 2, wings: 1, skates: 0, weapon: 0, clothes: [], outfit: '', wear: {}, toys: {}, tames: 0, stocks: {} });
+  assert.deepEqual(kept.gear, { off: { wings: true }, pick: { weapon: 0 }, shoes: 2, wings: 1, skates: 0, weapon: 0, clothes: [], outfit: '', wear: {}, toys: {}, tames: 0, stocks: {}, souls: emptySouls() });
   const merged = mergeProfiles(mine, theirs);
   assert.equal(merged.coins, 3);
   assert.equal(merged.gear.shoes, 2);

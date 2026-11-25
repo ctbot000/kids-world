@@ -13,6 +13,7 @@ import { COLLECTABLES } from './blocks.js';
 import { cleanToys } from './gashapon.js';
 import { maxHp } from './monsters.js';
 import { MOVE } from './physics.js';
+import { cleanSouls, pickedSoul, soulWeapon } from './souls.js';
 import { cleanStocks } from './stocks.js';
 
 export const COINS_MAX = 99999;
@@ -188,7 +189,8 @@ export const ROD_LOB_MS = 550;
 // How long the Meteor Staff's meteor takes to fall, from the moment it is
 // called (ms).
 export const METEOR_FALL_MS = 750;
-export const weaponOf = (key) => WEAPONS.find((w) => w.key === key) ?? null;
+// (And the soul weapons nobody can buy: souls.js.)
+export const weaponOf = (key) => WEAPONS.find((w) => w.key === key) ?? soulWeapon(key);
 
 // Your look as the island sees it: with the weapon, clothes, shoes (or
 // skates) and wings you have on, if any (by key: friends see them on you),
@@ -233,10 +235,13 @@ export const fixPrice = (gear, w) => {
 };
 
 // The weapon you have on: the one you have chosen to carry of those you own
-// (pick, by its level), or the best you have — the best not broken, when
-// that one is. Null with none, them all broken, or it taken off.
+// (pick, by its level; or a soul weapon of yours, souls.js), or the best you
+// have — the best not broken, when that one is. Null with none, them all
+// broken, or it taken off.
 export const wornWeapon = (gear) => {
   if (gear?.off?.weapon) return null;
+  const soul = pickedSoul(gear?.souls);
+  if (soul) return soul;
   const have = gear?.weapon ?? 0;
   if (!have) return null;
   const pick = gear?.pick?.weapon;
@@ -253,8 +258,9 @@ export const gearKind = (key) => GEAR.find((g) => g.key === key) ?? null;
 // have (in CLOTHES order) and the ones you have on ('' for none); and the
 // capsule toys from gashapon machines, how many of each (gashapon.js); how
 // worn each weapon you own is (wear); how many times you have tamed a
-// volcano island's dragon (dragon.js); and your shares at the stock market
-// (stocks.js).
+// volcano island's dragon (dragon.js); your shares at the stock market
+// (stocks.js); and on Adventure Isle, your soul weapons and their parts
+// (souls.js).
 export function cleanGear(raw) {
   const p = raw && typeof raw === 'object' ? raw : {};
   const out = { off: {}, pick: {} };
@@ -276,6 +282,7 @@ export function cleanGear(raw) {
   out.toys = cleanToys(p.toys);
   out.tames = cleanTames(p.tames);
   out.stocks = cleanStocks(p.stocks);
+  out.souls = cleanSouls(p.souls);
   return out;
 }
 

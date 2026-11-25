@@ -26,6 +26,7 @@ import { World } from '../shared/world.js';
 import { FlagModel, KingModel, Shockwave } from './adventure-models.js';
 import { makeBoss } from './boss-models.js';
 import { Thrown, WarnRing, WarnStrip } from './boss-fx.js';
+import { PartBeam, soulShows, SpiritWolf } from './soul-fx.js';
 import { Meteor, RainbowBeam, ZapBolt } from './weapon-fx.js';
 import { isBoss } from '../shared/bosses.js';
 import { ANIM, Avatar, shirtHex, weapon } from './avatar.js';
@@ -71,6 +72,7 @@ export const VIEWS = {
   sky: { dist: 18, pitch: 1.25 },
 };
 const tmpV = new THREE.Vector3();
+const tmpUp = new THREE.Vector3();
 const tmpM = new THREE.Matrix4();
 const tmpC = new THREE.Color();
 const tmpX = new THREE.Vector3();
@@ -638,8 +640,9 @@ export class Renderer {
       // sides; a pet turned as asked: framed to fit whatever its shape.
       if (held) thing.rotation.set(0.35, 0.5, -0.8);
       else thing.rotation.y = turn;
-      // A critter's hidden parts (what it carries, a splash) left out.
-      const box = critter || stamp ? shownBox(thing) : new THREE.Box3().setFromObject(thing);
+      // A critter's hidden parts (what it carries, a splash) left out, and the
+      // glow of a soul weapon.
+      const box = critter || stamp || held ? shownBox(thing) : new THREE.Box3().setFromObject(thing);
       const mid = box.getCenter(new THREE.Vector3());
       const far = (box.getSize(new THREE.Vector3()).length() / 2 / Math.sin(THREE.MathUtils.degToRad(15))) * (stamp ? 0.78 : animal?.dog ? 0.68 : 0.82);
       camera.position.set(mid.x, mid.y + far * (stamp ? 0.55 : 0.15), mid.z + far);
@@ -870,6 +873,25 @@ export class Renderer {
 
   meteor(from, to, ms, r) {
     this.bossFx.push(new Meteor(this.scene, this.effects, from, to, ms, r));
+  }
+
+  // The shows of a soul weapon's swing (soul-fx.js), one for every soul in it:
+  // spec (shared/souls.js soulWeapon), root: whoever swung it, as they stand.
+  soulSwing(spec, root, opts) {
+    const up = tmpUp.set(0, 1, 0).applyQuaternion(root.quaternion);
+    const frame = { p: root.position.clone().addScaledVector(up, 0.9 * root.scale.y), q: root.quaternion.clone() };
+    this.bossFx.push(...soulShows(this.scene, this.effects, spec, frame, opts));
+  }
+
+  // Wildheart's spirit wolf, leaping through points, up being up there.
+  spiritWolf(points, up, opts) {
+    if (points.length > 1) this.bossFx.push(new SpiritWolf(this.scene, this.effects, points, tmpUp.set(up.x, up.y, up.z), opts));
+  }
+
+  // A part of a soul weapon (key, its i-th) rising out of a golden chest at p
+  // in a pillar of light, and then off to whoever found it: to(), where they are.
+  partBeam(p, up, key, i, to) {
+    this.bossFx.push(new PartBeam(this.scene, this.effects, p, up, key, i, to));
   }
 
   // Where the ground is under something, for its round shadow.

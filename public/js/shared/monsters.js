@@ -1614,6 +1614,18 @@ export class MonsterSim {
     return { hearts: m.hearts };
   }
 
+  // Sat down dizzy by a blow that did not pop it, for ms (a soul weapon's din, or
+  // its lullaby: souls.js): whatever it was up to is over, and bops on it count
+  // twice over till it is up again. Not a boss, nor one marching, one in a heap or
+  // one under the ground. Says whether it was.
+  daze(m, now, ms) {
+    if (isBoss(m.kind) || m.march || m.heap || m.under || m.passive) return false;
+    if (m.plan) this.moveDone(m, now);
+    Object.assign(m, { crouch: 0, pounce: null, windup: 0, slam: false, tired: true, dazed: Math.max(m.dazed ?? 0, now + ms) });
+    if (pounceOf(m)) m.pounceAt = m.dazed + POUNCE_REARM;
+    return true;
+  }
+
   // Whether someone at p can bop the one numbered id from where they stand:
   // as far as an arm reaches, and extra further with a toy weapon in it (see
   // shop.js).

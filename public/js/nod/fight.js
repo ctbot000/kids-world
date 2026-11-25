@@ -5,13 +5,14 @@
 // out of the air, a roll, and once you have been brave enough often enough, a
 // Brave Burst.
 import * as THREE from '../../vendor/three.module.js';
-import { SWINGS } from '../render/avatar.js';
+import { swingOf } from '../render/avatar.js';
 import { LaneMark, Shot, Beam, BurstDome } from '../render/nod/fx.js';
 import { makeFright } from '../render/nod/frights.js';
 import { quatOf } from '../render/nod/kit.js';
 import { flashModel } from '../render/toon.js';
 import { ARM_REACH } from '../shared/monsters.js';
 import { wornWeapon } from '../shared/shop.js';
+import { soulOf } from '../shared/souls.js';
 import { aimedPath, beamPath, laneAt, lanePath, offPath, pathOf, waveR } from '../shared/nod/attacks.js';
 import { BURST_R } from '../shared/nod/dream.js';
 import { CHIPS, frightOf, readFright } from '../shared/nod/foes.js';
@@ -283,6 +284,8 @@ export class Fight {
   meet(f) {
     if (this.met.has(f.kind) || !f.spec.told) return;
     this.met.add(f.kind);
+    // (Whose soul it is has been told of already: tale.)
+    if (f.spec.boss && this.g.adventure?.duel) return;
     this.g.emit('toast', { icon: f.spec.icon, text: f.spec.told });
   }
 
@@ -727,7 +730,7 @@ export class Fight {
       return null;
     }
     const weapon = wornWeapon(g.profile.data.gear);
-    const swing = SWINGS[weapon?.key] ?? SWINGS.punch;
+    const swing = swingOf(weapon?.key);
     if (now < this.swungAt) {
       this.soon = now + 180;
       return null;
@@ -746,16 +749,19 @@ export class Fight {
     const lands = Math.min(0.16, avatar?.swing() ?? 0.1);
     g.send({ t: 'swing' });
     g.sound.play('swish', { lands });
-    const look = SLASH[weapon?.key] ?? SLASH.punch;
+    const look = slashFor(weapon);
     const world = g.world;
     setTimeout(() => {
       if (g.world !== world || g.nod !== this.nod) return;
       const up = w.up;
       const c = add(w, up, 0.95);
       const q = quatOf(up, this.nod.h);
-      g.renderer.effects.slash(c.x, c.y, c.z, 0, { reach: reach + 0.3, color: look, quat: q, ...(weapon?.spin ? { from: -3.2, to: 3.2 } : {}) });
+      const round = Boolean(weapon?.spin || weapon?.round);
+      g.renderer.effects.slash(c.x, c.y, c.z, 0, { reach: reach + 0.3, color: look, quat: q, ...(round ? { from: -3.2, to: 3.2 } : {}) });
+      // (A soul weapon strikes with all its light here too, and no further for it.)
+      if (weapon?.soul && avatar) g.soulSwingFrom(avatar, true, 0.5);
       if (parry) return;
-      this.land(this.inReach(reach, weapon?.spin ? -1 : -0.17), weapon);
+      this.land(this.inReach(reach, round ? -1 : weapon?.soul ? weapon.arc : -0.17), weapon);
     }, lands * 1000);
     return aim?.f.id ?? null;
   }
@@ -805,7 +811,7 @@ export class Fight {
         f.model.squash = Math.max(f.model.squash, 0.5);
         if (!f.spec.big) f.kick = { ...h.way, far: 0.35, ms: 180, until: now + 180 };
         const c = add(add(f, f.up, f.alt + f.spec.height * 0.5), h.way, -f.spec.radius * 0.7);
-        g.renderer.effects.impact(c.x, c.y, c.z, h.way.x, h.way.z, SLASH[weapon?.key] ?? '#ffe27a', 1);
+        g.renderer.effects.impact(c.x, c.y, c.z, h.way.x, h.way.z, slashFor(weapon), 1);
       } else clang ??= h;
     }
     g.send({ t: 'nod', op: 'bop', ids });
@@ -1155,7 +1161,24 @@ export class Fight {
         break;
       case 'dark':
         nod.view.setDark(m.on === true);
+        if (g.adventure?.duel && m.on) nod.tellOnce('dark', 60000, '🌑', 'Out go the lights! Watch for a pair of eyes — and bop, or roll, as they flash.');
         break;
+      // (A weapon's soul gathers itself: shared/nod/soul-foes.js.)
+      case 'soulsays': {
+        const said = soulOf(g.adventure?.duel)?.soul.lines?.[m.i];
+        if (!said) break;
+        g.sound.setDuel({ soul: g.adventure.duel, rage: m.i });
+        g.sound.play(m.i ? 'soul-wake' : 'soul-circle', { secs: 1.2 });
+        if (f && m.i) {
+          const c = add(f, f.up, f.alt + f.spec.height * 0.5);
+          this.domes.push(new BurstDome(this.scene, c, 7, f.model.color, 900), new BurstDome(this.scene, c, 4, '#ffffff', 620));
+          this.poof(f, 40);
+          g.renderer.effects.sparkles(c.x, c.y, c.z, 30, [f.model.color, '#ffffff', '#ffe27a']);
+          g.renderer.shake(0.5);
+        }
+        g.emit('soul-says', { w: g.adventure.duel, i: m.i, text: said });
+        break;
+      }
       case 'lantern': {
         const list = nod.view.lanterns;
         if (m.i === -1) for (const l of list) l.set(false);
@@ -1237,6 +1260,16 @@ export class Fight {
     }
     g.setHp(msg);
     g.emit('hp');
+    // (Out of HP, in a duel with a weapon's soul: shared/nod/duel.js.)
+    if (msg.lost) {
+      g.dizzy = true;
+      g.sound.play('dizzy');
+      this.stop();
+      this.nod.view.setDark(false);
+      g.sound.setDuel(null);
+      g.emit('duel', { won: false, w: g.adventure?.duel });
+      return;
+    }
     if (msg.dizzy) {
       g.dizzy = true;
       g.sound.play('dizzy');
@@ -1397,4 +1430,5 @@ export class Fight {
 const PART_ICONS = { ring: '⭕', note: '🎵', crash: '💥' };
 const PART_NOTES = { ring: 0, note: 7, crash: -5 };
 // How each weapon's swing looks here.
+const slashFor = (weapon) => (weapon?.soul ? soulOf(weapon.souls[0])?.color : SLASH[weapon?.key]) ?? SLASH.punch;
 const SLASH = { punch: '#ffe27a', sword: '#4fc3ff', hammer: '#ffc21a', lavablade: '#ff6a1f', punchglove: '#ffd84d', galaxyblade: '#b98cff', thunderspear: '#9fe8ff', rainbowray: '#ff9fd0', meteorstaff: '#ff8a4d', bow: '#ffd75e', blaster: '#9fd8ff', bombrod: '#ffb06a' };

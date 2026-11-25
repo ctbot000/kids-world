@@ -44,6 +44,7 @@ import { COOK_BREAK_MS, cookCoins, doneness, RECIPES, recipeByKey } from './shar
 import { drawKitchen, KITCHEN_H, KITCHEN_W, rubPoints, VESSEL } from './render/kitchen.js';
 import { Kitchen3D } from './render/kitchen3d.js';
 import { robotKitDialog } from './ui-robokit.js';
+import { duelCard, forgeChip, soulCards, soulChestLine, soulDuelIntro, soulDuelOver, soulForge, soulLines, soulPartShow, soulSays, soulStageSoon } from './ui-souls.js';
 import { stockDialog } from './ui-stocks.js';
 import { BY_HEART, workbookByKey, workbookProgress, WORKBOOKS } from './shared/study.js';
 import { BRUSHES, COLORS as DRAW_COLORS, decodePicture, GALLERY_MAX, isBoard, isFrame, MAX_POINTS, PICTURE_H, PICTURE_W } from './shared/drawing.js';
@@ -526,14 +527,15 @@ export class UI {
     document.body.classList.remove('posing');
     const fn = this.modalClose;
     this.modalClose = null;
-    this.input.enabled = Boolean(this.game);
-    if (this.game) this.game.uiBlocking = false;
+    this.input.enabled = Boolean(this.game) && !this.soulScreen;
+    if (this.game) this.game.uiBlocking = Boolean(this.soulScreen);
     this.sound.play('close');
     fn?.();
   }
 
+  // (A soul weapon's show over everything is as good as one: ui-souls.js.)
   get modalOpen() {
-    return !$('modal').hidden;
+    return !$('modal').hidden || Boolean(this.soulScreen);
   }
 
   // Puts the focus in a dialog's first box a moment after it opens, unless a
@@ -1952,7 +1954,8 @@ export class UI {
   isleArrival() {
     const g = this.game;
     const adv = g?.adventure;
-    if (!adv?.story) return;
+    if (adv?.duel) soulDuelIntro(this);
+    if (!adv?.story || adv.duel) return;
     const seen = filmsSeen();
     const { intro } = adv.story.episode.films;
     const start = adv.story.n === 1 && adv.run ? `${intro}@${adv.run}.${adv.journey}` : '';
@@ -2367,7 +2370,7 @@ export class UI {
         // append() writes a null out as "null": only what is there.
         root.append(
           ...[
-            h('div', { class: 'dialog-head' }, h('h2', {}, '🛒 Shop'), coins, h('button', { class: 'chip', type: 'button', onclick: () => this.backpackDialog() }, '🎒 Backpack'), farming ? h('button', { class: 'chip', type: 'button', onclick: () => this.stockDialog() }, '📈 Stocks') : null),
+            h('div', { class: 'dialog-head' }, h('h2', {}, '🛒 Shop'), coins, h('button', { class: 'chip', type: 'button', onclick: () => this.backpackDialog() }, '🎒 Backpack'), forgeChip(this) ?? '', farming ? h('button', { class: 'chip', type: 'button', onclick: () => this.stockDialog() }, '📈 Stocks') : null),
             p === this.isle ? h('p', { class: 'muted' }, 'Adventure Isle is a world of its own: these coins, these treasures, potions and gear are the isle’s, apart from yours everywhere else.') : null,
             h('p', { class: 'muted' }, 'What you buy goes in your 🎒 backpack, and on you straight away: put things on and take them off there.'),
             h('h3', {}, 'Sell your treasures'),
@@ -2445,6 +2448,8 @@ export class UI {
             const on = gear.outfit === c.key;
             cards.push(card(this.gearPic('outfit', c.key, c.icon), c.name, `${c.power ? '✨ ' : ''}${c.does}`, on, tap(on ? '🙌 Take off' : '👕 Put on', () => p.putOn(on ? '' : c.key))));
           }
+          // Your soul weapons, which no shop sells, before any of it (ui-souls.js).
+          cards.unshift(...soulCards(this, card, tap));
           // On the isle, the tickets you hold to its story's later episodes
           // (shared/isle-story.js): yours to keep, first in the backpack.
           if (p === this.isle) {
@@ -2459,7 +2464,7 @@ export class UI {
           }
           // Keys for the isle's treasure chests (treasure.js).
           if (p.data.keys > 0) cards.push(card('🔑', `Chest Key × ${p.data.keys}`, 'Opens a wooden treasure chest on Adventure Isle.', false, null));
-          if (p.data.gkeys > 0) cards.push(card('👑', `Golden Key × ${p.data.gkeys}`, 'Opens the golden chest on Adventure Isle, full of coins, with a diamond and a potion.', false, null));
+          if (p.data.gkeys > 0) cards.push(card('👑', `Golden Key × ${p.data.gkeys}`, 'Opens the golden chest on Adventure Isle, full of coins, with a diamond and a potion — and the first on each island has a part of a soul weapon in it!', false, null));
           list.replaceChildren(
             ...(cards.length ? cards : [h('p', { class: 'muted shop-empty' }, 'Your backpack is empty. Sell treasures from your basket in the 🛒 shop, and buy shoes, wings, toy weapons, clothes and potions: they all go in here!')]),
           );
@@ -2467,7 +2472,7 @@ export class UI {
         draw();
         root.append(
           ...[
-            h('div', { class: 'dialog-head' }, h('h2', {}, '🎒 Backpack'), h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop'), h('button', { class: 'chip', type: 'button', onclick: () => this.collectionDialog() }, '🧸 Collection'), h('button', { class: 'chip', type: 'button', onclick: () => this.fishDialog() }, '🐟 Fish'), p !== this.isle ? h('button', { class: 'chip', type: 'button', onclick: () => this.stockDialog() }, '📈 Stocks') : null),
+            h('div', { class: 'dialog-head' }, h('h2', {}, '🎒 Backpack'), h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop'), h('button', { class: 'chip', type: 'button', onclick: () => this.collectionDialog() }, '🧸 Collection'), h('button', { class: 'chip', type: 'button', onclick: () => this.fishDialog() }, '🐟 Fish'), forgeChip(this) ?? '', p !== this.isle ? h('button', { class: 'chip', type: 'button', onclick: () => this.stockDialog() }, '📈 Stocks') : null),
             p === this.isle ? h('p', { class: 'muted' }, 'This is Adventure Isle’s backpack: what you bought on the isle, apart from your things everywhere else.') : null,
             h('p', { class: 'muted' }, 'Put on what you like and see how you look: friends see it on you too. One set of clothes at a time, and one toy weapon in your hand.'),
             stats,
@@ -2880,6 +2885,7 @@ export class UI {
           card('⌨️', 'Typing', ['Put down a Computer from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap ⌨️ Type). In ⌨️ Typing practice, copy a line of keys or words: the next key lights up on the keyboard, coloured by the finger that types it. In 🌧️ Word Rain, words fall from the sky: type one to pop it before it lands. Three that land end the game.']),
           card('📚', 'Studying', ['Put down a Study Desk from the toy box\'s 🛋️ Home tab and sit at it (press ', h('kbd', {}, 'Q'), ' beside it, or tap Sit): your workbooks open — adding, taking away, times tables, sharing and spelling. New facts are shown to you first, then you type the answers. Miss one and you see the answer and a way to work it out, and it comes back soon. Get a fact right in four studies and you know it by heart; the bar under each workbook fills up a little with every study. Press ', h('kbd', {}, 'Q'), ' (or tap Study) to open them again, and walk to get up.']),
           card('🔑', 'Key quizzes', ['On 🌟 Adventure Isle, each camp you help free gives you one quiz, at the level you pick: one question, one try, and the right answer is a 🔑 key to a treasure chest. Win a whole stage for one quiz for a 👑 golden key, which opens the golden chest. A quiz comes up by itself; if you shut it, the 🔑 button over the hotbar brings it back.']),
+          card('⚒️', 'Soul weapons', ['Six weapons no shop sells, one for each episode of 🌟 Adventure Isle. Each lies in pieces in the 👑 golden chests of its episode: the first you open on each island has a part for you — any of them, so maybe one you have already (melt one to spare for 🪙 coins). With every part, put it together at the ⚒️ Soul Forge, in the isle’s 🎒 backpack or 🛒 shop. Then its soul wakes: beat it on your own, rolling (', h('kbd', {}, 'Shift'), ' or 💨) just as a blow lands and bopping back what it throws or what flashes, and the weapon is yours. It never wears out — and two of yours combine into one that is mightier still!']),
           card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner its bosses go pop. Its story has six episodes, each with a film at its start and its end. In the first, 📖 The Star of Adventure Isle, King Grumble broke the lighthouse’s Star into twelve Star Shards and gave them to his captains to keep, and every stage is a chapter with a map of its own — Shipwreck Shore, the Whispering Woods, Frostpeak Pass, Candy Canyon, Sunscorch Dunes, Misty Marsh, the Crystal Caverns, Haunted Hollow, Ember Mountain, Cogwheel City, the Stormcloud Spires and his castle on Gloom Rock. Free the camps one after another along the way: each one freed opens the gate on to the next (there is no way round a gate: swim round one, and back you go), and at the end waits the chapter’s boss — one of King Grumble’s eleven captains, or at the very last the King himself — each with moves of its own: run out of the red rings, step aside when it charges, jump when it stomps! Pop it for a Star Shard — then 🏆 everyone’s results show what each of you did for the stage, and pay each of you coins and diamonds by how much you helped — and the next chapter is up, harder — after the fireworks everyone there goes on to it by themselves (or tap Go now). The higher stages fight back: flags slide down while monsters hold them, monsters ambush you half way up a flag, and things come down on the way between the camps. Pop King Grumble on its last stage and everyone there gets the 🎫 Rainbow Ticket, to keep — the only way into the second episode, 🌈 The Rainbow of Adventure Isle, which begins there and then: his big sister Queen Grizzle caught the rainbow in her great grey umbrella and hid its seven colours in the Rainbow Lands — the Tulip Fields, Maple Ridge, the Honeycomb Hills, Tangle Jungle, Bubble Lagoon, Moonbeam Moor and Violet Vale — each with a boss of its own, and every one you pop brings a colour back. Pop Queen Grizzle at its end and everyone there gets the 🧭 Wild Isle Compass, the only way into the third episode, 🏞️ The Wild Isle: an island far out to sea that is not made of bricks at all — real rocks, real trees, real waves and real animals — where Old Murk, the Fog Wolf, has stolen its five Sunstones and given them to the biggest creatures there: Driftwood Bay, Deepwood Forest, Thunder Falls, Snowcap Ridge, and Murk Fen, where he waits in his tower. Pop Old Murk and everyone there gets the 🪶 Magpie Feather, the only way into the fourth episode, 🔔 The Golden Bells, which is another kind of adventure altogether: no camps, no gates, no monsters at all. Jinx the Magpie has carried off the isle’s five Golden Bells and locked each in a cage on one of his Puzzle Isles — Bellbuoy Bay, Henhouse Hills, Topsy Gardens, Kite Cliffs and his own Magpie’s Nest — with a lock for each of his challenges there, to beat in any order you like: find the shinies he dropped (they glint!), climb to a golden key at the top of something tall, catch a cheeky monkey (it runs out of puff), lead lost chicks or sheep home, light every bonfire at once, sing back the Singing Stones’ tune, and at the very last, dazzle Jinx with his own beacons and catch him. Catch Jinx and everyone there gets the 🗺️ Toon Isle Map, the only way into the fifth episode, ☁️ Toon Isle: the biggest islands of all, drawn as a cartoon and hidden under Baron Bluster’s Cloud Blanket until somebody gets there — then the clouds roll back for everyone. His Storm Gang fights in battles, not camps: ambushes that shut you in a ring of thorns, wave after wave; beacons to keep alight while they storm them; Storm Nests to burst; Big Bads to hunt across the island (follow them when they run off to rest); and gangs roaming the paths. Win every battle to light each island’s Sky Lantern — Lollipop Bay, Toadstool Woods, Rumble Canyon, Snowball Peaks, and Thunder Top, where you zap the Baron down off his cloud with his own lightning rods. Pop Baron Bluster and everyone there gets the 🛏️ Cloud Pillow, the only way into the sixth episode, 🌙 The Land of Nod, which has no island in it at all, and not one block: every dream is a sky of little worlds of any shape, and each has a down of its own, so you can walk right round every one of them; step on a spring and it flings you to the next. The Night Mare has trampled five dreams into nightmares — Pillow Moons, Pumpkin Skies, the Music Box, Tick-Tock Skies and the Dark Side — and here it is not how strong your weapon is that counts: her frights guard themselves, and each has a way in. Roll (Shift, or 💨) just as a blow lands, bop back what is thrown or what flashes, jump and bop to slam down, trick them into things — then bop while they are dizzy, and once your five ★ are full, let a ✨ Brave Burst out (', h('kbd', {}, 'V'), ')! Every nightmare over lights a lamp round the dream’s night-light; light them all, and its golden spring flings you up to the boss. Only calming the Night Mare on the very last stage starts the story over, on a new journey — but you can start a new game any time, from stage 1 or, with your ticket, straight from a later episode (🆕 New game in the island’s card, or from 🌟 Adventure Isle on the title), and the other games keep going, each at its own stage. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there. And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
           card('🍎', 'Treasures', ['Tap fruit, seashells, pearls and star pieces to put them in your basket. Plant fruit to grow a tree! And tap a giant clam in the sandy shallows: sometimes there is a pearl in there for you, sometimes nothing but bubbles.']),
@@ -3958,7 +3964,15 @@ export class UI {
       this.raceGoAt = performance.now();
     });
     on('key-offer', () => this.keyOfferNews());
-    on('treasure', (e) => this.treasurePop(e.detail));
+    on('treasure', (e) => {
+      this.treasurePop(e.detail);
+      if (e.detail.gold) soulStageSoon();
+    });
+    // Soul weapons (ui-souls.js): a part out of a golden chest; and a duel with a
+    // weapon's soul, what it says and how it ends.
+    on('soul-part', (e) => soulPartShow(this, e.detail));
+    on('soul-says', (e) => soulSays(this, e.detail));
+    on('duel', (e) => soulDuelOver(this, e.detail));
     on('quiz', () => this.quizNews());
     on('next-stage', () => this.nextStageNews());
     on('tool', () => {
@@ -3991,6 +4005,8 @@ export class UI {
 
   detach() {
     this.game = null;
+    this.soulScreen?.close();
+    this.soulBanner?.remove();
     document.body.classList.remove('watching');
     // Back at the title, the world picked there.
     this.profile = this.titleWorld === 'isle' && this.hasIsleWorld() ? this.isle : this.home;
@@ -4650,7 +4666,8 @@ export class UI {
         if (g.song) root.append(h('p', { class: 'muted song-line' }, '🎵 The island song: ', h('b', { lang: langOf(g.song.name) || undefined }, g.song.name)));
         root.append(this.hideSeekPart());
         const adv = g.adventure;
-        if (g.nod) root.append(...this.dreamCard(g, adv));
+        if (adv?.duel) root.append(...duelCard(this, g));
+        else if (g.nod) root.append(...this.dreamCard(g, adv));
         else if (adv?.battles) root.append(...this.battleCard(g, adv));
         else if (adv?.quests) root.append(...this.questCard(g, adv));
         else if (adv) {
@@ -4679,6 +4696,8 @@ export class UI {
             h('div', { class: 'row', style: 'justify-content:center;gap:8px' }, h('button', { class: 'chip', type: 'button', onclick: () => this.storyDialog() }, '📖 The story'), h('button', { class: 'chip', type: 'button', onclick: () => this.monsterBook() }, '👾 Monster collection'), h('button', { class: 'chip', type: 'button', onclick: () => this.newIsleGameDialog() }, '🆕 New game')),
           );
         }
+        // (And this episode's soul weapon: ui-souls.js.)
+        if (adv && !adv.duel) root.append(...soulLines(this, g));
         const def = g.defense;
         if (def) {
           const built = def.pads.filter((p) => p.level > 0).length;
@@ -5077,7 +5096,7 @@ export class UI {
   renderIsland() {
     const g = this.game;
     if (!g?.world) return;
-    $('island-name').textContent = `${THEME_ICON[g.world.theme] ?? '🏝️'} ${g.world.name}`;
+    $('island-name').textContent = `${g.adventure?.duel ? g.adventure.story.icon : (THEME_ICON[g.world.theme] ?? '🏝️')} ${g.world.name}`;
     // The shared isle is open to everyone from the title screen: no code to
     // tell anybody.
     const code = $('island-code');
@@ -5090,7 +5109,7 @@ export class UI {
     const stage = $('island-stage');
     stage.hidden = !adv && !grow;
     stage.title = grow ? `Coins spent on ${g.world.name} by everyone, all told` : '';
-    stage.replaceChildren(...(adv ? [`${adv.story.episode.icon} `, h('span', { class: 'word' }, 'Stage '), String(adv.story.n)] : grow ? [`🪙 ${(g.spent ?? 0).toLocaleString()}`, h('span', { class: 'word' }, ' spent')] : []));
+    stage.replaceChildren(...(adv?.duel ? ['⚔️ ', h('span', { class: 'word' }, 'A soul duel')] : adv ? [`${adv.story.episode.icon} `, h('span', { class: 'word' }, 'Stage '), String(adv.story.n)] : grow ? [`🪙 ${(g.spent ?? 0).toLocaleString()}`, h('span', { class: 'word' }, ' spent')] : []));
   }
 
   // Your HP, shown while the island has monsters (or camps to free): the
@@ -5141,8 +5160,8 @@ export class UI {
       h('span', { class: 'hp-num' }, `${hp}/${maxHp}`),
       dragon ? h('span', { class: 'hp-label' }, '🐲') : '',
       dragonBar,
-      adv ? h('span', { class: 'camps' }, `${nod ? '🌟' : adv.battles ? '🏮' : '🚩'} ${freed}/${camps.length}`) : '',
-      nod ? h('span', { class: 'camps', title: 'Winks found' }, `😉 ${nod.winks.size}/${nod.world.winks.length}`) : '',
+      adv && !adv.duel ? h('span', { class: 'camps' }, `${nod ? '🌟' : adv.battles ? '🏮' : '🚩'} ${freed}/${camps.length}`) : '',
+      nod && !adv.duel ? h('span', { class: 'camps', title: 'Winks found' }, `😉 ${nod.winks.size}/${nod.world.winks.length}`) : '',
       nod ? h('span', { class: `courage${nod.fight.courage >= COURAGE ? ' full' : ''}`, 'aria-label': `Courage ${Math.floor(nod.fight.courage)} of ${COURAGE}` }, ...Array.from({ length: COURAGE }, (_, i) => h('i', { class: nod.fight.courage >= i + 1 ? 'on' : nod.fight.courage > i ? 'half' : '' }, '★'))) : '',
     );
     this.renderBurst();
@@ -6867,6 +6886,11 @@ export class UI {
     );
   }
 
+  // The Soul Forge, opened on one of its weapons (ui-souls.js).
+  soulForgeDialog(key = '') {
+    soulForge(this, key);
+  }
+
   // A robot kit's window: build, program and run a robot (ui-robokit.js).
   robotKitDialog() {
     robotKitDialog(this);
@@ -8481,6 +8505,7 @@ export class UI {
           h('div', { class: 'chest-pic', 'aria-hidden': 'true' }, t.gold ? '👑🔒' : '🧰🔒'),
           h('h2', {}, t.gold ? '🔒 The golden chest!' : '🔒 A treasure chest!'),
           h('p', {}, t.gold ? 'It is locked, and only a 👑 golden key opens it. Win a whole stage with your friends, then answer its quiz right for a golden key.' : `It is locked, and it takes a 🔑 key. ${this.keyWords().how}, then answer its quiz right for a key.`),
+          t.gold ? soulChestLine(this, g) : '',
           have ? h('p', { class: 'muted' }, `You have ${have}${t.gold ? '' : gkeys && !keys ? ' — a golden key only opens the golden chest' : ''}.`) : '',
           offer ? h('button', { class: 'big yellow', type: 'button', onclick: () => { this.sound.play('ui'); this.keyQuizDialog(); } }, h('span', { class: 'emoji' }, offer.gold ? '👑' : '🔑'), offer.gold ? ' Take your golden key quiz' : ' Take your key quiz') : '',
           h('button', { class: 'big green', type: 'button', onclick: () => this.closeModal() }, 'OK'),
@@ -8532,7 +8557,7 @@ export class UI {
         root.append(
           h('div', { class: 'chest-pic', 'aria-hidden': 'true' }, offer.gold ? '👑' : '🔑'),
           h('h2', {}, offer.gold ? '👑 A golden key quiz!' : '🔑 A key quiz!'),
-          h('p', {}, offer.gold ? 'You helped win the whole stage! Pick the level of your quiz: get its one question right for a golden key, which opens the golden chest.' : `${this.keyWords().did} Pick the level of your quiz: get its one question right for a key to a treasure chest.`),
+          h('p', {}, offer.gold ? 'You helped win the whole stage! Pick the level of your quiz: get its one question right for a golden key, which opens the golden chest — and in the first you open on each island there is a part of a soul weapon!' : `${this.keyWords().did} Pick the level of your quiz: get its one question right for a key to a treasure chest.`),
           h('p', { class: 'muted' }, 'One quiz, one try, so pick well and think carefully!'),
           list,
         );
@@ -8821,7 +8846,7 @@ export class UI {
     const icon = wornWeapon(this.profile.data.gear)?.icon ?? '👊';
     if (el.textContent !== icon) el.textContent = icon;
     const swap = $('btn-weapon');
-    const weapons = this.profile.data.gear.weapon >= 2;
+    const weapons = this.profile.weapons.length >= 2;
     if (swap.hidden === weapons) swap.hidden = !weapons;
     if (weapons && swap.textContent !== icon) swap.textContent = icon;
   }

@@ -518,4 +518,131 @@ const satin = {
   `,
 };
 
-export const SKINS = { quilt, cord, knit, plain, rind, plant, apple, pot, shell, cap, drum, vinyl, brass, keys, velvet, dial, sandglass, dusk, satin };
+// ---------------------------------------------------------------- the souls' own
+
+// Where a weapon's soul is fought (shared/nod/worlds/souls.js): what its world is
+// made of (uKind: night glass, pearl, a wild hill, a gong, drawing paper, moondust),
+// with a great circle of light let into the top of it, a star of as many points as
+// the weapon has parts.
+const rune = {
+  head: `${NOISE}
+    uniform vec3 uColor;
+    uniform vec3 uColor2;
+    uniform vec3 uGlow;
+    uniform vec3 uGlow2;
+    uniform float uR;
+    uniform float uN;
+    uniform float uKind;
+    float rLine(float d, float w) { return exp(-(d / w) * (d / w)); }
+    float rPoly(vec2 q, float n, float R, float t) {
+      float a = atan(q.y, q.x) + t;
+      float s = 6.2831853 / n;
+      return abs(cos(floor(0.5 + a / s) * s - a) * length(q) - R);
+    }
+    vec3 rHue(float h) { vec3 k = abs(fract(vec3(h, h + 2.0 / 3.0, h + 1.0 / 3.0)) * 6.0 - 3.0) - 1.0; return clamp(k, 0.0, 1.0); }`,
+  uniforms: { uColor: '#1a1440', uColor2: '#3a2f8a', uGlow: '#ffd84d', uGlow2: '#8fd8ff', uR: 12, uN: 6, uKind: 0 },
+  params: { roughness: 0.5, envMapIntensity: 0.6 },
+  glsl: /* glsl */ `
+    vec2 q = p.xz / uR;
+    float r = length(q);
+    float a = atan(q.y, q.x);
+    float top = smoothstep(0.3, 0.7, n.y);
+    vec3 line_ = mix(uGlow, uGlow2, smoothstep(0.35, 0.95, r));
+    if (uKind < 0.5) {
+      // Night glass: deep, with stars down in it.
+      float f = nFbm(p * 0.22 + 3.0);
+      albedo = mix(uColor, uColor2, smoothstep(0.35, 0.75, f));
+      vec3 g = p * vec3(1.3, 0.8, 1.3);
+      float star = smoothstep(0.16, 0.0, length(fract(g) - 0.5)) * step(0.86, nHash(floor(g)));
+      glow += vec3(0.75, 0.85, 1.0) * star * (0.5 + 0.5 * sin(uTime * 2.0 + nHash(floor(g)) * 50.0));
+      vec3 g2 = p * 3.1 + 11.0;
+      glow += vec3(1.0, 0.9, 0.7) * smoothstep(0.14, 0.0, length(fract(g2) - 0.5)) * step(0.95, nHash(floor(g2))) * 0.7;
+      rough = 0.14;
+    } else if (uKind < 1.5) {
+      // Pearl, every colour round it.
+      float h = a / 6.2831853;
+      float band = smoothstep(0.35, 0.65, sin(p.y * 2.2 + sin(a * 7.0) * 0.5 + nNoise(p * 0.5) * 2.0) * 0.5 + 0.5);
+      vec3 c = mix(vec3(1.0), rHue(h * 2.0), 0.62);
+      albedo = mix(mix(uColor, uColor2, nFbm(p * 0.4)), c, 0.55 + 0.35 * band);
+      albedo = mix(albedo, rHue(h * 2.0 + p.y * 0.04), 0.25) * 0.86;
+      line_ = mix(vec3(1.0), rHue(h * 2.0 + 0.5), 0.6);
+      rough = 0.2;
+      fuzz = 0.25;
+      // (The rings of it, along the top.)
+      r = r * 0.92;
+    } else if (uKind < 2.5) {
+      // Earth and moss, with roots of light.
+      float grain = nFbm(p * 1.6);
+      float moss = smoothstep(0.35, 0.62, nFbm(p * 0.4 + 4.0) + n.y * 0.22);
+      albedo = mix(uColor2 * (0.75 + 0.4 * grain), uColor * (0.75 + 0.5 * nNoise(p * 5.0)), moss);
+      vec3 w2 = p * 0.5 + vec3(nNoise(p * 0.7), nNoise(p * 0.7 + 9.0), nNoise(p * 0.7 + 17.0)) * 0.7;
+      float vein = smoothstep(0.03, 0.0, abs(nNoise(w2 * 1.5) - 0.5)) * (1.0 - top * 0.6);
+      glow += uGlow * vein * (0.4 + 0.3 * sin(uTime * 1.5 + p.x));
+      bend += nSlope(p * 3.4, 0.08) * 0.35;
+      rough = 0.92;
+      fuzz = 0.5 * moss;
+    } else if (uKind < 3.5) {
+      // A gong: beaten bronze, worn bright in the middle.
+      float beat = nNoise(p * vec3(1.7, 1.0, 1.7));
+      albedo = mix(uColor2, uColor, smoothstep(0.2, 0.75, beat * 0.5 + 0.5 * (1.0 - r)));
+      float grooves = sin(r * 120.0);
+      bend += normalize(vec3(p.x, 0.0, p.z) + 1e-4) * grooves * 0.06 * top + nSlope(p * 1.7, 0.15) * 0.3;
+      rough = 0.32 + 0.1 * beat;
+    } else if (uKind < 4.5) {
+      // Drawing paper, scribbled all over in crayon.
+      float tooth = nNoise(p * 14.0);
+      albedo = mix(uColor, uColor2, smoothstep(0.75, 1.0, nFbm(p * 0.6)) * 0.6) * (0.96 + 0.05 * tooth);
+      for (int i = 0; i < 5; i++) {
+        float fi = float(i);
+        vec2 c = vec2(sin(fi * 2.4 + 0.6), cos(fi * 2.4 + 0.6)) * (0.34 + 0.12 * fi);
+        vec2 d = q - c;
+        float wob = nNoise(vec3(q * 5.0, fi)) * 0.07;
+        float shape = i == 0 ? rLine(length(d) - 0.17 + wob, 0.02) : i == 1 ? rLine(rPoly(d, 3.0, 0.1, 0.4) - wob * 0.3, 0.02) : i == 2 ? rLine(d.y - sin(d.x * 18.0) * 0.06 + wob, 0.022) * step(abs(d.x), 0.3) : i == 3 ? rLine(rPoly(d, 4.0, 0.11, 0.9) - wob * 0.3, 0.02) : rLine(length(d) - 0.07 - 0.05 * cos(atan(d.y, d.x) * 5.0) + wob * 0.4, 0.02);
+        shape *= smoothstep(0.25, 0.6, tooth);
+        albedo = mix(albedo, rHue(fi * 0.21 + 0.03), clamp(shape, 0.0, 1.0) * 0.85 * top);
+      }
+      // (Ruled underneath.)
+      float rule = smoothstep(0.06, 0.02, abs(fract(p.z * 0.9) - 0.5)) * step(n.y, -0.5);
+      albedo = mix(albedo, vec3(0.45, 0.65, 0.95), rule * 0.6);
+      rough = 0.95;
+      fuzz = 0.2;
+    } else {
+      // Moondust, soft, with little pits in it.
+      float big_ = nFbm(p * 0.35);
+      albedo = mix(uColor2, uColor, smoothstep(0.3, 0.75, big_ * 0.7 + 0.3 * nNoise(p * 2.6)));
+      vec3 g = p * 0.8;
+      vec3 id = floor(g);
+      float pit = length(fract(g) - 0.5 - (vec3(nHash(id), nHash(id + 3.0), nHash(id + 7.0)) - 0.5) * 0.4);
+      float has = step(0.6, nHash(id + 5.0));
+      albedo *= 1.0 - 0.22 * has * smoothstep(0.26, 0.14, pit);
+      albedo *= 1.0 + 0.2 * has * smoothstep(0.05, 0.0, abs(pit - 0.28));
+      vec3 g3 = p * 2.6;
+      glow += vec3(0.9, 0.85, 1.0) * smoothstep(0.12, 0.0, length(fract(g3) - 0.5)) * step(0.96, nHash(floor(g3))) * (0.5 + 0.5 * sin(uTime * 2.4 + nHash(floor(g3)) * 40.0));
+      bend += nSlope(p * 2.2, 0.1) * 0.25;
+      rough = 0.9;
+      fuzz = 0.6;
+    }
+    // The circle of light.
+    float k = 0.0;
+    float pulse = 0.72 + 0.28 * sin(uTime * 1.6 - r * 7.0);
+    if (uR < 100.0) {
+      k += rLine(r - 0.95, 0.011) + rLine(r - 0.88, 0.006);
+      if (uKind < 0.5 || uKind > 1.5) {
+        k += rLine(r - 0.56, 0.007) + rLine(r - 0.2, 0.007);
+        float seg = a / 6.2831853 * 48.0 + uTime * 0.25;
+        float mark = step(0.5, nHash(vec3(floor(seg), 5.0, 1.0)));
+        k += step(0.893, r) * step(r, 0.938) * step(0.2, fract(seg)) * step(fract(seg), 0.75) * mark * 0.6;
+        k += rLine(rPoly(q, uN, 0.56 * cos(3.14159 / uN), uTime * 0.05), 0.007) * step(r, 0.57);
+        k += rLine(rPoly(q, uN, 0.56 * cos(3.14159 / uN) * 0.72, -uTime * 0.08), 0.006) * step(r, 0.52);
+        float s = 6.2831853 / uN;
+        float ca = floor(a / s + 0.5) * s;
+        k += rLine(length(q - vec2(cos(ca), sin(ca)) * 0.72) - 0.07, 0.007);
+      } else k += rLine(r - 0.82, 0.006) + rLine(r - 1.08, 0.011);
+      k = min(1.0, k) * top;
+    }
+    albedo = mix(albedo, line_, k * 0.35);
+    glow += line_ * k * pulse * (uKind > 3.5 && uKind < 4.5 ? 0.25 : uKind > 0.5 && uKind < 1.5 ? 0.35 : 0.85);
+  `,
+};
+
+export const SKINS = { quilt, cord, knit, plain, rind, plant, apple, pot, shell, cap, drum, vinyl, brass, keys, velvet, dial, sandglass, dusk, satin, rune };

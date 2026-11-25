@@ -30,6 +30,7 @@ import { STUDY_SIZE } from '../public/js/shared/study.js';
 import { PICTURE_H, PICTURE_W } from '../public/js/shared/drawing.js';
 import { youtubeAt } from '../public/js/shared/broadcast.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
+import { SOULS } from '../public/js/shared/souls.js';
 import { placeTemplate } from '../public/js/shared/stamps.js';
 import { World } from '../public/js/shared/world.js';
 import { adminHandler } from '../server/admin.js';
@@ -9178,6 +9179,246 @@ test('treasure chest keys on Adventure Isle come only from a quiz after a camp i
   assert.equal(gold.diamonds, before.diamonds + 1, 'and a diamond');
   await until(page, () => document.getElementById('treasure-pop').textContent.includes('Golden treasure'));
   await page.browserContext().close();
+});
+
+// Soul weapons (shared/souls.js, ui-souls.js): the golden chest on an island of the
+// isle has a part of its episode's, risen out of it and then shown over the whole
+// screen; with every part, the Soul Forge puts it together and its soul wakes; faced,
+// alone, on a world of its own, it is beaten there — and the weapon is in your hand,
+// back on the isle you came from.
+test('a part of a soul weapon out of a golden chest, the weapon put together at the Soul Forge, its soul faced and beaten, and back to the isle with it', { skip }, async () => {
+  const games = createGameServer({ log: () => {}, publicAdventure: true });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const { room } = games.publicAdventure;
+  const heard = [];
+  const friend = { send: (text) => heard.push(JSON.parse(text)), close() {} };
+  room.attach(friend);
+  room.receive(friend, { t: 'join', protocol: PROTOCOL, name: 'Happy Panda', look: { animal: 'panda' }, tickets: [] });
+  const page = await openPlayer(`http://127.0.0.1:${games.address().port}/`, { name: 'Keen Owl' });
+  const souls = (fn, arg) => page.evaluate(fn, arg);
+  const show = (text) => until(page, (t) => document.querySelector('.soul-show')?.textContent.includes(t), text);
+  const skipTo = async (text) => {
+    await until(page, () => document.querySelector('.soul-show.on'));
+    // (Straight on to where it holds.)
+    await until(page, () => {
+      const s = window.kidsWorld.ui.soulScreen;
+      if (s && !s.buttons.childElementCount) s.skip();
+      return s?.buttons.childElementCount > 0;
+    });
+    await show(text);
+  };
+  const press = (text) => clickButton(page, text, '.soul-show');
+  try {
+    await clickButton(page, '⚔️ Adventure');
+    await clickButton(page, 'Adventure Isle');
+    await inGame(page);
+    await until(page, () => window.kidsWorld.game?.profile === window.kidsWorld.isle);
+    for (const p of room.players.values()) p.safeUntil = Infinity;
+    // (It may be past a gate still shut.)
+    room.adventure.stepSneaks = () => [];
+    const gold = room.adventure.chests.list.find((o) => !o.openedAt && o.gold);
+    for (const o of [...room.critters.list]) {
+      if (Math.hypot(o.x - gold.x, o.z - gold.z) < 16) {
+        room.critters.remove(o.id);
+        room.broadcast({ t: 'cdel', id: o.id, by: 0 });
+      }
+    }
+    const standBy = () =>
+      page.evaluate((k) => {
+        const kw = window.kidsWorld;
+        Object.assign(kw.game.me.body, { x: k.x + 0.5, y: k.y + 0.2, z: k.z - 0.9, vx: 0, vy: 0, vz: 0, flying: false });
+        kw.game.sendMove(true);
+      }, { x: gold.x, y: gold.y, z: gold.z });
+    // Locked, it says there is a part of Starfall in it; so does the island card.
+    await standBy();
+    await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('🔒 Locked'));
+    await page.keyboard.press('KeyQ');
+    await until(page, () => document.querySelector('#modal .soul-chest')?.textContent.includes('a part of Starfall, the Star Sword'));
+    await souls(() => window.kidsWorld.ui.closeModal());
+    await page.click('#island-badge');
+    await until(page, () => /Starfall, the Star Sword0 of 8 parts.*golden chestwaiting here/.test(document.querySelector('#modal .soul-lines')?.textContent));
+    await souls(() => window.kidsWorld.ui.closeModal());
+    // Opened: a part, risen out of it for everyone there, and shown.
+    await souls(() => (window.kidsWorld.isle.data.gkeys = 1));
+    await until(page, () => document.getElementById('ride').textContent.includes('👑 Open'));
+    await page.keyboard.press('KeyQ');
+    await until(page, () => window.kidsWorld.isle.data.stats.parts === 1);
+    const { i } = await souls(() => ({ i: window.kidsWorld.isle.data.gear.souls.parts.star.findIndex(Boolean) }));
+    await skipTo(SOULS[0].parts[i].name);
+    assert.equal(await page.$$eval('.soul-show .ss-dots .on', (els) => els.length), 1);
+    assert.deepEqual(await souls(() => [window.kidsWorld.ui.modalOpen, window.kidsWorld.input.enabled, window.kidsWorld.renderer.drawing]), [true, false, false], 'nothing else meanwhile');
+    const told = heard.filter((m) => m.t === 'soul');
+    assert.deepEqual(told.map(({ op, w, i: n }) => [op, w, n]), [['part', 'star', i]], 'friends see it too');
+    await press('OK');
+    await until(page, () => !document.querySelector('.soul-show') && window.kidsWorld.input.enabled && window.kidsWorld.renderer.drawing);
+
+    // Every part: the forge, from the backpack. One to spare is melted there.
+    await souls(() => {
+      window.kidsWorld.isle.data.gear.souls.parts = { star: [1, 1, 3, 1, 1, 1, 1, 1], wild: [0, 1, 0, 0, 0, 0] };
+      window.kidsWorld.ui.backpackDialog();
+    });
+    await clickButton(page, '⚒️ Soul Forge', '#modal');
+    await until(page, () => document.querySelectorAll('#modal .forge-part').length === 8 && document.querySelector('#modal .forge-tab[data-soul="wild"]').textContent.includes('1/6'));
+    assert.ok(!(await page.$eval('#modal', (el) => el.textContent.includes('null'))));
+    const coins = await souls(() => window.kidsWorld.isle.data.coins);
+    await clickButton(page, '🔥 Melt', '#modal .forge-part[data-part="2"]');
+    await until(page, (c) => window.kidsWorld.isle.data.coins === c + 60 && document.querySelector('#modal .forge-part[data-part="2"] .count').textContent === '×2', coins);
+    await page.click('#modal .forge-tab[data-soul="wild"]');
+    await until(page, () => document.querySelectorAll('#modal .forge-part').length === 6 && document.querySelectorAll('#modal .forge-part.missing').length === 5);
+    await page.click('#modal .forge-tab[data-soul="star"]');
+    await clickButton(page, '⚒️ Put it together!', '#modal');
+    await skipTo('Astra, the Star Knight');
+    assert.deepEqual(await souls(() => window.kidsWorld.isle.data.gear.souls.made), ['star']);
+    await until(page, () => true);
+    for (let n = 0; n < 50 && !heard.some((m) => m.t === 'soul' && m.op === 'forged'); n++) await new Promise((r) => setTimeout(r, 100));
+    assert.ok(heard.some((m) => m.t === 'soul' && m.op === 'forged' && m.w === 'star'));
+    const isleCode = await souls(() => window.kidsWorld.game.code);
+
+    // Faced: a world of its own, nobody else there, and nothing of the isle's.
+    await press('⚔️ Face Astra!');
+    await until(page, () => window.kidsWorld.session?.started && window.kidsWorld.game?.adventure?.duel === 'star' && window.kidsWorld.renderer.nod, null, 60000);
+    await until(page, () => document.querySelector('.soul-banner')?.textContent.includes('Astra, the Star Knight'));
+    assert.match(await page.$eval('#island-stage', (el) => el.textContent), /A soul duel/);
+    assert.ok(!(await page.$eval('#hearts', (el) => /🌟|😉/.test(el.textContent))));
+    await souls(() => window.kidsWorld.ui.backpackDialog());
+    assert.equal(await page.$('#modal .forge-chip'), null, 'no forge in a duel');
+    await souls(() => window.kidsWorld.ui.closeModal());
+    await page.click('#island-badge');
+    await until(page, () => document.getElementById('modal').textContent.includes('The soul of Starfall'));
+    await souls(() => window.kidsWorld.ui.closeModal());
+    // Here she comes. Out of HP it is lost — and can be tried again at once.
+    await until(page, () => [...window.kidsWorld.game.nod.fight.frights.values()].some((f) => f.kind === 'soulstar' && f.state !== 'come'));
+    await souls(() => {
+      const { room } = window.kidsWorld.session.link;
+      const p = [...room.players.values()][0];
+      p.safeUntil = 0;
+      room.knock(p, room.now(), 0, { t: 'bump', pid: p.id, nod: room.adventure.dream.boss.fright, a: 0 });
+    });
+    await until(page, () => document.querySelector('#modal h2')?.textContent.includes('Astra was too much this time'), null, 15000);
+    await clickButton(page, '⚔️ Face Astra again', '#modal');
+    await until(page, () => window.kidsWorld.game?.adventure?.duel === 'star' && !window.kidsWorld.game.dizzy && window.kidsWorld.game.hp === window.kidsWorld.game.maxHp && !window.kidsWorld.session.link.room.adventure.lost, null, 60000);
+    await until(page, () => [...window.kidsWorld.game.nod.fight.frights.values()].some((f) => f.kind === 'soulstar' && f.state !== 'come'));
+    // A bop on her guard only clangs; open, and with her last heart gone, she is beaten.
+    const bop = (open) =>
+      page.evaluate((open) => {
+        const { game, session } = window.kidsWorld;
+        const { room } = session.link;
+        const sim = room.adventure.dream.frights;
+        const f = sim.get(room.adventure.dream.boss.fright);
+        for (const p of room.players.values()) p.safeUntil = Infinity;
+        if (!f || !game.nod) return;
+        if (open) {
+          f.hearts = 1;
+          f.immune = 0;
+          if (!f.open) sim.opens(f, 'stun', room.now(), 60000);
+          f.chips = 0.5;
+        } else f.cool = Infinity;
+        const { nod } = game;
+        const e = nod.fight.frights.get(f.id);
+        const way = { x: f.h.x, y: f.h.y, z: f.h.z };
+        nod.putAt({ x: f.x + way.x * 1.9, y: f.y + way.y * 1.9, z: f.z + way.z * 1.9 });
+        nod.h = { x: -way.x, y: -way.y, z: -way.z };
+        nod.fight.safeUntil = Infinity;
+        game.sendMove(true);
+        nod.fight.swungAt = 0;
+        if (e && (!open || e.open)) game.attack();
+      }, open);
+    for (let n = 0; n < 40 && !(await souls(() => window.kidsWorld.game.nod.fight.clangUntil > 0)); n++) {
+      await bop(false);
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    assert.ok(await souls(() => window.kidsWorld.game.nod.fight.clangUntil > 0));
+    for (let n = 0; n < 60 && !(await souls(() => window.kidsWorld.game.adventure.won)); n++) {
+      await bop(true);
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    await until(page, () => window.kidsWorld.isle.data.gear.souls.held.includes('star') && window.kidsWorld.isle.data.stats.souls === 1);
+    await skipTo('Starfall is yours!');
+    await press('🎉 Hooray!');
+    // Back where you were, with it in your hand; friends there hear of it.
+    await until(page, (code) => window.kidsWorld.session?.started && window.kidsWorld.game?.code === code && !window.kidsWorld.game.adventure?.duel, isleCode, 60000);
+    await until(page, () => window.kidsWorld.game.players.get(window.kidsWorld.game.pid)?.avatar?.weaponKind === 'soul:star');
+    for (let n = 0; n < 80 && !heard.some((m) => m.t === 'soul' && m.op === 'won'); n++) await new Promise((r) => setTimeout(r, 100));
+    assert.ok(heard.some((m) => m.t === 'soul' && m.op === 'won' && m.w === 'star'));
+    await souls(() => window.kidsWorld.ui.closeModal());
+    await souls(() => window.kidsWorld.ui.backpackDialog());
+    await until(page, () => [...document.querySelectorAll('#modal .shop-card.gear')].some((c) => c.textContent.includes('Starfall ✅')));
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
+    await games.shutdown();
+  }
+});
+
+// Two soul weapons of yours combined at the forge, from the title's Adventure side, into
+// one that strikes with both their souls; and taken apart again. Without WebGL to draw it
+// with, a show is told in words and a picture. A duel left is back at the title.
+test('two soul weapons are combined into one and taken apart again, and a duel started at the title goes back to it', { skip }, async () => {
+  const games = createGameServer({ log: () => {}, publicAdventure: true });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const page = await openPlayer(`http://127.0.0.1:${games.address().port}/`, { name: 'Keen Owl' });
+  const held = () => page.evaluate(() => window.kidsWorld.isle.data.gear.souls);
+  const forward = async (text) => {
+    await until(page, () => {
+      const s = window.kidsWorld.ui.soulScreen;
+      if (s && !s.buttons.childElementCount) s.skip();
+      return s?.buttons.childElementCount > 0;
+    });
+    await until(page, (t) => document.querySelector('.soul-show')?.textContent.includes(t), text);
+  };
+  const pick = (id) => clickButton(page, '➕ Combine', `#modal .forge-weapon[data-id="${id}"]`);
+  try {
+    await clickButton(page, '⚔️ Adventure');
+    await page.evaluate(() => {
+      Object.assign(window.kidsWorld.isle.data.gear.souls, { held: ['star', 'bells', 'nod'], pick: 'bells', made: ['toon'] });
+      window.kidsWorld.ui.backpackDialog();
+    });
+    await until(page, () => [...document.querySelectorAll('#modal .shop-card.gear')].filter((c) => c.textContent.includes('Never wears out')).length === 3);
+    await clickButton(page, '⚒️ Soul Forge', '#modal');
+    await until(page, () => document.querySelectorAll('#modal .forge-weapon').length === 3);
+    await pick('nod');
+    await pick('star');
+    await until(page, () => document.querySelector('#modal .forge-fusion')?.textContent.includes('Lullaby + Starfall = Moonstar'));
+    await clickButton(page, '⇄', '#modal');
+    await until(page, () => document.querySelector('#modal .forge-fusion')?.textContent.includes('Starfall + Lullaby = Moonstar'));
+    await clickButton(page, '💫 Combine them!', '#modal');
+    await forward('Moonstar');
+    assert.ok(await page.$eval('.soul-show', (el) => el.textContent.includes('13 and 13 → 16')));
+    assert.deepEqual((await held()).held, ['star+nod', 'bells']);
+    assert.equal((await held()).pick, 'star+nod');
+    await clickButton(page, '🎉 Hooray!', '.soul-show');
+    await until(page, () => document.querySelectorAll('#modal .forge-weapon').length === 2);
+    // Apart again: told in words, this time, as there is no drawing it.
+    await page.evaluate(() => {
+      const get = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function (kind, ...more) {
+        return String(kind).startsWith('webgl') ? null : get.call(this, kind, ...more);
+      };
+    });
+    await clickButton(page, '✂️ Take apart', '#modal .forge-weapon[data-id="star+nod"]');
+    await forward('Starfall · Lullaby');
+    assert.ok(await page.$('.soul-show.flat'));
+    await clickButton(page, 'OK', '.soul-show');
+    assert.deepEqual((await held()).held, ['star', 'nod', 'bells']);
+    await until(page, () => document.querySelectorAll('#modal .forge-weapon').length === 3);
+    // Held, and put away.
+    await clickButton(page, '✋ Hold it', '#modal .forge-weapon[data-id="bells"]');
+    await until(page, () => document.querySelector('#modal .forge-weapon[data-id="bells"]').textContent.includes('✅'));
+    await clickButton(page, '🙌 Put away', '#modal .forge-weapon[data-id="bells"]');
+    await until(page, () => !document.querySelector('#modal .forge-weapons').textContent.includes('✅'));
+    // Doodle's soul, faced from here; given up, back to the title.
+    await page.click('#modal .forge-tab[data-soul="toon"]');
+    await clickButton(page, '⚔️ Face Scrawl!', '#modal');
+    await until(page, () => window.kidsWorld.session?.started && window.kidsWorld.game?.adventure?.duel === 'toon', null, 60000);
+    assert.deepEqual(await page.evaluate(() => [window.kidsWorld.session.link.online, window.kidsWorld.session.islandId]), [false, null]);
+    await page.click('#island-badge');
+    await clickButton(page, '🚪 Give up this try', '#modal');
+    await until(page, () => !window.kidsWorld.session && !document.getElementById('title').hidden);
+    assert.deepEqual((await held()).made, ['toon'], 'it waits at the forge');
+  } finally {
+    await page.browserContext().close();
+    await games.shutdown();
+  }
 });
 
 // Each chapter's lair on the isle is held by a boss of its own

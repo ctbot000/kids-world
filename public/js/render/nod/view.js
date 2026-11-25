@@ -10,6 +10,7 @@ import { Winks } from './fx.js';
 import './frights-garden.js';
 import './frights-mare.js';
 import './frights-music.js';
+import './frights-souls.js';
 import { MAX_ZONES, nodLight } from './light.js';
 import { MOODS } from './moods.js';
 import { Motes } from './motes.js';

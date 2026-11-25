@@ -72,6 +72,7 @@ import { CHUNK } from './framing.js';
 import { addToys } from './gashapon.js';
 import { cleanGallery, joinGalleries } from './drawing.js';
 import { cleanCoins, cleanGear, cleanKeys, cleanPotions, cleanTames, COINS_MAX } from './shop.js';
+import { addSouls } from './souls.js';
 import { addStocks } from './stocks.js';
 import { cleanLook, isMadeUpName, isValidName } from './words.js';
 
@@ -291,15 +292,15 @@ export function mergeProfiles(mine, theirs) {
 }
 
 // Stats that are the best there has ever been, not a count to add up.
-const BEST_STATS = new Set(['highest', 'byheart', 'typewpm', 'rainbest', 'fishcm', 'ropebest']);
+const BEST_STATS = new Set(['highest', 'soulmax', 'byheart', 'typewpm', 'rainbest', 'fishcm', 'ropebest']);
 
 // What you did as the guest on a device, added to the player you logged in
 // as there, once, when you say it was you: every sticker either has earned
 // (dated the earlier day), the two baskets, their coins and what each has
 // done added up (the highest you flew, the facts known by heart and the
 // best typing, the higher of the two), and the better gear of each kind, and the clothes
-// and capsule toys of both, the dragons both tamed, the shares both own, and
-// the pictures in both galleries.
+// and capsule toys of both, the dragons both tamed, the shares both own, the
+// soul weapons and parts of both, and the pictures in both galleries.
 export function addProgress(player, guest) {
   const a = keptProfile(player);
   const b = keptProfile(guest);
@@ -315,6 +316,7 @@ export function addProgress(player, guest) {
   gear.toys = addToys(gear.toys, b.gear.toys);
   gear.tames = cleanTames(gear.tames + b.gear.tames);
   gear.stocks = addStocks(gear.stocks, b.gear.stocks);
+  gear.souls = addSouls(gear.souls, b.gear.souls);
   return { stickers, stats, basket, coins: Math.min(COINS_MAX, a.coins + b.coins), potions: Math.min(999, a.potions + b.potions), keys: cleanKeys(a.keys + b.keys), gkeys: cleanKeys(a.gkeys + b.gkeys), gear, gallery: joinGalleries(a.gallery, b.gallery) };
 }
 

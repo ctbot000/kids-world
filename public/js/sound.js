@@ -6,6 +6,8 @@
 // (an MP3, see shared/song.js), which plays round and round instead.
 import { dogSize } from './shared/dog-kinds.js';
 import { NOD_SOUNDS } from './nod/sounds.js';
+import { soulWeapon } from './shared/souls.js';
+import { duelBeat, duelTempo, SOUL_SOUNDS, SOUL_WHACKS } from './soul-sounds.js';
 
 
 const NOTE = (n) => 440 * 2 ** ((n - 69) / 12);
@@ -185,8 +187,8 @@ export class Sound {
       this.woof(dogSized);
       return;
     }
-    // The Land of Nod's own (nod/sounds.js).
-    const nod = NOD_SOUNDS[name];
+    // The Land of Nod's own (nod/sounds.js), and the soul weapons' (soul-sounds.js).
+    const nod = NOD_SOUNDS[name] ?? SOUL_SOUNDS[name];
     if (nod) {
       nod(this, opts);
       return;
@@ -504,7 +506,7 @@ export class Sound {
       // right there. opts.chain: how many blows in a row, each a note higher
       // than the last. opts.final: the blow that pops it, with a boom under it.
       case 'whack': {
-        const kind = opts.kind;
+        const kind = SOUL_WHACKS[soulWeapon(opts.kind)?.souls[0]] ?? opts.kind;
         const near = opts.near ?? 1;
         const chain = Math.max(0, (opts.chain ?? 1) - 1);
         const up = 2 ** (MAJOR[Math.min(chain, MAJOR.length - 1)] / 12);
@@ -1352,7 +1354,15 @@ export class Sound {
 
   stopMusic() {
     this.musicOn = false;
+    this.duel = null;
     this.song?.el.pause();
+  }
+
+  // The music of a duel with a weapon's soul, { soul, rage (how cross it is) }, in
+  // place of the island's; null for that again.
+  setDuel(duel) {
+    if (Boolean(duel) !== Boolean(this.duel)) this.beat = 0;
+    this.duel = duel;
   }
 
   // The island's song (a Blob), played instead of the island music while
@@ -1401,15 +1411,16 @@ export class Sound {
       return;
     }
     const night = this.mood === 'night';
-    const spb = 60 / (night ? 66 : 88) / 2; // eighth notes
+    const spb = 60 / (this.duel ? duelTempo(this.duel.soul) : night ? 66 : 88) / 2; // eighth notes
     if (this.nextBeat < now) this.nextBeat = now + 0.1;
     while (this.nextBeat < now + 0.2) {
-      this.playBeat(this.beat, this.nextBeat - now, night, spb);
+      if (this.duel) duelBeat(this, this.beat, this.nextBeat - now, this.duel);
+      else this.playBeat(this.beat, this.nextBeat - now, night, spb);
       this.nextBeat += spb;
       this.beat++;
     }
     // Birds in the day, crickets at night, now and then.
-    if (now > this.ambienceAt) {
+    if (now > this.ambienceAt && !this.duel) {
       this.ambienceAt = now + 4 + Math.random() * 7;
       if (this.weather === 'clear' || this.weather === 'rainbow') {
         if (night) for (let i = 0; i < 3; i++) this.tone(4200, { at: i * 0.09, decay: 0.03, gain: 0.012, dest: this.music });

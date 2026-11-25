@@ -212,6 +212,42 @@ const KINDS = {
     plain: painted([[lathe([[0, 0], [0.6, 0], [0.6, 0.2], [0.42, 0.34], [0.34, 1.2], [0.5, 1.5], [0.5, 1.7], [0.32, 1.9], [0.3, 2.8], [0.48, 3.0], [0.48, 3.2], [0, 3.25]], 24), '#4a3358']]),
     gloss: painted([[ball(0.66, 22, 16), '#7a5fa8', where(0, 3.6, 0)]]),
   }),
+  // ------- where the souls of weapons are fought
+  // A standing stone, mossy on top, with a mark that glows.
+  menhir: () => ({
+    soft: painted([
+      [smoothLathe([[0, 0], [0.72, 0], [0.7, 0.5], [0.6, 1.3], [0.5, 2.0], [0.34, 2.5], [0, 2.62]], 9, 22), '#8a8778', where(0, 0, 0, [1.05, 1, 0.8])],
+      [ball(0.4, 14, 8), '#6fa84a', where(0.04, 2.5, 0, [1.05, 0.34, 0.85])],
+      ...[0, 1, 2, 3, 4, 5].map((i) => [ball(0.16, 8, 6), i % 2 ? '#7fb85a' : '#5a9440', where(Math.sin(i * 1.7) * 0.62, 0.1 + (i % 3) * 0.12, Math.cos(i * 1.7) * 0.52, [1, 0.8, 1])]),
+    ]),
+    glow: painted([
+      [tube(0.2, 0.035, 26, 6), '#ffb547', where(0, 1.45, 0.43, 1, -0.12)],
+      [tube(0.09, 0.03, 18, 6), '#ffb547', where(0, 1.45, 0.44, 1, -0.12)],
+      [cap(0.03, 0.34, 6), '#ffb547', where(0, 1.0, 0.49, 1, -0.1)],
+      [cap(0.03, 0.2, 6), '#ffb547', where(0.1, 0.94, 0.48, 1, -0.1, 0, 0.8)],
+    ]),
+  }),
+  // A thin gold post with a star on it.
+  starpost: () => ({
+    metal: painted([[lathe([[0.34, 0], [0.3, 0.08], [0.12, 0.2], [0.09, 1.5], [0.16, 1.6], [0, 1.66]], 20), '#e8b93f']]),
+    glow: painted([[starGeo(5, 0.36, 0.17, 0.1, 0.03), '#ffe9a0', where(0, 1.98, 0, 1)], [ball(0.09, 10, 8), '#ffffff', where(0, 1.62, 0)]]),
+  }),
+  prism: () => ({
+    crystal: painted([
+      [new THREE.CylinderGeometry(0.08, 0.36, 1.6, 6), null, where(0, 0.75, 0.04, 1, 0.08)],
+      [new THREE.CylinderGeometry(0.05, 0.22, 0.95, 6), '#ffffff', where(0.34, 0.4, 0, 1, 0, 0, -0.45)],
+      [new THREE.CylinderGeometry(0.04, 0.2, 0.8, 6), null, where(-0.3, 0.32, -0.08, 1, -0.2, 0, 0.5)],
+    ]),
+  }),
+  // A wax crayon stood on its end.
+  crayon: () => ({
+    soft: painted([
+      [rod(0.27, 0.27, 1.35, 20), null, where(0, 0.66, 0)],
+      [lathe([[0.27, 1.33], [0.2, 1.38], [0.1, 1.72], [0.06, 1.8], [0, 1.82]], 20), null],
+      [rod(0.275, 0.275, 0.16, 20), '#2b2440', where(0, 0.28, 0)],
+      [rod(0.275, 0.275, 0.16, 20), '#2b2440', where(0, 1.1, 0)],
+    ]),
+  }),
 };
 
 // The colours each kind comes in.
@@ -230,6 +266,8 @@ const TINTS = {
   notelet: ['#ffd75e', '#ff9fd0', '#8fd6ff', '#b9ff9a'],
   cog: ['#e0b060', '#c98a4a', '#b9a08a'],
   spark: ['#b45cff', '#5fa8ff', '#ff6fc0'],
+  prism: ['#ff4b3e', '#ff9330', '#ffd83a', '#3fc95c', '#3a8bff', '#5a4be0', '#b45cf0'],
+  crayon: ['#ff2f62', '#ff8f12', '#ffd21a', '#22b85a', '#1f9bff', '#a45cf0'],
 };
 
 // Too small to cast a shadow worth having.

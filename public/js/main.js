@@ -28,6 +28,7 @@ import { headTop } from './shared/critters.js';
 import { addProgress, mergeProfiles } from './shared/keeper.js';
 import { makePet, placePet, petPose, stepPet } from './shared/pets.js';
 import { lookWithGear } from './shared/shop.js';
+import { soulOf } from './shared/souls.js';
 import { lookHair, lookTall } from './shared/words.js';
 import { generate, SIZES } from './shared/worldgen.js';
 
@@ -437,7 +438,7 @@ function startSession({ link, mode, islandId = null, key, loadingText, first = (
   renderer.removePet(-1);
   demo.avatar = null;
   demo.pet = null;
-  session = { link, game, mode, islandId, key, started: false, dirty: false };
+  session = { link, game, mode, islandId, key, visit, started: false, dirty: false };
   ui.hideTitle();
   ui.loading(loadingText, () => backToTitle());
   link.addEventListener('status', (e) => {
@@ -566,7 +567,7 @@ setInterval(() => {
 // Played alone, or closed to new visitors, it is on it hidden, for the
 // keeper's admin page alone, which can watch it unseen (shared/watch.js).
 function updateListing() {
-  const link = session?.mode === 'host' && session.started && !session.game.watching ? session.link : null;
+  const link = session?.mode === 'host' && session.started && !session.game.watching && !session.duel ? session.link : null;
   const open = link?.online && link.state === 'online' ? link.room.listing() : null;
   keeper.setListing(open ?? (link ? { ...link.room.listing({ anyway: true }), hidden: true } : null));
 }
@@ -672,6 +673,29 @@ async function lookAtCopy(copy, day) {
     return;
   }
   startSession({ link, mode: 'host', key: tokenKey('copy', id), loadingText: '👁️ Opening the kept copy…', watching: `👁️ Saved copy · ${day || 'latest'}` });
+}
+
+// A duel with the soul of a soul weapon of yours (shared/nod/duel.js), put together at
+// the Soul Forge (ui-souls.js): on a little world of its own, in this page alone, and
+// after it back to the island you were on (or the title). Once more: the same again.
+function soulDuel(key) {
+  const w = soulOf(key);
+  if (!w) return;
+  const back = session?.duel ? session.back : session?.game.shared ? session.visit || '' : '';
+  const link = new HostLink({ island: { soul: key }, online: false });
+  startSession({ link, mode: 'host', key: tokenKey('duel', key), loadingText: `${w.icon} ${w.soul.name} is waiting…` });
+  Object.assign(session, { duel: key, back });
+}
+
+function leaveDuel() {
+  const back = session?.back;
+  const won = ui.duelWon;
+  ui.duelWon = '';
+  backToTitle();
+  if (!back) return;
+  visitIsland(back);
+  // (Friends there hear whose weapon is yours now.)
+  if (won) session?.game.addEventListener('welcome', () => session?.game.send({ t: 'soul', op: 'won', w: won }), { once: true });
 }
 
 // Whether you have been on this island before, and so come back without its passcode.
@@ -984,6 +1008,8 @@ const titleHandlers = {
   // for, the first unless said), kept apart from the others: asked of one of
   // its games (viaCode), which says where the new one is.
   newIsleGame: (viaCode, episode = 1) => visitIsland(viaCode, '', '', { isleNew: true, episode }),
+  // A duel with the soul of a soul weapon, from the Soul Forge there.
+  soulDuel,
   // 🏢 The CTB island, straight from the title screen.
   ctb: () => watchCtb(keeperStarted),
   visitedBefore,
@@ -1014,7 +1040,7 @@ const gameHandlers = {
   canInvite: () => session && (session.mode !== 'host' || session.link.online),
   inviteLink,
   invitePlayer,
-  canToggleOnline: () => session?.mode === 'host' && !signalError,
+  canToggleOnline: () => session?.mode === 'host' && !session.duel && !signalError,
   isOnline: () => session?.link.online ?? false,
   setOnline: (on) => {
     session?.link.setOnline(on);
@@ -1043,12 +1069,14 @@ const gameHandlers = {
     backToTitle();
     visitIsland(code);
   },
-  canSave: () => session?.mode === 'host',
+  canSave: () => session?.mode === 'host' && !session.duel,
   saveFile: () => downloadIsland(),
   keeper,
   login: loginHandlers,
   applySettings: () => applySettings(),
-  leave: () => backToTitle(),
+  soulDuel,
+  leaveDuel,
+  leave: () => (session?.duel ? leaveDuel() : backToTitle()),
 };
 Object.assign(ui, { handlers: titleHandlers });
 

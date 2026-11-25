@@ -40,7 +40,7 @@ import { SPLASH_COOL_MS, VolcanoSim } from './volcano.js';
 import { underTent } from './tents.js';
 import { FIG_HEARTS, isMonsterGashapon, kindsOfFigures } from './gashapon.js';
 import { cleanDishFood, DISH_MAX, isDish } from './dish.js';
-import { CHEST_REACH } from './treasure.js';
+import { CHEST_REACH, isGoldChest } from './treasure.js';
 import { isBeast } from './beasts.js';
 import { isBoss } from './bosses.js';
 import { ARM_REACH, BOP_SLACK, bopGap, BUMP_HP, GHOST_FIRE, hpAfterBump, hpBack, isHeavy, KING_PUSH, KING_REACH, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, SPORES, STOMP } from './monsters.js';
@@ -52,6 +52,8 @@ import { applyStroke, blankPicture, cleanStroke, decodePicture, encodePicture, i
 import { cleanPiece } from './song.js';
 import { canWatch } from './watch.js';
 import { hasPower, METEOR_FALL_MS, ROD_LOB_MS, weaponOf } from './shop.js';
+import { duelWorld, SoulDuel } from './nod/duel.js';
+import { soulOf, soulWeapon } from './souls.js';
 import { cleanChat, cleanIslandName, cleanLook, cleanName, EMOTE_KEYS, isValidName, lookHair, lookTall, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
 
 // The most HP someone has, from the level on their look.
@@ -121,8 +123,16 @@ const BLASTS = {
   meteorstaff: { range: 7, blast: weaponOf('meteorstaff').blast, ms: METEOR_FALL_MS, fx: 'meteor' },
 };
 // A Thunder Spear's bolt leaps from one monster to another no further off
-// than this (middle to middle).
+// than this (middle to middle); and a soul weapon's wolf springs out of a swing
+// the once, however many it bops.
 const BOLT_LEAP = 5;
+const WOLF_MS = 300;
+// What someone has come by of soul weapons is told no oftener than this. A part
+// comes out of a golden chest opened no longer ago than that (GOLD_OPEN_MS), and
+// nothing touches them for a while as they look at it.
+const SOUL_NEWS_MS = 1500;
+const PART_SAFE_MS = 10000;
+const GOLD_OPEN_MS = 12000;
 // Talking: a few at once, then about one a second.
 const TALK_BURST = 5;
 const TALK_PER_SEC = 1;
@@ -201,8 +211,9 @@ export class Room {
   // and its toy box stays shut: nobody builds on it or brings anything to
   // it. Adventure Isle is one, made with adventure on too (shared and
   // adventure: a stage of the isle, server/adventure.js): stage, which one,
-  // and journey, how many times round its story this is.
-  constructor({ code = '', theme = 'sunny', size = 'small', name = '', seed = 0, adventure = false, defense = false, save = null, settings = null, stage = 1, journey = 1, shared = false, now = () => Date.now(), log = () => {}, random = Math.random } = {}) {
+  // and journey, how many times round its story this is. soul: whose, for a duel
+  // with the soul of a soul weapon (nod/duel.js), and nothing else.
+  constructor({ code = '', theme = 'sunny', size = 'small', name = '', seed = 0, adventure = false, defense = false, save = null, settings = null, stage = 1, journey = 1, shared = false, soul = null, now = () => Date.now(), log = () => {}, random = Math.random } = {}) {
     this.code = code;
     this.now = now;
     this.log = log;
@@ -210,7 +221,8 @@ export class Room {
     this.stage = cleanStage(stage);
     // How many times round the isle's story this is (server/adventure.js).
     this.journey = Number.isInteger(journey) && journey >= 1 ? Math.min(journey, 9999) : 1;
-    this.shared = shared === true;
+    const duel = soulOf(soul);
+    this.shared = shared === true || Boolean(duel);
     this.clients = new Map();
     this.tokens = new Map();
     this.players = new Map();
@@ -300,11 +312,12 @@ export class Room {
     } else {
       const s = seed >>> 0 || Math.floor(random() * 2 ** 31) + 1;
       const islandName = cleanIslandName(name) || randomIslandName(theme, random);
+      const duelled = duel ? { world: duelWorld(duel.key, s), critters: [] } : null;
       // The shared isle, Adventure Isle, is the map of its stage's chapter
       // of the story (isle-maps.js), not a random island.
       const isle = this.shared && adventure;
-      const made = isle ? buildIsle({ stage: this.stage, seed: s, journey: this.journey }) : generate({ seed: s, theme, size, name: islandName, defense });
-      if (isle) made.world.name = islandName;
+      const made = duelled ?? (isle ? buildIsle({ stage: this.stage, seed: s, journey: this.journey }) : generate({ seed: s, theme, size, name: islandName, defense }));
+      if (isle || duel) made.world.name = duel ? `The soul of ${duel.name}` : islandName;
       this.world = made.world;
       this.critters = new CritterSim(s ^ 0x5bd1e995);
       this.critters.max = maxCritters(this.world);
@@ -314,6 +327,7 @@ export class Room {
         this.adventure = new AdventureSim({ camps: made.camps, stage: this.stage, journey: this.journey, gates: made.gates, chestSpots: made.chestSpots, quests: made.quests, hub: made.hub, battles: made.battles, roads: made.roads, world: this.world }, s ^ 0x510e527f);
         this.adventure.setup(this.world, this.critters);
       }
+      if (duel) this.adventure = new SoulDuel(duel.key, s);
       for (const c of made.critters) this.critters.add(c.type, c.x, c.y, c.z, null, c.yaw);
       this.settings = cleanSettings(settings);
       this.env = { time: 0.3, weather: 'clear', left: 240 };
@@ -727,6 +741,9 @@ export class Room {
         break;
       case 'chest':
         this.chestOp(conn, p, msg);
+        break;
+      case 'soul':
+        this.soulOp(p, msg);
         break;
       case 'isle':
         this.isleOp(conn, p, msg);
@@ -1959,7 +1976,12 @@ export class Room {
     p.safeUntil = now + SAFE_MS;
     Object.assign(msg, this.hpOf(p), { home: false });
     if (p.hp === 0) {
-      if (this.adventure && this.helperFor(p.id, now)) {
+      if (this.adventure?.duel) {
+        // (Out of HP in a duel with a weapon's soul: it is lost, this time.)
+        this.adventure.lost = true;
+        p.dizzyUntil = Infinity;
+        Object.assign(msg, { dizzy: true, lost: true });
+      } else if (this.adventure && this.helperFor(p.id, now)) {
         p.dizzyUntil = now + DIZZY_MS;
         msg.dizzy = true;
       } else {
@@ -2300,6 +2322,7 @@ export class Room {
   // end): all their HP back at once, and up on their own if they were the
   // one sitting dizzy. With none missing, there is nothing to drink for.
   drank(p) {
+    if (this.adventure?.duel) return;
     const now = this.now();
     const dizzy = (p.dizzyUntil ?? 0) > now;
     if (p.hp >= p.maxHp && !dizzy) return;
@@ -2340,7 +2363,10 @@ export class Room {
     const at = { x: p.s[0], y: p.s[1], z: p.s[2] };
     const landed = msg.on === true && this.monsters.landsOn(m.id, at);
     if (!landed && !this.monsters.canBop(m.id, at, king ? (glove ? KING_REACH + glove.wave : KING_REACH) : weapon?.reach ?? 0)) return;
-    if (!landed && weapon?.chain) this.boltOn(p, m, now, weapon);
+    if (!landed && weapon?.chain && !(weapon.soul && now - (p.boltAt ?? -Infinity) < WOLF_MS)) {
+      p.boltAt = now;
+      this.boltOn(p, m, now, weapon);
+    }
     if (m.march) {
       this.bopMarcher(p, m, now, landed ? LAND_POWER : m.kind === 'king' ? (glove ? glove.king : king ? 1 : weapon?.king ?? 1) : (glove ? glove.shock : king ? 1 : weapon?.power ?? 1));
       return;
@@ -2355,6 +2381,7 @@ export class Room {
       const hit = this.monsters.hit(m, p.id, at, now, (landed ? land : (glove ? glove.shock : king ? 1 : weapon?.power ?? 1)) + this.figBonus(p, m), king ? (glove ? KING_PUSH + 4 : KING_PUSH) : weapon?.push, landed ? null : weapon?.key);
       if (hit.wait) return;
       if (hit.hearts) {
+        if (!landed && weapon?.daze) this.monsters.daze(m, now, weapon.daze);
         this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts, ...(hit.still ? { still: true } : {}) });
         return;
       }
@@ -2392,6 +2419,7 @@ export class Room {
     const hit = this.monsters.hit(m, p.id, from, now, weapon.power + this.figBonus(p, m), weapon.push, weapon.key);
     if (hit.wait) return;
     if (hit.hearts) {
+      if (weapon.daze) this.monsters.daze(m, now, weapon.daze);
       this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts, ...(hit.still ? { still: true } : {}) });
       return;
     }
@@ -2982,6 +3010,13 @@ export class Room {
   // lit, and everyone told who was there.
   nightmareOver(n, by, hero = 0) {
     const adv = this.adventure;
+    // (A weapon's soul beaten: nod/duel.js.)
+    if (adv.duel) {
+      adv.win();
+      this.broadcast({ t: 'duel', won: true, w: adv.duel });
+      this.allWell();
+      return;
+    }
     for (const id of by) adv.credit(id, 'play', n.boss ? 20 : 10);
     this.broadcast({ t: 'nightmare', id: n.id, by, ...(n.boss ? { won: true } : {}) });
     if (n.boss) {
@@ -3072,6 +3107,7 @@ export class Room {
       case 'chest': {
         // (Whoever the island says opened it spends the key: chestOp.)
         const chest = Number.isInteger(msg.i) ? dream.chests.open(at, msg.i, now) : null;
+        if (chest?.gold) p.goldAt = now;
         if (chest) this.broadcast({ t: 'nx', k: 'chest', pid: p.id, i: chest.i });
         break;
       }
@@ -3137,17 +3173,40 @@ export class Room {
   // who opened it ({ t: 'chest', x, y, z, by }) — the one who did spends
   // their key and gets what is inside.
   chestOp(conn, p, msg) {
-    if (!this.adventure || !this.shared || !Array.isArray(msg.at) || msg.at.length !== 3 || !msg.at.every(Number.isInteger)) return;
+    if (!this.adventure?.chests || !this.shared || !Array.isArray(msg.at) || msg.at.length !== 3 || !msg.at.every(Number.isInteger)) return;
     const [x, y, z] = msg.at;
     if (Math.hypot(p.s[0] - x - 0.5, p.s[2] - z - 0.5) > CHEST_REACH || Math.abs(p.s[1] - y) > 3) return;
+    const gold = isGoldChest(this.world.get(x, y, z));
     const cells = this.adventure.chests.open(this.world, x, y, z, this.now());
     if (!cells) return;
+    if (gold) p.goldAt = this.now();
     // Who opened it first, while it is still shut where everyone is, so
     // each page knows which kind it was and plays its opening from the
     // start (render/chest-model.js); then the chest open.
     this.broadcast({ t: 'chest', x, y, z, by: p.id });
     this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'nature', cells });
     this.changed();
+  }
+
+  // What someone on the isle has come by of soul weapons (souls.js), for everyone
+  // there to see: a part risen out of a golden chest — and nothing touches them
+  // for a while, as they look at it — a weapon put together, its soul beaten, or
+  // two combined.
+  soulOp(p, msg) {
+    if (!this.shared || !this.adventure || this.adventure.duel) return;
+    const now = this.now();
+    if (now - (p.soulAt ?? -Infinity) < SOUL_NEWS_MS) return;
+    p.soulAt = now;
+    const w = soulOf(msg.w);
+    if (msg.op === 'part') {
+      if (!w?.parts[Number.isInteger(msg.i) ? msg.i : -1] || now - (p.goldAt ?? -Infinity) > GOLD_OPEN_MS) return;
+      p.goldAt = -Infinity;
+      const near = Array.isArray(msg.at) && msg.at.length === 3 && msg.at.every(finite) && Math.hypot(msg.at[0] - p.s[0], msg.at[1] - p.s[1], msg.at[2] - p.s[2]) < 9;
+      const at = (near ? msg.at : p.s.slice(0, 3)).map((v) => +v.toFixed(2));
+      p.safeUntil = Math.max(p.safeUntil ?? 0, now + PART_SAFE_MS);
+      this.broadcast({ t: 'soul', op: 'part', pid: p.id, w: w.key, i: msg.i, at });
+    } else if ((msg.op === 'forged' || msg.op === 'won') && w) this.broadcast({ t: 'soul', op: msg.op, pid: p.id, w: w.key });
+    else if (msg.op === 'fused' && soulWeapon(msg.key)?.souls.length > 1) this.broadcast({ t: 'soul', op: 'fused', pid: p.id, key: msg.key });
   }
 
   // Someone on the shared isle starting a new game of it, from stage 1 (of

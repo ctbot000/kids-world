@@ -53,7 +53,8 @@ const LEAD_MOST = 6;
 // (slam), whether it bonks into things (bonk), and its moves (attacks.js MOVES),
 // in the turn it makes them: near and far, how far off whoever it is after has
 // to be; windup, how long it shows before; rest, how long after; every, how long
-// to the next; open, an opening it leaves after it by itself.
+// to the next; open, an opening it leaves after it by itself. lax: how many times
+// as long as others it stays open, if not just as long.
 export const FRIGHTS = {
   // ------- Pillow Moons
   // Dust Bunnies: little grey puffs with ears, in crowds, one bop each.
@@ -775,7 +776,7 @@ export class Frights {
   }
 
   // Open: for a moment, every bop counts. how: one of OPENINGS.
-  opens(f, how, now = this.now, ms = OPENINGS[how]) {
+  opens(f, how, now = this.now, ms = OPENINGS[how] * (f.spec.lax ?? 1)) {
     f.under = false;
     if (f.spec.guard === 'none' && !f.spec.falls) {
       // (One with no guard is only put off its stride.)

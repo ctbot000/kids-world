@@ -96,6 +96,13 @@ export const XP_FOR = {
   monsterfigs: { xp: 3, cap: 500 },
   monstertoys: { xp: 15 },
   chests: { xp: 10 },
+  // Soul weapons (shared/souls.js): parts found, weapons put together, souls
+  // beaten, weapons combined, and the most souls there have been in one.
+  parts: { xp: 15 },
+  forged: { xp: 100 },
+  souls: { xp: 250 },
+  fused: { xp: 25, cap: 12 },
+  soulmax: { xp: 50 },
   keys: { xp: 5, cap: 500 },
   notes: { xp: 0.1, cap: 1000 },
   tunes: { xp: 10, cap: 200 },

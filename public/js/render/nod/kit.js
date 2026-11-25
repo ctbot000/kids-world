@@ -71,6 +71,8 @@ const FINISH = {
   crystal: { params: { roughness: 0.12, envMapIntensity: 1.2 }, skin: 'rough = 0.12; glow = albedo * 0.3;' },
   ember: { params: { roughness: 0.5 }, skin: 'glow = albedo * 0.35;' },
   glow: { params: { roughness: 0.6 }, skin: 'glow = albedo * 0.75;' },
+  // As if made of light (a weapon's soul: frights-souls.js): its edges shining.
+  spirit: { params: { roughness: 0.3, envMapIntensity: 0.6 }, skin: 'float edge = 1.0 - abs(dot(normalize(vNodN), normalize(cameraPosition - w))); rough = 0.3; fuzz = 0.3; glow = albedo * 0.14 + albedo / max(0.12, max(albedo.r, max(albedo.g, albedo.b))) * edge * edge * (0.25 + 0.5 * edge);' },
 };
 const mats = new Map();
 export function finishOf(name, mode = 'instanced') {

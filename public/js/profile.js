@@ -13,6 +13,7 @@ import { mergeProfiles } from './shared/keeper.js';
 import { progressOf } from './shared/levels.js';
 import { CLOTHES, cleanCoins, cleanGear, cleanTames, cleanKeys, cleanPotions, COINS_MAX, KEYS_MAX, fixPrice, ISLAND_PRICE, isBroken, lookWithGear, nextLevel, POTION, sale, SEED_PACK, seedPrice, usesLeft, WEAPONS, weaponOf, wornWeapon } from './shared/shop.js';
 import { buying, companiesHeld, marketsHeld, oldSharesPaid, selling, splitting } from './shared/stocks.js';
+import { canForge, drawPart, forge, fuse, MELT_COINS, meltPart, partsFound, pickedSoul, SOUL_KEY, soulsIn, soulWeapon, split, takePart, winSoul } from './shared/souls.js';
 import { STAT_KEYS, STICKERS } from './shared/stickers.js';
 import { cleanLook, isValidName, randomLook, randomName } from './shared/words.js';
 import { load, save } from './storage.js';
@@ -201,7 +202,10 @@ export class Profile extends EventTarget {
     if (other && this.data.gear[other]) this.data.gear.off[other] = true;
     if (kind === 'weapon') delete this.data.gear.wear[next.key];
     // A new weapon goes straight into your hand (choose another any time).
-    if (kind === 'weapon') this.data.gear.pick.weapon = next.level;
+    if (kind === 'weapon') {
+      this.data.gear.pick.weapon = next.level;
+      this.data.gear.souls.pick = '';
+    }
     this.shopped();
     return true;
   }
@@ -348,6 +352,82 @@ export class Profile extends EventTarget {
     return true;
   }
 
+  // ------------------------------------------------ soul weapons (souls.js)
+
+  // A golden chest opened on an island of the isle (place: souls.js placeOf):
+  // the part it holds for you, of its episode's weapon (key), now yours —
+  // { key, i, fresh, spare, have (how many of it you have now), found (how many
+  // of its parts) } — or null when it holds none for you.
+  findPart(key, place, rand = Math.random) {
+    const s = this.data.gear.souls;
+    const got = drawPart(s, key, place, rand);
+    if (!got) return null;
+    const have = takePart(s, key, got.i, place);
+    this.shopped();
+    this.count('parts');
+    return { key, ...got, have, found: partsFound(s, key) };
+  }
+
+  // A part you have to spare melted down into coins: whether it was.
+  meltPart(key, i) {
+    if (!meltPart(this.data.gear.souls, key, i)) return false;
+    this.earn(MELT_COINS);
+    return true;
+  }
+
+  // A weapon put together out of all its parts: its soul is awake, and has
+  // still to be beaten (nod/duel.js). Whether it was.
+  forgeSoul(key) {
+    if (!canForge(this.data.gear.souls, key)) return false;
+    forge(this.data.gear.souls, key);
+    this.shopped();
+    this.count('forged');
+    return true;
+  }
+
+  // Its soul beaten: the weapon is yours, and in your hand. Whether it is.
+  beatSoul(key) {
+    const g = this.data.gear;
+    if (!winSoul(g.souls, key)) return false;
+    delete g.off.weapon;
+    this.shopped();
+    this.count('souls');
+    this.count('soulmax', 1, { max: true });
+    return true;
+  }
+
+  // Two of yours combined into one (in the form of the first), and in your
+  // hand: it (its spec), or null.
+  fuseSouls(a, b) {
+    const g = this.data.gear;
+    const id = fuse(g.souls, a, b);
+    if (!id) return null;
+    delete g.off.weapon;
+    this.shopped();
+    this.count('fused');
+    this.count('soulmax', soulsIn(id).length, { max: true });
+    return soulWeapon(`${SOUL_KEY}${id}`);
+  }
+
+  // One of them taken apart again into the weapons it was made of: their ids,
+  // or null.
+  splitSoul(id) {
+    const list = split(this.data.gear.souls, id);
+    if (list) this.shopped();
+    return list;
+  }
+
+  // Which of your soul weapons is in your hand, by its id (friends see it there
+  // at once): the weapon, or null.
+  pickSoul(id) {
+    const g = this.data.gear;
+    if (!g.souls.held.includes(id)) return null;
+    g.souls.pick = id;
+    delete g.off.weapon;
+    this.shopped();
+    return pickedSoul(g.souls);
+  }
+
   // An HP potion found (in a treasure chest): into your pocket for free.
   findPotion() {
     if (this.data.potions >= 999) return false;
@@ -375,7 +455,7 @@ export class Profile extends EventTarget {
   // Skates go on your feet in place of running shoes: putting one on takes
   // the other off.
   wear(kind, on) {
-    if (!this.data.gear[kind]) return;
+    if (!this.data.gear[kind] && !(kind === 'weapon' && this.data.gear.souls.held.length)) return;
     if (on) delete this.data.gear.off[kind];
     else this.data.gear.off[kind] = true;
     const other = { shoes: 'skates', skates: 'shoes' }[kind];
@@ -391,6 +471,7 @@ export class Profile extends EventTarget {
     if (!Number.isInteger(level) || level < 1 || level > this.data.gear.weapon) return null;
     if (isBroken(this.data.gear, WEAPONS[level - 1])) return null;
     this.data.gear.pick.weapon = level;
+    this.data.gear.souls.pick = '';
     delete this.data.gear.off.weapon;
     this.shopped();
     return WEAPONS[level - 1];
@@ -399,11 +480,11 @@ export class Profile extends EventTarget {
   // The next of your weapons round: for the button by the bop button (and
   // its key, N), flipping through them as it is pressed. With one put away
   // in the backpack, it is that one back into your hand.
-  // Broken ones are skipped.
+  // Broken ones are skipped, and your soul weapons come after the rest.
   nextWeapon() {
     const g = this.data.gear;
-    const have = g.weapon;
-    if (have < 2) return null;
+    const all = this.weapons;
+    if (all.length < 2) return null;
     const worn = wornWeapon(g);
     if (!worn) {
       // Put away: back into your hand (the pick, or the best not broken).
@@ -411,21 +492,28 @@ export class Profile extends EventTarget {
       this.wear('weapon', true);
       return wornWeapon(g);
     }
-    const from = WEAPONS.indexOf(worn);
-    for (let i = 1; i < have; i++) {
-      const level = ((from + i) % have) + 1;
-      if (!isBroken(g, WEAPONS[level - 1])) return this.pickWeapon(level);
+    const from = all.indexOf(worn);
+    for (let i = 1; i < all.length; i++) {
+      const w = all[(from + i) % all.length];
+      if (w.soul) return this.pickSoul(w.id);
+      if (!isBroken(g, w)) return this.pickWeapon(WEAPONS.indexOf(w) + 1);
     }
     return null;
   }
 
+  // Every weapon you have to carry, the shop's first and then your soul weapons.
+  get weapons() {
+    const g = this.data.gear;
+    return [...WEAPONS.slice(0, g.weapon), ...g.souls.held.map((id) => soulWeapon(`${SOUL_KEY}${id}`))];
+  }
+
   // A swing that landed, with the weapon in your hand: it wears a little.
   // Returns { weapon, left } (left: swings it has left; 0, it just broke),
-  // or null with no weapon in hand.
+  // or null with no weapon in hand (or a soul weapon, which never wears).
   useWeapon() {
     const g = this.data.gear;
     const weapon = wornWeapon(g);
-    if (!weapon) return null;
+    if (!weapon || weapon.soul) return null;
     g.wear[weapon.key] = (g.wear[weapon.key] ?? 0) + 1;
     this.shopped();
     return { weapon, left: usesLeft(g, weapon) };

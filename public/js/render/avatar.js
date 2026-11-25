@@ -10,10 +10,12 @@ import * as THREE from '../../vendor/three.module.js';
 import { BRICK_COLORS, TOY_BRICKS } from '../shared/blocks.js';
 import { HIPS } from '../shared/critters.js';
 import { BENCH_H, HIGH, LOW } from '../shared/piano.js';
+import { soulWeapon } from '../shared/souls.js';
 import { buildOf, FUR_COLORS, GROWN_UP, HAIR_COLORS, headOf, isPerson, lookScale, lookTall, SKIN_TONES } from '../shared/words.js';
 import { fishingRod } from './fishing-rod.js';
 import { STICK_LEN } from './mallow-model.js';
 import { heldRope, placeRope } from './jump-rope.js';
+import { soulWeaponModel } from './soul-models.js';
 import { bake, bakeCached, blobShadow, capsule, cone, cylinder, geo, lathe, loft, mesh, onSurface, roundedBox, sphere, toon, torus } from './toon.js';
 
 // A King Punch's charge (game.js chargeBop): how long it takes, and how far
@@ -214,6 +216,86 @@ export const SWINGS = {
     ],
   },
 };
+// The swings of the soul weapons (shared/souls.js), by their forms.
+export const SOUL_SWINGS = {
+  // Starfall: drawn right back over the shoulder in both hands, and a great
+  // cut down across, the crescent flying off the end of it.
+  starsword: {
+    secs: 0.56,
+    strike: 0.5,
+    keys: [
+      { at: 0, w: 0, wL: 0 },
+      { at: 0.3, w: 1, wL: 1, fwd: -2.8, raise: 1, elbow: 0.5, wrist: -0.4, fwdL: -2.6, raiseL: 0.85, elbowL: 0.6, twist: 0.56, lean: -0.12, nod: -0.16 },
+      { at: 0.5, w: 1, wL: 1, fwd: -1.05, raise: -0.42, elbow: 0.08, wrist: 1.2, fwdL: -0.9, raiseL: -0.5, elbowL: 0.15, twist: -0.56, lean: 0.24, step: 0.45, dip: -0.06, nod: 0.14 },
+      { at: 0.68, w: 1, wL: 1, fwd: -0.8, raise: -0.5, elbow: 0.14, wrist: 1.1, fwdL: -0.72, raiseL: -0.55, elbowL: 0.2, twist: -0.6, lean: 0.2, step: 0.45, dip: -0.06, nod: 0.1 },
+      { at: 1, w: 0, wL: 0 },
+    ],
+  },
+  // Prisma: swung round from out at the side, flat, and let go of in front.
+  ring: {
+    secs: 0.56,
+    strike: 0.42,
+    keys: [
+      { at: 0, w: 0, wL: 0 },
+      { at: 0.24, w: 1, wL: 0.8, fwd: -0.7, raise: 1.25, elbow: 0.7, wrist: 1.2, fwdL: -0.9, raiseL: 0.3, elbowL: 0.5, twist: 0.62, lean: -0.08, nod: -0.04 },
+      { at: 0.42, w: 1, wL: 0.8, fwd: -1.55, raise: 0.02, elbow: 0.04, wrist: 1.55, fwdL: 0.3, raiseL: 0.7, elbowL: 0.6, twist: -0.58, lean: 0.2, step: 0.45, dip: -0.04, nod: 0.08 },
+      { at: 0.7, w: 1, wL: 0.6, fwd: -1.5, raise: 0.05, elbow: 0.15, wrist: 1.5, fwdL: 0.2, raiseL: 0.6, elbowL: 0.6, twist: -0.4, lean: 0.12, step: 0.35, dip: -0.03, nod: 0.04 },
+      { at: 1, w: 0, wL: 0 },
+    ],
+  },
+  // Wildheart: up over the one shoulder in both hands, and down hard.
+  axe: {
+    secs: 0.56,
+    strike: 0.54,
+    keys: [
+      { at: 0, w: 0, wL: 0 },
+      { at: 0.36, w: 1, wL: 1, fwd: -2.95, raise: 0.45, elbow: 0.6, wrist: -0.3, fwdL: -2.75, raiseL: 0.3, elbowL: 0.6, twist: 0.3, lean: -0.16, nod: -0.18 },
+      { at: 0.54, w: 1, wL: 1, fwd: -1.15, raise: -0.15, elbow: 0.12, wrist: 1.35, fwdL: -1.1, raiseL: -0.4, elbowL: 0.15, twist: -0.3, lean: 0.3, step: 0.45, dip: -0.07, nod: 0.16 },
+      { at: 0.72, w: 1, wL: 1, fwd: -1.0, raise: -0.18, elbow: 0.14, wrist: 1.4, fwdL: -0.98, raiseL: -0.4, elbowL: 0.18, twist: -0.3, lean: 0.27, step: 0.45, dip: -0.06, nod: 0.12 },
+      { at: 1, w: 0, wL: 0 },
+    ],
+  },
+  // Clarion: both hands up and back over the head, and down: DONG.
+  hammer: {
+    secs: 0.64,
+    strike: 0.56,
+    keys: [
+      { at: 0, w: 0, wL: 0 },
+      { at: 0.42, w: 1, wL: 1, fwd: -3, raise: 0.12, elbow: 0.6, wrist: -0.2, fwdL: -2.8, raiseL: 0.05, elbowL: 0.6, lean: -0.18, nod: -0.2 },
+      { at: 0.56, w: 1, wL: 1, fwd: -1.1, raise: -0.08, elbow: 0.12, wrist: 1.4, fwdL: -1.15, raiseL: -0.35, elbowL: 0.15, lean: 0.34, step: 0.42, dip: -0.09, nod: 0.18 },
+      { at: 0.74, w: 1, wL: 1, fwd: -0.98, raise: -0.08, elbow: 0.15, wrist: 1.5, fwdL: -1, raiseL: -0.35, elbowL: 0.15, lean: 0.3, step: 0.42, dip: -0.08, nod: 0.15 },
+      { at: 1, w: 0, wL: 0 },
+    ],
+  },
+  // Doodle: dipped back low to the one side, and swept right across, high
+  // and wide, as if over a canvas as big as a house.
+  brush: {
+    secs: 0.58,
+    strike: 0.52,
+    keys: [
+      { at: 0, w: 0, wL: 0 },
+      { at: 0.26, w: 1, wL: 1, fwd: -0.5, raise: 1.35, elbow: 0.25, wrist: 0.9, fwdL: -0.9, raiseL: -0.3, elbowL: 0.9, twist: 0.7, lean: -0.04, dip: -0.04, nod: -0.04 },
+      { at: 0.52, w: 1, wL: 1, fwd: -1.6, raise: -0.35, elbow: 0.06, wrist: 1.4, fwdL: -1.35, raiseL: 0.2, elbowL: 0.3, twist: -0.62, lean: 0.14, step: 0.4, dip: -0.02, nod: 0.02 },
+      { at: 0.72, w: 1, wL: 1, fwd: -1.75, raise: -0.5, elbow: 0.1, wrist: 1.2, fwdL: -1.3, raiseL: 0.35, elbowL: 0.35, twist: -0.7, lean: 0.1, step: 0.4, dip: -0.01, nod: -0.04 },
+      { at: 1, w: 0, wL: 0 },
+    ],
+  },
+  // Lullaby: held out level, and round you go, the once.
+  scythe: {
+    secs: 0.64,
+    strike: 0.6,
+    turn: { from: 0.12, to: 0.66 },
+    keys: [
+      { at: 0, w: 0, wL: 0 },
+      { at: 0.16, w: 1, wL: 1, fwd: -1.45, raise: 0.6, elbow: 0.2, wrist: 1.45, fwdL: -1.1, raiseL: 0.2, elbowL: 0.6, twist: 0.4, lean: -0.05, nod: -0.05 },
+      { at: 0.6, w: 1, wL: 1, fwd: -1.35, raise: 0.2, elbow: 0.06, wrist: 1.35, fwdL: -1.15, raiseL: -0.1, elbowL: 0.5, twist: -0.4, lean: 0.18, step: 0.4, dip: -0.07, nod: 0.06 },
+      { at: 0.76, w: 1, wL: 1, fwd: -1.3, raise: 0.2, elbow: 0.1, wrist: 1.3, fwdL: -1.1, raiseL: -0.05, elbowL: 0.5, twist: -0.36, lean: 0.15, step: 0.4, dip: -0.05, nod: 0.05 },
+      { at: 1, w: 0, wL: 0 },
+    ],
+  },
+};
+// The swing of whatever is in hand, by its key in a look (none: a fist).
+export const swingOf = (kind) => SWINGS[kind] ?? SOUL_SWINGS[soulWeapon(kind)?.form] ?? SWINGS.punch;
 const POSE_KEYS = ['w', 'wL', 'fwd', 'raise', 'elbow', 'wrist', 'fwdL', 'raiseL', 'elbowL', 'twist', 'lean', 'nod', 'dip', 'step'];
 // What a key says of one of them: an arm angle a key leaves out is the next
 // key's (it has no weight there anyway), anything else is none.
@@ -1822,6 +1904,8 @@ const turnedBlade = (...parts) => {
   return blade;
 };
 
+// How big a soul weapon is in the hand, of its size at the Soul Forge.
+const SOUL_SIZE = 0.8;
 // A toy weapon from the shop (shared/shop.js), held in the hand: its grip
 // at the hand, pointing forward with the arm down. Soft foam and bubbles,
 // in bright toy colours.
@@ -1829,6 +1913,14 @@ export function weapon(kind) {
   const g = new THREE.Group();
   g.name = `weapon ${kind}`;
   g.rotation.x = Math.PI / 2;
+  // (A soul weapon: soul-models.js, a little smaller than it is at the forge.)
+  const soul = soulWeaponModel(kind);
+  if (soul) {
+    soul.scale.setScalar(SOUL_SIZE);
+    g.add(soul);
+    g.userData.tick = soul.userData.tick;
+    return g;
+  }
   switch (kind) {
     case 'sword':
       g.add(
@@ -2801,7 +2893,7 @@ export class Avatar {
   // long until it lands, in seconds.
   swing() {
     this.swingAt = this.time;
-    const swing = SWINGS[this.weaponKind] ?? SWINGS.punch;
+    const swing = swingOf(this.weaponKind);
     return swing.secs * swing.strike;
   }
 
@@ -2809,6 +2901,11 @@ export class Avatar {
   // a Thunder Spear's point, a Rainbow Ray's lens, a Meteor Staff's rock.
   muzzle() {
     return this.tip?.getWorldPosition(new THREE.Vector3()) ?? null;
+  }
+
+  // What is in hand thrown, and back in it in secs.
+  throwIt(secs) {
+    this.thrown = this.time + secs;
   }
 
   // A King Punch charging (game.js chargeBop): k is how far it has come, 0 to
@@ -3278,7 +3375,7 @@ export class Avatar {
     let dip = 0;
     let step = 0;
     let wrist = 0;
-    const swing = SWINGS[this.weaponKind] ?? SWINGS.punch;
+    const swing = swingOf(this.weaponKind);
     const swung = t - (this.swingAt ?? -Infinity);
     if (swung < swing.secs) {
       const p = swingPose(swing, swung / swing.secs);
@@ -3363,6 +3460,12 @@ export class Avatar {
       this.weapon.rotation.x = held + (Math.PI - held) * up;
       // Shot, the bow is empty until the swing is over and the next is on.
       if (this.nock) this.nock.visible = !(swung >= swing.secs * swing.strike && swung < swing.secs);
+      // What goes round a soul weapon; and Prisma gone from the hand, thrown.
+      this.weapon.userData.tick?.(t);
+      if (this.thrown !== undefined) {
+        this.weapon.visible = t >= this.thrown;
+        if (this.weapon.visible) this.thrown = undefined;
+      }
     }
     // The head keeps looking ahead as the shoulders turn.
     this.head.rotation.set(headNod, -twist * 0.8, headTilt);

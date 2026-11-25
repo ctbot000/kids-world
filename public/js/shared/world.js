@@ -91,7 +91,7 @@ export class World {
 
 export function normalizeMeta(meta) {
   const int = (v, lo, hi, fallback) => (Number.isInteger(v) && v >= lo && v <= hi ? v : fallback);
-  const theme = ['sunny', 'snowy', 'candy', 'desert', 'volcano', 'park', 'race', 'zoo', 'escape', 'flat', 'grow', 'dunes', 'crystal', 'hollow', 'works', 'spires', 'tulip', 'maple', 'honey', 'jungle', 'lagoon', 'moor', 'vale', 'wildcoast', 'wildwood', 'wildfalls', 'wildpeak', 'wildfen', 'toonbay', 'toonwood', 'tooncanyon', 'toonpeak', 'toonstorm', 'nodpillow', 'nodgarden', 'nodmusic', 'nodclock', 'nodmare'].includes(meta?.theme) ? meta.theme : 'sunny';
+  const theme = ['sunny', 'snowy', 'candy', 'desert', 'volcano', 'park', 'race', 'zoo', 'escape', 'flat', 'grow', 'dunes', 'crystal', 'hollow', 'works', 'spires', 'tulip', 'maple', 'honey', 'jungle', 'lagoon', 'moor', 'vale', 'wildcoast', 'wildwood', 'wildfalls', 'wildpeak', 'wildfen', 'toonbay', 'toonwood', 'tooncanyon', 'toonpeak', 'toonstorm', 'nodpillow', 'nodgarden', 'nodmusic', 'nodclock', 'nodmare', 'nodsoulstar', 'nodsoulrainbow', 'nodsoulwild', 'nodsoulbells', 'nodsoultoon', 'nodsoulnod'].includes(meta?.theme) ? meta.theme : 'sunny';
   const grow = theme === 'grow';
   // A Grow Island's world is whole steps a side, and may be wider.
   const side = (v) => {

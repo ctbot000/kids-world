@@ -86,6 +86,16 @@ export class LaneMark {
   }
 }
 
+// A flat star, and a crescent.
+let thrownHue = 0;
+const flatShape = (pts, t) => {
+  const g = new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y))), { depth: t, bevelEnabled: true, bevelSize: 0.03, bevelThickness: 0.03, bevelSegments: 2 });
+  g.translate(0, 0, -t / 2);
+  return g;
+};
+const starShape = (R, r) => flatShape(Array.from({ length: 10 }, (_, i) => [Math.sin((i / 10) * Math.PI * 2) * (i % 2 ? r : R), Math.cos((i / 10) * Math.PI * 2) * (i % 2 ? r : R)]), 0.1);
+const crescentShape = (R) => flatShape([...Array.from({ length: 17 }, (_, i) => [Math.cos(0.8 + i * 0.28) * R, Math.sin(0.8 + i * 0.28) * R]), ...Array.from({ length: 17 }, (_, i) => [R * 0.38 + Math.cos(5.18 - i * 0.255) * R * 0.76, Math.sin(5.18 - i * 0.255) * R * 0.76])], 0.12);
+
 // Something thrown: a ball of dust, a seed, a note, a cog, a drop of the dark.
 const THROWN = {
   dust: () => painted([[new THREE.IcosahedronGeometry(0.34, 2), '#cdbff0', where()], ...[0, 1, 2, 3, 4, 5].map((i) => [new THREE.IcosahedronGeometry(0.17, 1), i % 2 ? '#e6dcff' : '#b3a3e0', where(Math.cos(i * 1.9) * 0.26, Math.sin(i * 2.7) * 0.26, Math.sin(i * 1.3) * 0.26)])]),
@@ -93,6 +103,12 @@ const THROWN = {
   note: () => painted([[new THREE.IcosahedronGeometry(0.26, 2), '#ffd75e', where(0, -0.16, 0, [1.2, 0.9, 0.9], 0, 0, 0.4)], [new THREE.CylinderGeometry(0.045, 0.045, 0.8, 8), '#ffd75e', where(0.24, 0.24, 0)], [new THREE.SphereGeometry(0.16, 10, 8), '#ffb52e', where(0.36, 0.5, 0, [1.2, 0.6, 0.5], 0, 0, -0.5)]]),
   cog: () => painted([[new THREE.CylinderGeometry(0.3, 0.3, 0.16, 20), '#e0b060', where()], ...[0, 1, 2, 3, 4, 5, 6, 7].map((i) => [new THREE.BoxGeometry(0.14, 0.15, 0.16), '#c9923e', where(Math.cos(i * 0.785) * 0.34, 0, Math.sin(i * 0.785) * 0.34, 1, 0, -i * 0.785, 0)])]),
   dark: () => painted([[new THREE.IcosahedronGeometry(0.36, 2), '#3a1f66', where()], [new THREE.IcosahedronGeometry(0.2, 1), '#c05cff', where(0.1, 0.1, 0.2)]]),
+  // The weapons' souls' own (shared/nod/soul-foes.js): a star, a drop of colour, a
+  // splat of paint, a crescent moon.
+  star: () => painted([[starShape(0.46, 0.2), '#ffe27a', where()], [starShape(0.46, 0.2), '#ffc93d', where(0, 0, 0, 1, 0, Math.PI / 2, 0)], [new THREE.IcosahedronGeometry(0.17, 1), '#ffffff', where()]]),
+  prism: () => painted([[new THREE.OctahedronGeometry(0.4, 0), ['#ff4b3e', '#ff9330', '#ffd83a', '#3fc95c', '#3a8bff', '#5a4be0', '#b45cf0'][thrownHue++ % 7], where(0, 0, 0, [0.8, 1.2, 0.8])], [new THREE.OctahedronGeometry(0.2, 0), '#ffffff', where()]]),
+  paint: () => painted([[new THREE.IcosahedronGeometry(0.3, 2), ['#ff2f62', '#ffe02a', '#22cf63', '#1f9bff', '#ff7ad9'][thrownHue++ % 5], where()], ...[0, 1, 2, 3, 4].map((i) => [new THREE.IcosahedronGeometry(0.1 + (i % 2) * 0.05, 1), ['#ff2f62', '#ffe02a', '#22cf63', '#1f9bff', '#ff7ad9'][(thrownHue + i) % 5], where(Math.cos(i * 1.9) * 0.34, Math.sin(i * 2.7) * 0.34, Math.sin(i * 1.3) * 0.34)])]),
+  moon: () => painted([[crescentShape(0.46), '#d8c4ff', where()], [crescentShape(0.36), '#ffffff', where(0.02, 0, 0, [1, 1, 1.4])]]),
 };
 const shotMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, emissive: '#ffffff', emissiveIntensity: 0.35 });
 shotMat.onBeforeCompile = (s) => {

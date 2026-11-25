@@ -9,6 +9,7 @@ import { dist3, dot, flatUnit, turn } from './shape.js';
 import { DreamChests } from './chests.js';
 import { Frights, mightOf } from './foes.js';
 import './bosses.js';
+import './soul-foes.js';
 import { nodWorld } from './worlds/index.js';
 
 // Somebody on its body this long sets a nightmare off; nobody there this long,
