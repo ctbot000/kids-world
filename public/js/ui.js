@@ -433,18 +433,20 @@ export class UI {
   // ring says and what the pill says are the same thing.
   // What a blow says as it lands (game.js strike): the word popping out over
   // what it hit, from the third in a row how many in a row, and gone in a blink.
-  hitWord({ x, y, z, top, text, color, big, chain, up = null }) {
+  // A critical hit's (crit) is on a golden starburst, and stays a little longer.
+  hitWord({ x, y, z, top, text, color, big, chain, up = null, crit = false }) {
     if (![x, y, z].every(Number.isFinite)) return;
-    const tilt = (Math.random() < 0.5 ? -1 : 1) * (4 + Math.random() * 9);
-    const el = h('div', { class: `float-hit${big ? ' finish' : ''}`, style: `--c:${color};--tilt:${tilt.toFixed(1)}deg` }, h('span', {}, text, chain >= 3 ? h('small', {}, `×${chain}`) : ''));
-    this.addFloat(el, { x, y, z, secs: up ? 0.85 : 0.62, lift: top + 0.72, rise: 0.8, ...(up ? { up: { ...up } } : {}) });
+    const tilt = (Math.random() < 0.5 ? -1 : 1) * (crit ? 3 + Math.random() * 4 : 4 + Math.random() * 9);
+    const el = h('div', { class: `float-hit${big ? ' finish' : ''}${crit ? ' crit' : ''}`, style: `--c:${color};--tilt:${tilt.toFixed(1)}deg` }, h('span', {}, text, chain >= 3 ? h('small', {}, `×${chain}`) : ''));
+    this.addFloat(el, { x, y, z, secs: up ? 0.85 : crit ? 0.8 : 0.62, lift: top + 0.72, rise: 0.8, ...(up ? { up: { ...up } } : {}) });
   }
 
-  // How many hearts it took off (off the island's own word), beside the word.
-  hitNumber({ x, y, z, n }) {
+  // How many hearts it took off (off the island's own word), beside the word:
+  // bigger and on a starburst of its own, a critical hit's.
+  hitNumber({ x, y, z, n, crit = false }) {
     if (![x, y, z, n].every(Number.isFinite)) return;
-    const el = h('div', { class: 'float-hit num', style: `--tilt:${(Math.random() * 10 - 5).toFixed(1)}deg` }, h('span', {}, `−${n}`));
-    this.addFloat(el, { x, y, z, secs: 0.7, lift: 0.35, rise: 0.8, side: 46 + Math.random() * 14 });
+    const el = h('div', { class: `float-hit num${crit ? ' crit' : ''}`, style: `--tilt:${(Math.random() * 10 - 5).toFixed(1)}deg` }, h('span', {}, `−${n}`));
+    this.addFloat(el, { x, y, z, secs: crit ? 0.85 : 0.7, lift: 0.35, rise: 0.8, side: 46 + Math.random() * 14 });
   }
 
   // Lines rushing in towards a big blow from all round the screen, a moment.
@@ -2959,7 +2961,7 @@ export class UI {
           card('🎹', 'Pianos', ['Put down a piano or a grand piano from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Play). Tap the keys — or play on your keyboard, Z to M low and Q to I high — and friends nearby hear you! Pick a song and the next key to play glows, or make one of your own with ⏺ Record and hear it again with ▶ Play.']),
           card('📺', 'TVs', ['Put down a TV, a Retro TV or a Wall TV (on a wall) from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Watch). Flip through the channels with ◀ ▶ (or the arrow keys, or 1 to ' + CHANNELS.length + '): fish, a bunny, a rocket, your island\'s weather and a dance party! On 🪩 Dance Party you dance along until you flip away. When the grown-ups put a show on, every TV gets 📡 Live after those.']),
           card('📹', 'Broadcast Station', ['Put down a Broadcast Station (a TV camera on a tripod) from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Go live). Say yes to your camera and microphone, tap 🔴 Go live, and you\'re on every TV on every island, on the 📹 On Air channel! One at a time; close the window to stop.']),
-          card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it and press ', h('kbd', {}, 'X'), ' or the 👊 button to swing: the swing sweeps round in front of you and bops every monster it passes, flashing it white. When one crouches, a red strip on the ground shows where it will pounce: step out of it (or jump over it), then bop it while it’s dizzy — every bop counts twice! With nothing in your hand — or the 🥊 King’s Punch Glove on — hold it down for a second and let go for a 👑 King Punch that bops everything in front of you, golden and far wider with the glove! A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. Press ', h('kbd', {}, 'N'), ' (or the weapon button by the 👊 button) to carry the next of the weapons you own. Weapons wear out as they bop: fix them in the 🛒 shop before they break. A big red Bruiser takes a few jumps and bumps hard, never jump on a prickly orange Spiky or a darting giant mosquito: bop them! And a giant spider scuttles quicker than you walk, so run — two jumps or four bops see it off.']),
+          card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it and press ', h('kbd', {}, 'X'), ' or the 👊 button to swing: the swing sweeps round in front of you and bops every monster it passes, flashing it white. When one crouches, a red strip on the ground shows where it will pounce: step out of it (or jump over it), then bop it while it’s dizzy — every bop counts twice! And now and then a swing lands as a 💥 CRITICAL HIT, taking twice the hearts off everything it hits. With nothing in your hand — or the 🥊 King’s Punch Glove on — hold it down for a second and let go for a 👑 King Punch that bops everything in front of you, golden and far wider with the glove! A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. Press ', h('kbd', {}, 'N'), ' (or the weapon button by the 👊 button) to carry the next of the weapons you own. Weapons wear out as they bop: fix them in the 🛒 shop before they break. A big red Bruiser takes a few jumps and bumps hard, never jump on a prickly orange Spiky or a darting giant mosquito: bop them! And a giant spider scuttles quicker than you walk, so run — two jumps or four bops see it off.']),
           card('🪙', 'Treasure', ['Every monster you pop drops something: 🪙 coins (a 💰 bag of them from the big ones), and now and then a ❤️ heart for HP back, a 🧪 HP potion or a jewel. Walk up to it and it flies to you. Friends who helped pop it get the same, whoever picks it up, and what is left lying comes to you by itself after a while. The tougher the monster, the more it drops!']),
           card('🧪', 'HP potions', ['A bump from a monster takes some of your HP, and it comes back by itself. In a fix? Buy a 🧪 potion at the 🛒 shop and drink it with the 🧪 button by your HP (or press ', h('kbd', {}, 'Y'), '): all your HP back at once, and up you get on your own if you were sitting dizzy!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),

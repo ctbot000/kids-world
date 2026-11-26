@@ -45,6 +45,7 @@ import { isBeast } from './beasts.js';
 import { isBoss } from './bosses.js';
 import { ARM_REACH, BOP_SLACK, bopGap, BUMP_HP, GHOST_FIRE, hpAfterBump, hpBack, isHeavy, KING_PUSH, KING_REACH, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, SPORES, STOMP } from './monsters.js';
 import { BOSS_LOOT_MS, HEART_HP, HELP_MS, Loot, lootOf, lootSpots, nodLootSpots, packLoot, TAKE_SLACK } from './loot.js';
+import { CRIT_TIMES, critRoll, isSwing } from './crits.js';
 import { isNote, isPiano } from './piano.js';
 import { feedTank, isTank } from './fishtank.js';
 import { Party } from './party.js';
@@ -128,6 +129,9 @@ const BLASTS = {
 // the once, however many it bops.
 const BOLT_LEAP = 5;
 const WOLF_MS = 300;
+// How many of someone's last swings the island keeps, critical or not, for the
+// bops of each (an arrow can land after the next swing has gone).
+const SWINGS_KEPT = 4;
 // What someone has come by of soul weapons is told no oftener than this. A part
 // comes out of a golden chest opened no longer ago than that (GOLD_OPEN_MS), and
 // nothing touches them for a while as they look at it.
@@ -340,6 +344,9 @@ export class Room {
     this.monstersSent = false;
     // What popped monsters dropped, lying about (loot.js): never saved either.
     this.loot = new Loot((this.world.seed ^ 0x1b873593 ^ (t | 0)) >>> 0);
+    // Which swings land as critical hits (crits.js): luck drawn for nothing
+    // else, so that nothing else on the island goes another way for it.
+    this.critRng = new Rng((this.world.seed ^ 0x2545f491 ^ (t | 0)) >>> 0);
     this.arcade = new ArcadeSim((this.world.seed ^ 0x5a7d3b1f ^ (t | 0)) >>> 0);
     this.party = new Party();
     this.hookWorld();
@@ -607,9 +614,11 @@ export class Room {
       }
       // A swing at a monster (the 👊 button), for friends to see it start as
       // it does: the bop it lands comes a moment later. A King Punch (a bare
-      // fist held to charge) says so, for friends to see the shockwave.
+      // fist held to charge) says so, for friends to see the shockwave. Its
+      // number (msg.n) is for the bops it lands, a critical hit or not.
       case 'swing':
         this.broadcast({ t: 'swing', pid, king: msg.king === true ? true : undefined }, conn);
+        this.swung(p, msg.n);
         break;
       // A King Punch charging (a bare fist held down), or let go: friends see
       // the fist glow.
@@ -979,8 +988,14 @@ export class Room {
   // shift: how far the world moved under everyone ([dx, dz]), welcoming
   // them to it again after it grew (resizeWorld).
   sendWelcome(conn, c, { shift = null } = {}) {
+    // They number their swings from 1 again from here: whether that first one
+    // lands as a critical hit (crits.js) goes with it.
+    const me = c.watch ? null : this.players.get(c.pid);
+    if (me) me.swings = new Map();
+    const luck = me ? this.dealLuck(me, 1) : false;
     this.sendTo(conn, {
       t: 'welcome',
+      ...(luck ? { luck: 1 } : {}),
       ...(shift ? { shift } : {}),
       protocol: PROTOCOL,
       code: this.code,
@@ -2068,13 +2083,14 @@ export class Room {
 
   // A monster popped by someone (bopped, landed on, burned, blasted): gone,
   // everyone told, a camp's to come back in a while — and a Gummy Bear
-  // split into two Gummy Cubs where it was, keeping to the same camp.
-  popMonster(p, m, now) {
+  // split into two Gummy Cubs where it was, keeping to the same camp. crit:
+  // popped by a critical hit (crits.js), for everyone to see.
+  popMonster(p, m, now, crit = false) {
     this.monsters.remove(m.id);
     const b = m.body;
     // (Out of it comes what it drops: loot.js.)
     const loot = this.dropLoot(m.kind, b, p, now, { hits: m.hits });
-    this.broadcast({ t: 'pop', id: m.id, by: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2), ...(loot ? { loot } : {}) });
+    this.broadcast({ t: 'pop', id: m.id, by: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2), ...(loot ? { loot } : {}), ...(crit ? { crit: true } : {}) });
     if (this.adventure?.active) this.adventure.credit(p.id, 'pops');
     // (A battle of Toon Isle may be waiting on it: isle-battles.js.)
     this.adventure?.popped(m);
@@ -2167,14 +2183,15 @@ export class Room {
     const r = CRITTER_INFO.dragon.ride;
     const at = { x: p.s[0], y: p.s[1], z: p.s[2] };
     if (bopGap(at, { x: c.x, y: c.y, z: c.z, radius: r.radius, height: r.height }, ARM_REACH + (weapon?.reach ?? 0) + BOP_SLACK) === null) return;
-    this.dragonBlow(p, c, now, weapon);
+    this.dragonBlow(p, c, now, weapon, this.critOf(p, msg.n));
   }
 
-  // A wild dragon taking a blow of theirs, with weapon in hand (or none).
-  dragonBlow(p, c, now, weapon) {
-    const hit = hitDragon(c, p.id, now, weapon?.power ?? 1);
+  // A wild dragon taking a blow of theirs, with weapon in hand (or none):
+  // twice over, a critical one (crits.js).
+  dragonBlow(p, c, now, weapon, crit = false) {
+    const hit = hitDragon(c, p.id, now, (weapon?.power ?? 1) * (crit ? CRIT_TIMES : 1));
     if (!hit || hit.wait) return;
-    this.broadcast({ t: 'dhit', id: c.id, by: p.id, hearts: hit.hearts, max: hit.max });
+    this.broadcast({ t: 'dhit', id: c.id, by: p.id, hearts: hit.hearts, max: hit.max, ...(crit ? { crit: true } : {}) });
     if (hit.tamed) {
       for (const q of this.players.values()) if (q.online && q.hp < q.maxHp && hit.fighters.includes(q.id)) this.allWellFor(q);
       this.broadcast({ t: 'tamed', id: c.id, by: hit.fighters, hero: p.id, name: c.name });
@@ -2418,10 +2435,38 @@ export class Room {
     return p.figs?.includes(m.kind) ? FIG_HEARTS : 0;
   }
 
+  // The luck of someone's swing numbered n, dealt a swing ahead: whether it
+  // will land as a critical hit (crits.js). Says whether it will.
+  dealLuck(p, n) {
+    p.luck = { n, crit: critRoll(() => this.critRng.next()) };
+    return p.luck.crit;
+  }
+
+  // A swing of someone's, by the number their page gives it (from 1 at the
+  // island's welcome): a critical hit for every blow it lands, if the luck
+  // dealt for it said so, and their next one's luck dealt — told to them alone
+  // when it is critical, so their page can show it as it lands. A page from
+  // before critical hits numbers no swing, and none of its swings is one.
+  swung(p, n) {
+    if (!p || !isSwing(n)) return;
+    const swings = (p.swings ??= new Map());
+    swings.delete(n);
+    swings.set(n, p.luck?.n === n && p.luck.crit);
+    // (A few back, for what a swing shot that lands after the next swing.)
+    while (swings.size > SWINGS_KEPT) swings.delete(swings.keys().next().value);
+    if (this.dealLuck(p, n + 1)) this.sendToPid(p.id, { t: 'luck', n: n + 1 });
+  }
+
+  // Whether a blow of someone's swing numbered n is a critical hit.
+  critOf(p, n) {
+    return isSwing(n) && p.swings?.get(n) === true;
+  }
+
   // Jumping on a monster (msg.on): pop! Tapping one: a heart off it (more,
   // and from further, with a toy weapon in hand), and pop with the last.
   // (King Grumble takes a lot of either, a Big Bruiser a few landings, and
-  // a Spiky is not landed on at all: see MonsterSim.step.)
+  // a Spiky is not landed on at all: see MonsterSim.step.) A tap of a swing
+  // the luck made critical (msg.n, crits.js) takes twice as much of either.
   bop(p, msg) {
     if (!Number.isInteger(msg.id)) return;
     const now = this.now();
@@ -2437,77 +2482,83 @@ export class Room {
     const at = { x: p.s[0], y: p.s[1], z: p.s[2] };
     const landed = msg.on === true && this.monsters.landsOn(m.id, at);
     if (!landed && !this.monsters.canBop(m.id, at, king ? (glove ? KING_REACH + glove.wave : KING_REACH) : weapon?.reach ?? 0)) return;
+    const crit = !landed && this.critOf(p, msg.n);
+    const times = crit ? CRIT_TIMES : 1;
     if (!landed && weapon?.chain && !(weapon.soul && now - (p.boltAt ?? -Infinity) < WOLF_MS)) {
       p.boltAt = now;
-      this.boltOn(p, m, now, weapon);
+      this.boltOn(p, m, now, weapon, crit);
     }
     if (m.march) {
-      this.bopMarcher(p, m, now, landed ? LAND_POWER : m.kind === 'king' ? (glove ? glove.king : king ? 1 : weapon?.king ?? 1) : (glove ? glove.shock : king ? 1 : weapon?.power ?? 1));
+      this.bopMarcher(p, m, now, (landed ? LAND_POWER : m.kind === 'king' ? (glove ? glove.king : king ? 1 : weapon?.king ?? 1) : (glove ? glove.shock : king ? 1 : weapon?.power ?? 1)) * times, crit);
       return;
     }
     if (isBoss(m.kind)) {
-      this.bopKing(p, m, now, glove ? glove.king : king ? 1 : weapon?.king ?? 1);
+      this.bopKing(p, m, now, (glove ? glove.king : king ? 1 : weapon?.king ?? 1) * times, crit);
       return;
     }
     const land = kindOf(m.kind).land;
     if (landed && !land) return;
     if (!landed || land !== Infinity) {
-      const hit = this.monsters.hit(m, p.id, at, now, (landed ? land : (glove ? glove.shock : king ? 1 : weapon?.power ?? 1)) + this.figBonus(p, m), king ? (glove ? KING_PUSH + 4 : KING_PUSH) : weapon?.push, landed ? null : weapon?.key);
+      const hit = this.monsters.hit(m, p.id, at, now, ((landed ? land : (glove ? glove.shock : king ? 1 : weapon?.power ?? 1)) + this.figBonus(p, m)) * times, king ? (glove ? KING_PUSH + 4 : KING_PUSH) : weapon?.push, landed ? null : weapon?.key);
       if (hit.wait) return;
       if (hit.hearts) {
         if (!landed && weapon?.daze) this.monsters.daze(m, now, weapon.daze);
-        this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts, ...(hit.still ? { still: true } : {}) });
+        this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts, ...(hit.still ? { still: true } : {}), ...(crit ? { crit: true } : {}) });
         return;
       }
     }
-    this.popMonster(p, m, now);
+    this.popMonster(p, m, now, crit);
   }
 
   // A monster marching on a tower defense island tapped (or landed on):
   // power hearts off it, and with the last it goes pop, with bricks for it.
-  bopMarcher(p, m, now, power) {
+  // crit: it was a critical hit (power counts it already), for all to see.
+  bopMarcher(p, m, now, power, crit = false) {
     const hit = this.defense?.tap(m, p.id, now, power);
     if (!hit || hit.wait) return;
+    const told = crit ? { crit: true } : {};
     if (hit.hearts) {
-      this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts, march: true });
+      this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts, march: true, ...told });
       return;
     }
     const { bricks } = this.defense.popped(m, this.monsters);
     const b = m.body;
     const loot = this.dropLoot(m.kind, b, p, now, { hits: m.hits, march: true });
-    this.broadcast({ t: 'pop', id: m.id, by: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2), bricks, ...(loot ? { loot } : {}) });
+    this.broadcast({ t: 'pop', id: m.id, by: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2), bricks, ...(loot ? { loot } : {}), ...told });
     this.sendDefense();
   }
 
   // A blow of a weapon's that lands by itself, not with a swing's bop: a bolt
-  // leaping on to it, or a blast round it. It is its owner's bop all the same.
+  // leaping on to it, or a blast round it. It is its owner's bop all the same,
+  // and as critical as the swing it came of (crit).
   // from: where it comes from, to be knocked back away from.
-  weaponBlow(p, m, now, weapon, from) {
+  weaponBlow(p, m, now, weapon, from, crit = false) {
+    const times = crit ? CRIT_TIMES : 1;
     if (m.march) {
-      this.bopMarcher(p, m, now, weapon.power);
+      this.bopMarcher(p, m, now, weapon.power * times, crit);
       return;
     }
     if (isBoss(m.kind)) {
-      this.bopKing(p, m, now, weapon.king);
+      this.bopKing(p, m, now, weapon.king * times, crit);
       return;
     }
-    const hit = this.monsters.hit(m, p.id, from, now, weapon.power + this.figBonus(p, m), weapon.push, weapon.key);
+    const hit = this.monsters.hit(m, p.id, from, now, (weapon.power + this.figBonus(p, m)) * times, weapon.push, weapon.key);
     if (hit.wait) return;
     if (hit.hearts) {
       if (weapon.daze) this.monsters.daze(m, now, weapon.daze);
-      this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts, ...(hit.still ? { still: true } : {}) });
+      this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts, ...(hit.still ? { still: true } : {}), ...(crit ? { crit: true } : {}) });
       return;
     }
-    this.popMonster(p, m, now);
+    this.popMonster(p, m, now, crit);
   }
 
   // A Thunder Spear's stab, landing on m (shop.js thunderspear): the bolt
   // leaps on to the nearest monster from there, and from that one to the next,
-  // as many times as the spear's chain, each one taking the spear's blow. It
-  // goes through no wall, and leaps no further than BOLT_LEAP. Everyone sees
-  // it by the monsters it went through, in order (m first, which bop goes on
-  // to hit).
-  boltOn(p, m, now, weapon) {
+  // as many times as the spear's chain, each one taking the spear's blow (a
+  // critical one, of a critical stab). It goes through no wall, and leaps no
+  // further than BOLT_LEAP. Everyone sees it by the monsters it went through,
+  // in order (m first, which bop goes on to hit).
+  boltOn(p, m, now, weapon, crit = false) {
     const middle = ({ body: b }) => ({ x: b.x, y: b.y + b.height / 2, z: b.z });
     const path = [m];
     while (path.length <= weapon.chain) {
@@ -2527,7 +2578,7 @@ export class Room {
       path.push(next);
     }
     this.broadcast({ t: 'fx', kind: 'bolt', pid: p.id, ids: path.map((q) => q.id) });
-    for (let i = 1; i < path.length; i++) this.weaponBlow(p, path[i], now, weapon, middle(path[i - 1]));
+    for (let i = 1; i < path.length; i++) this.weaponBlow(p, path[i], now, weapon, middle(path[i - 1]), crit);
   }
 
   // A Bomb Rod thrown (shop.js bombrod), or a meteor called down with a Meteor
@@ -2535,7 +2586,8 @@ export class Room {
   // caught in its blast — the thrower's bops, as any swing of theirs is — and
   // shaking the jewels out of any gem rocks there into their basket (tools.js
   // gemBlastEdit). The ground is never dug, and nothing anyone built, planted
-  // or furnished is ever broken.
+  // or furnished is ever broken. Of a critical swing (msg.n), all it bops is
+  // a critical hit.
   rodBlast(p, msg) {
     const now = this.now();
     const key = weaponOf(p.look?.weapon)?.key;
@@ -2555,7 +2607,7 @@ export class Room {
     // out of the sky at it), and it pops as it lands (stepRodBombs), from where
     // they threw it.
     this.broadcast({ t: 'fx', kind: how.fx, pid: p.id, x: +p.s[0].toFixed(2), y: +(p.s[1] + 1).toFixed(2), z: +p.s[2].toFixed(2), tx: x + 0.5, tz: z + 0.5 });
-    this.rodBombs.push({ pid: p.id, key, x, y, z, from: { x: p.s[0], y: p.s[1], z: p.s[2] }, at: now + how.ms });
+    this.rodBombs.push({ pid: p.id, key, x, y, z, from: { x: p.s[0], y: p.s[1], z: p.s[2] }, at: now + how.ms, crit: this.critOf(p, msg.n) });
   }
 
   // The Bomb Rod's little bombs, and meteors, landing.
@@ -2569,20 +2621,20 @@ export class Room {
     }
   }
 
-  rodBurst(p, { key, x, y, z, from }, now) {
+  rodBurst(p, { key, x, y, z, from, crit = false }, now) {
     const weapon = weaponOf(key);
     const { blast } = BLASTS[key];
     const meteor = key === 'meteorstaff';
     const caught = (b) => Math.hypot(b.x - x - 0.5, b.z - z - 0.5) <= blast + b.radius && b.y <= y + blast + 1 && b.y + b.height >= y - blast;
     // The monsters in the blast: each takes a bop of the thrower's.
     for (const m of [...this.monsters.list]) {
-      if (!m.under && caught(m.body)) this.weaponBlow(p, m, now, weapon, from);
+      if (!m.under && caught(m.body)) this.weaponBlow(p, m, now, weapon, from, crit);
     }
     // A meteor catches a wild dragon too (a bomb is too little to trouble one).
     if (meteor) {
       const { radius, height } = CRITTER_INFO.dragon.ride;
       for (const c of [...this.critters.list]) {
-        if (isWild(c) && caught({ x: c.x, y: c.y, z: c.z, radius, height })) this.dragonBlow(p, c, now, weapon);
+        if (isWild(c) && caught({ x: c.x, y: c.y, z: c.z, radius, height })) this.dragonBlow(p, c, now, weapon, crit);
       }
     }
     // The gem rocks caught in it: their jewels, and the boom everyone hears.
@@ -2980,7 +3032,8 @@ export class Room {
   // A bop for the lair's boss (the chapter's: bosses.js): nothing in its
   // bubble, otherwise a heart (three while it sits dazed; it is too big to
   // knock back); with none left it goes pop, and the whole stage is won.
-  bopKing(p, m, now, times = 1) {
+  // crit: a critical hit (times counts it already), for everyone to see.
+  bopKing(p, m, now, times = 1, crit = false) {
     const hit = this.adventure?.hitKing(p.id, now, now < (m.dazed ?? 0), times);
     if (!hit || hit.wait) return;
     if (hit.shielded) {
@@ -2990,6 +3043,7 @@ export class Room {
     this.adventure.credit(p.id, 'boss', times);
     const msg = { t: 'kinghit', id: m.id, by: p.id, hearts: hit.hearts, max: hit.max };
     if (hit.dazed) msg.dazed = true;
+    if (crit) msg.crit = true;
     // King Grumble puffing himself up, at the end of the story: his helpers
     // come running as he does.
     if (hit.second) {

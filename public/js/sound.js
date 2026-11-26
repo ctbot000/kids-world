@@ -609,6 +609,19 @@ export class Sound {
         }
         break;
       }
+      // A critical hit (game.js CRIT), over its whack: a deep thump under it, as
+      // heavy as two blows, and a bright ka-ching ringing up over it with a
+      // shimmer, the sound of good luck. opts.near: how close, 1 right there.
+      case 'crit': {
+        const near = opts.near ?? 1;
+        this.tone(95 * r(), { decay: 0.32, gain: 0.5 * near, slide: 38, slideTime: 0.26, attack: 0.002 });
+        for (const [i, n] of [91, 98, 103].entries()) {
+          this.tone(NOTE(n), { at: 0.02 + i * 0.035, decay: 0.34 - i * 0.04, gain: 0.08 * near, type: 'triangle' });
+          this.tone(NOTE(n) * 2.76, { at: 0.02 + i * 0.035, decay: 0.12, gain: 0.018 * near });
+        }
+        this.noise(0.3, { at: 0.03, type: 'highpass', freq: 6000, sweep: 10000, gain: 0.07 * near, attack: 0.05 });
+        break;
+      }
       // The Toy Bow drawn: the string creaking back.
       case 'creak':
         this.noise(0.18, { type: 'bandpass', freq: 500, sweep: 900, q: 6, gain: 0.05 });

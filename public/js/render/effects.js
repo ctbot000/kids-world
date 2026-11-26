@@ -580,6 +580,24 @@ export class Effects {
     });
   }
 
+  // A critical hit landing at (x, y, z), behind its blow's own impact: a great
+  // golden flash, gone a blink after the blow's, and gold and white stars
+  // thrown out all round it across the picture, spinning as they slow. over:
+  // drawn over everything (your own; a friend's is not); power: how big.
+  critBurst(x, y, z, over = true, power = 1) {
+    const turn = Math.random() * Math.PI * 2;
+    this.add('burst', x, y, z, { size: 3.4 * power, grow: -11 * power, life: 0.17, color: '#ffd84d', turn, over });
+    this.add('burst', x, y, z, { size: 2.3 * power, grow: -9 * power, life: 0.13, color: '#fff3a0', turn: turn + 0.4, over });
+    const e = this.camera.matrixWorld.elements;
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 + Math.random() * 0.3;
+      const s = (4.5 + Math.random() * 2) * power;
+      const sx = Math.cos(a) * s;
+      const sy = Math.sin(a) * s;
+      this.add('star', x, y, z, { vx: e[0] * sx + e[4] * sy, vy: e[1] * sx + e[5] * sy, vz: e[2] * sx + e[6] * sy, size: (0.3 + Math.random() * 0.14) * power, life: 0.5 + Math.random() * 0.25, drag: 4, spin: 5, color: i % 3 ? '#ffd84d' : '#ffffff', over });
+    }
+  }
+
   // A blow landing at (x, y, z), going the way (dx, dz) along the ground, sized
   // by power: a spiky star there in color with a white-hot one inside it, gone
   // in a few frames; splinters of light shooting straight out from it across

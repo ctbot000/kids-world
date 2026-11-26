@@ -1888,9 +1888,49 @@ body.touch.playing #joystick {
   font-size: clamp(1.15rem, 3.8vmin, 1.9rem);
 }
 
+/* A critical hit's word (game.js CRIT), on a golden starburst of its own with
+   a dark edge, spinning out behind it as it pops up; and the hearts it took on
+   a smaller one beside it, bigger, in the word's colour. */
+.float-hit.crit span {
+  position: relative;
+  isolation: isolate;
+  font-size: clamp(1.6rem, 6.4vmin, 3rem);
+  animation-duration: 0.26s;
+}
+
+.float-hit.crit span::before,
+.float-hit.crit span::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  clip-path: polygon(50% 0%, 58.5% 18.1%, 73.5% 9.3%, 73.3% 26.7%, 93.3% 25%, 81.9% 41.5%, 95% 50%, 81.9% 58.5%, 92.4% 74.5%, 73.3% 73.3%, 73% 89.8%, 58.5% 81.9%, 50% 100%, 41.5% 81.9%, 28% 88.1%, 26.7% 73.3%, 6.7% 75%, 18.1% 58.5%, 3% 50%, 18.1% 41.5%, 7.6% 25.5%, 26.7% 26.7%, 27.5% 11%, 41.5% 18.1%);
+  animation: crit-burst 0.3s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+}
+
+.float-hit.crit span::before {
+  inset: -0.95em -0.75em;
+  background: #2f2140;
+}
+
+.float-hit.crit span::after {
+  inset: -0.82em -0.64em;
+  background: radial-gradient(closest-side, #fffbe0 0 30%, #ffe15a 58%, #ffae1f 100%);
+}
+
+.float-hit.num.crit span {
+  color: #ff5a36;
+  font-size: clamp(1.45rem, 4.8vmin, 2.4rem);
+}
+
 @keyframes hit-word {
   from {
     transform: rotate(var(--tilt, 0deg)) scale(0.45);
+  }
+}
+
+@keyframes crit-burst {
+  from {
+    transform: rotate(-35deg) scale(0.3);
   }
 }
 
@@ -1921,6 +1961,8 @@ body.touch.playing #joystick {
 
 @media (prefers-reduced-motion: reduce) {
   .float-hit span,
+  .float-hit.crit span::before,
+  .float-hit.crit span::after,
   .adv-tag.mon .bar.hit {
     animation: none;
   }

@@ -41,6 +41,7 @@ import { battleFrame, battleFx, battleWon, fogNews, fogSeen, readBattleRow, read
 import { NodGame } from './nod/nod-game.js';
 import { LootView } from './loot-view.js';
 import { JEWELS } from './shared/loot.js';
+import { CRIT_TIMES } from './shared/crits.js';
 import { NOD_BOSSES } from './shared/nod/bosses.js';
 import { duelStory } from './shared/nod/duel.js';
 import { isNodKey } from './shared/nod/worlds/index.js';
@@ -277,6 +278,12 @@ const STOP_MAX = 230;
 // The blow that takes a monster's last heart lands harder still: this much
 // longer a stop, a bigger jolt and burst, and it flies off and goes pop.
 const FINISH = { stop: 60, jolt: 1.35, burst: 1.2, buzz: 20, words: ['KA-POW!', 'WHAMMO!', 'SPLAT!'] };
+// A critical hit (shared/crits.js) lands harder too, last blow or not, and says
+// so: a longer stop, a bigger jolt and burst, a golden flash with stars thrown
+// out of it, lines rushing in, a chime over the whack and a word of its own.
+// One the island tells of only after it landed (late: yours it had not said
+// would be, or a friend's) still says so, as long as it has not just said so.
+const CRIT = { stop: 50, jolt: 1.3, burst: 1.25, buzz: 24, word: 'CRITICAL!', color: '#ff5a36', late: 400 };
 // How far a monster being stopped by a blow shudders along it, at the start.
 const SHUDDER = 0.14;
 // If the island has not said it popped once the stop is over, it waits as it
@@ -958,6 +965,10 @@ export class Game extends EventTarget {
       case 'mhit':
         this.monsterHit(msg);
         break;
+      // Your swing numbered msg.n will land as a critical hit (room.js swung).
+      case 'luck':
+        if (Number.isInteger(msg.n) && msg.n > this.swings) this.critSwing = msg.n;
+        break;
       case 'stomp':
         this.stomped(msg);
         break;
@@ -1112,6 +1123,11 @@ export class Game extends EventTarget {
     this.settings = msg.settings;
     this.passcode = typeof msg.passcode === 'string' ? msg.passcode : '';
     this.chat = msg.chat ?? [];
+    // Your swings are numbered from 1 again from here, for the island to know
+    // which a bop is of; and the island says which will be a critical hit
+    // (room.js swung), the first one now.
+    this.swings = 0;
+    this.critSwing = msg.luck === 1 ? 1 : 0;
     const keep = again && this.me ? { x: this.me.body.x, y: this.me.body.y, z: this.me.body.z } : null;
     // A Grow Island that grew west or north moved everything east or south
     // under you (room.js resizeWorld): you move with it.
@@ -1947,7 +1963,8 @@ export class Game extends EventTarget {
     const near = here && this.near(p.x, p.y, p.z, boss || entry?.kind === 'queen' || beast?.tier === 2 ? 120 : 40);
     const mine = msg.by === this.pid;
     // The last of its hearts it lost: only you hear how many.
-    if (mine && near && entry?.hearts > 0) this.emit('hit-number', { x: p.x, y: p.y, z: p.z, n: entry.hearts });
+    if (mine && near && entry?.hearts > 0) this.emit('hit-number', { x: p.x, y: p.y, z: p.z, n: entry.hearts, crit: msg.crit === true });
+    this.critNews(msg, here ? p : null, entry ? bodyOf(entry.kind).height : 0, entry);
     // Off the end of a swing it flies off, and goes pop as it lands (fling).
     // (The mightiest beasts are too heavy to fly anywhere: they go pop where they stand.)
     const away = near && entry && !boss && beast?.tier !== 2 ? this.blownAway(entry, msg.by) : null;
@@ -2188,6 +2205,38 @@ export class Game extends EventTarget {
     if (this.near(p.x, p.y, p.z, 30)) this.sound.play(msg.what === 'venom' || msg.what === 'steam' ? 'hiss' : 'fire');
   }
 
+  // The island's word that a blow landed as a critical hit (msg.crit: a mhit,
+  // pop, kinghit or dhit), on what stands at `at`, top tall (thing: the
+  // monster or dragon, as this page has it). Yours is counted, and the first
+  // you ever land says what it is; yours that did not show as it landed (the
+  // island had not said it would be, or it was a bomb's) says so now, and a
+  // friend's flashes gold and chimes, a little quieter.
+  critNews(msg, at, top = 0, thing = null) {
+    if (msg.crit !== true) return;
+    const now = performance.now();
+    const mine = msg.by === this.pid;
+    if (mine) this.critLanded();
+    if (!at || (mine && now - (thing?.critAt ?? -Infinity) < 1500) || !this.near(at.x, at.y, at.z, 30)) return;
+    this.renderer.effects.critBurst(at.x, at.y + top * 0.55, at.z, mine, mine ? 1 : 0.75);
+    // (A blast that catches a crowd: one chime, and one word.)
+    if (now - (this.critChimeAt ?? -Infinity) > 150) {
+      this.critChimeAt = now;
+      this.sound.play('crit', { near: mine ? 1 : 0.5 });
+    }
+    if (mine && now - (this.critShownAt ?? -Infinity) > CRIT.late) {
+      this.critShownAt = now;
+      this.emit('hit-word', { x: at.x, y: at.y, z: at.z, top, text: CRIT.word, color: CRIT.color, big: true, crit: true });
+    }
+  }
+
+  // One of your blows landed as a critical hit: counted (stickers are for
+  // them), and the first you ever land told of.
+  critLanded() {
+    const first = !this.profile.data.stats.crits;
+    this.profile.count('crits');
+    if (first) this.emit('toast', { icon: '💥', text: 'A critical hit! Now and then a swing lands twice as hard — keep swinging!' });
+  }
+
   monsterHit(msg) {
     const now = performance.now();
     const entry = this.monsters.get(msg.id);
@@ -2244,7 +2293,7 @@ export class Game extends EventTarget {
         const r = size.radius * 0.8;
         this.renderer.effects.impact(p.x - away.x * r, p.y + size.height * 0.55, p.z - away.z * r, away.x, away.z, look.color, look.burst * 0.8, mine);
       }
-      if (mine && lost > 0) this.emit('hit-number', { x: p.x, y: p.y, z: p.z, n: lost });
+      if (mine && lost > 0) this.emit('hit-number', { x: p.x, y: p.y, z: p.z, n: lost, crit: msg.crit === true });
       // Your own swing sounded and burst as it landed (strike). A friend's, or
       // your bomb's, as the island says.
       if (!struck) {
@@ -2252,6 +2301,7 @@ export class Game extends EventTarget {
         this.sound.play('whack', { kind, on: HIT_ON[entry.kind], near: 0.6 });
       }
     }
+    this.critNews(msg, p, entry ? bodyOf(entry.kind).height : 0, entry);
     if (msg.by === this.pid && performance.now() > (this.toldHit ?? 0)) {
       this.toldHit = performance.now() + 20000;
       const n = msg.hearts | 0;
@@ -2294,6 +2344,7 @@ export class Game extends EventTarget {
       this.renderer.effects.bang(p.x, p.y + CRITTER_INFO.dragon.ride.height * 0.7, p.z);
       this.sound.play('bump');
     }
+    this.critNews(msg, p, CRITTER_INFO.dragon.ride.height, c);
     if (msg.by === this.pid && msg.hearts && now > (this.toldDragonHit ?? 0)) {
       this.toldDragonHit = now + 20000;
       this.emit('toast', { icon: '🐲', text: `Bonk! ${msg.hearts} more ${msg.hearts === 1 ? 'heart' : 'hearts'} and ${c.name || 'the dragon'} is tired out. Watch out for its fire!` });
@@ -2353,9 +2404,19 @@ export class Game extends EventTarget {
   }
 
   // Bopping a monster, or landing on it (on). A King Punch's bop (king) is
-  // the island's to allow for: it reaches further and hits harder.
-  bop(id, on = false, king = false) {
-    this.send(on ? { t: 'bop', id, on: true } : king ? { t: 'bop', id, king: true } : { t: 'bop', id });
+  // the island's to allow for: it reaches further and hits harder. A swing's
+  // bop says which swing it is of (n), for the island to know whether it is a
+  // critical hit.
+  bop(id, on = false, king = false, n = 0) {
+    const swing = n ? { n } : {};
+    this.send(on ? { t: 'bop', id, on: true } : king ? { t: 'bop', id, king: true, ...swing } : { t: 'bop', id, ...swing });
+  }
+
+  // The next of your swings: its number (sent with it and with its bops) and
+  // whether the island said it would be a critical hit (crits.js).
+  nextSwing() {
+    const n = (this.swings = (this.swings ?? 0) + 1);
+    return { n, crit: this.critSwing === n };
   }
 
   // Drinking an HP potion (the 🧪 button by your HP, or Y): one out of your
@@ -2482,9 +2543,10 @@ export class Game extends EventTarget {
   // the picture jolts, each one goes white and squashes, a burst flies off it
   // from where the blow met it, and it hops back leaning away from the blow; the
   // whack is as heavy as the weapon (kind) is. The blow that takes a monster's
-  // last heart lands harder still. Not a boss safe in its bubble: that
-  // bounces.
-  strike(hits, kind, dragons = []) {
+  // last heart lands harder still, and so does a critical hit (crit: the
+  // island said this swing would be one, room.js swung), twice as heavy. Not
+  // a boss safe in its bubble: that bounces.
+  strike(hits, kind, dragons = [], crit = false) {
     const look = impactOf(kind);
     const now = performance.now();
     const b = this.me.body;
@@ -2495,11 +2557,13 @@ export class Game extends EventTarget {
     });
     // A monster's last blow, as far as anyone can tell from here. A boss has
     // its hearts kept apart, and a boss feels a weapon its own way.
-    const lastBlow = (entry) => (isBoss(entry.kind) ? (this.adventure?.king?.hearts ?? Infinity) <= (weapon?.king ?? 1) : entry.hearts <= (weapon?.power ?? 1) * (dizzyAfterPounce(entry) ? TIRED_HIT : 1));
+    const times = crit ? CRIT_TIMES : 1;
+    const lastBlow = (entry) => (isBoss(entry.kind) ? (this.adventure?.king?.hearts ?? Infinity) <= (weapon?.king ?? 1) * times : entry.hearts <= (weapon?.power ?? 1) * times * (dizzyAfterPounce(entry) ? TIRED_HIT : 1));
     const finish = landing.some((hit) => lastBlow(this.monsters.get(hit.id)));
-    const until = now + Math.min(STOP_MAX, look.stop + STOP_MORE * (hits.length - 1) + (finish ? FINISH.stop : 0));
+    const until = now + Math.min(STOP_MAX, look.stop + STOP_MORE * (hits.length - 1) + (finish ? FINISH.stop : 0) + (crit ? CRIT.stop : 0));
     // (Bursts side by side are smaller, or they hide all there is to see.)
-    const burst = look.burst * (finish ? FINISH.burst : 1) * (hits.length + dragons.length > 1 ? 0.72 : 1);
+    const side = hits.length + dragons.length > 1 ? 0.72 : 1;
+    const burst = look.burst * (finish ? FINISH.burst : 1) * (crit ? CRIT.burst : 1) * side;
     let first = null;
     for (const hit of landing) {
       const entry = this.monsters.get(hit.id);
@@ -2513,12 +2577,15 @@ export class Game extends EventTarget {
       entry.finishAt = last ? until : 0;
       entry.struckAt = now;
       entry.swungAt = now;
+      // (A critical hit shown already: the island's word of it need not be.)
+      entry.critAt = crit ? now : 0;
       entry.flashUntil = until + FLASH_TAIL;
       entry.model.squash = Math.max(entry.model.squash ?? 0, last ? 0.6 : 0.45);
       entry.recoil = { x: dx / d, z: dz / d, at: until };
       // Where the blow met it: its near side, a little over half way up.
       const r = hit.size.radius * 0.8;
       const at = { x: m.x - (dx / d) * r, y: m.y + hit.size.height * 0.55, z: m.z - (dz / d) * r };
+      if (crit) this.renderer.effects.critBurst(at.x, at.y, at.z, true, side);
       this.renderer.effects.impact(at.x, at.y, at.z, dx / d, dz / d, look.color, burst);
       if (look.embers) this.renderer.effects.embers(at.x, at.y, at.z);
       first ??= { m: { x: m.x, y: m.y, z: m.z }, top: hit.size.height, at, dx: dx / d, dz: dz / d, on: HIT_ON[entry.kind] };
@@ -2531,15 +2598,17 @@ export class Game extends EventTarget {
       const dz = m.z - b.z;
       const d = Math.hypot(dx, dz) || 1;
       c.flashUntil = until + FLASH_TAIL;
+      c.critAt = crit ? now : 0;
       const r = hit.size.radius * 0.8;
       const at = { x: m.x - (dx / d) * r, y: m.y + hit.size.height * 0.35, z: m.z - (dz / d) * r };
+      if (crit) this.renderer.effects.critBurst(at.x, at.y, at.z, true, side);
       this.renderer.effects.impact(at.x, at.y, at.z, dx / d, dz / d, look.color, burst);
       first ??= { m: { x: m.x, y: m.y, z: m.z }, top: hit.size.height, at, dx: dx / d, dz: dz / d };
     }
     if (!first) return;
     this.hitStopUntil = until;
     this.renderer.effects.holdSlashes(until);
-    const more = finish ? FINISH.jolt : 1;
+    const more = (finish ? FINISH.jolt : 1) * (crit ? CRIT.jolt : 1);
     this.renderer.jolt(first.dx, first.dz, { kick: look.kick * more, down: (look.down ?? 0) * more, roll: look.roll * more, zoom: look.zoom * more });
     if (look.thud) {
       const y = this.renderer.groundUnder(first.m.x, first.m.y, first.m.z) ?? first.m.y;
@@ -2550,10 +2619,16 @@ export class Game extends EventTarget {
     this.chain = now - (this.chainAt ?? -Infinity) < CHAIN_MS ? (this.chain ?? 0) + 1 : 1;
     this.chainAt = now;
     this.sound.play('whack', { kind, on: first.on, final: finish, chain: this.chain });
-    const words = finish ? FINISH.words : look.words;
-    this.emit('hit-word', { ...first.m, top: first.top, text: words[this.chain % words.length], color: finish ? '#ffd84d' : look.color, big: finish, chain: this.chain });
-    if (finish || look.lines) this.emit('hit-lines', first.at);
-    this.buzz(look.buzz + (finish ? FINISH.buzz : 0));
+    if (crit) {
+      this.sound.play('crit');
+      this.critShownAt = now;
+      this.emit('hit-word', { ...first.m, top: first.top, text: CRIT.word, color: CRIT.color, big: true, crit: true });
+    } else {
+      const words = finish ? FINISH.words : look.words;
+      this.emit('hit-word', { ...first.m, top: first.top, text: words[this.chain % words.length], color: finish ? '#ffd84d' : look.color, big: finish, chain: this.chain });
+    }
+    if (finish || crit || look.lines) this.emit('hit-lines', first.at);
+    this.buzz(look.buzz + (finish ? FINISH.buzz : 0) + (crit ? CRIT.buzz : 0));
   }
 
   // Landing on a monster: a thump down through the picture as you hit it.
@@ -2668,7 +2743,8 @@ export class Game extends EventTarget {
     // With the glove on it is the glove's own mightier swing, and a bigger
     // golden wave goes out of it.
     const lands = this.players.get(this.pid)?.avatar?.swing() ?? 0;
-    this.send({ t: 'swing', king: true });
+    const swing = this.nextSwing();
+    this.send({ t: 'swing', king: true, n: swing.n });
     this.sound.play('swish', { lands });
     this.slashSoon(this.players.get(this.pid)?.avatar, lands, true);
     const world = this.world;
@@ -2676,11 +2752,11 @@ export class Game extends EventTarget {
       if (this.world !== world) return;
       const yaw = this.me.yaw;
       this.shockwave(b.x, b.y + 0.95, b.z, yaw, glove);
-      this.strike(hits, 'king', dragons);
+      this.strike(hits, 'king', dragons, swing.crit);
       this.bopSentAt = performance.now();
       for (const hit of [...hits, ...dragons]) {
-        if (hit.dragon) this.send({ t: 'critter', op: 'hit', id: hit.id });
-        else this.bop(hit.id, false, true);
+        if (hit.dragon) this.send({ t: 'critter', op: 'hit', id: hit.id, n: swing.n });
+        else this.bop(hit.id, false, true, swing.n);
       }
       this.wearOut();
     }, lands * 1000);
@@ -2789,7 +2865,8 @@ export class Game extends EventTarget {
     // the whoosh of a swing as it starts.
     const avatar = this.players.get(this.pid)?.avatar;
     const lands = avatar?.swing() ?? 0;
-    this.send({ t: 'swing' });
+    const swing = this.nextSwing();
+    this.send({ t: 'swing', n: swing.n });
     if (ray) this.sound.play('raycharge', { lands });
     else if (meteor) this.sound.play('summon', { lands });
     else if (!blaster) this.sound.play('swish', { lands });
@@ -2820,14 +2897,14 @@ export class Game extends EventTarget {
         const d = best ? Math.hypot(best.dx, best.dz) : reach;
         this.lobBomb(hand.x, hand.y, hand.z, b.x + Math.sin(yaw) * d, b.z + Math.cos(yaw) * d);
         this.sound.play('swish');
-        this.send({ t: 'bomb', d: +d.toFixed(2) });
+        this.send({ t: 'bomb', d: +d.toFixed(2), n: swing.n });
         this.wearOut();
         return;
       } else if (meteor) {
         // Called down out of the sky at the one aimed at, or a few steps ahead.
         const d = best ? Math.hypot(best.dx, best.dz) : reach;
         this.callMeteor(b.x + Math.sin(yaw) * d, b.y, b.z + Math.cos(yaw) * d, yaw);
-        this.send({ t: 'bomb', d: +d.toFixed(2) });
+        this.send({ t: 'bomb', d: +d.toFixed(2), n: swing.n });
         this.wearOut();
         return;
       } else {
@@ -2835,17 +2912,17 @@ export class Game extends EventTarget {
         if (spear) this.zapFrom(avatar, aim, reach);
         else if (ray) this.rayFrom(avatar, aim);
         else if (soul) this.soulSwingFrom(avatar, !struck.length);
-        if (struck.length || struckDragons.length) this.strike(struck, weapon?.key ?? 'punch', struckDragons);
+        if (struck.length || struckDragons.length) this.strike(struck, weapon?.key ?? 'punch', struckDragons, swing.crit);
       }
       if (best) {
         const bop = () => {
           if (this.world !== world) return;
           // What flies lands as it gets there, on the one it was shot at.
-          if (shot) this.strike(best.dragon ? [] : [best], weapon.key, best.dragon ? [best] : []);
+          if (shot) this.strike(best.dragon ? [] : [best], weapon.key, best.dragon ? [best] : [], swing.crit);
           this.bopSentAt = performance.now();
           for (const hit of blaster ? [best] : [...struck, ...struckDragons]) {
-            if (hit.dragon) this.send({ t: 'critter', op: 'hit', id: hit.id });
-            else this.bop(hit.id);
+            if (hit.dragon) this.send({ t: 'critter', op: 'hit', id: hit.id, n: swing.n });
+            else this.bop(hit.id, false, false, swing.n);
           }
           this.wearOut();
         };
@@ -3530,6 +3607,7 @@ export class Game extends EventTarget {
       this.renderer.effects.bang(p.x, p.y + 2.3, p.z);
       this.sound.play('ouch');
     }
+    this.critNews(msg, p, entry ? bodyOf(entry.kind).height : 0, entry);
     this.emit('adventure');
   }
 

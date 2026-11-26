@@ -57,6 +57,11 @@ const CHROME = [
 
 const skip = CHROME ? false : 'Chrome not found; set CHROME_PATH';
 
+// No swing is a critical hit (crits.js) on the islands of the server here, nor
+// on those in the pages (openPlayer), unless a test says otherwise: a blow
+// takes just what the test counts on it taking.
+globalThis.kidsWorldLuck = 0;
+
 // E2E_SHARD=k/n runs every nth test, from the kth on (counting from 0), so
 // that n processes, each with a browser and servers of its own, can share the
 // tests out between them (npm test does). Without it, every test runs. (A test
@@ -143,6 +148,8 @@ async function openPlayer(url, profile = {}, init = null) {
   // And in a hurry: the seconds a player never notices, before the keeper is first called,
   // between saves and between asking for a list again, are a tenth as long (see hurry.js).
   await page.evaluateOnNewDocument(() => (window.kidsWorldHurry = true));
+  // And never a critical hit on an island in the page, unless init says so.
+  await page.evaluateOnNewDocument(() => (window.kidsWorldLuck = 0));
   if (init) await page.evaluateOnNewDocument(init);
   // These players have seen every update too, unless profile.seenNews says
   // the newest one they saw (null: none); and every chapter of Adventure
@@ -2400,7 +2407,142 @@ test('a blow lands hard: the picture jolts, the monster stops dead and goes whit
   await page.browserContext().close();
 });
 
-test('a friend’s blow lands on your screen too: the monster stops dead, goes white and is knocked back, to their weapon’s whack, and their last blow flings it off', { skip }, async () => {
+test('now and then a swing lands as a critical hit: twice the hearts, its own word on a starburst, a chime, a bigger jolt, a sticker the first time, and the island’s word of one shown even when it comes late', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Lucky Hitter' });
+  const pageErrors = [];
+  page.on('pageerror', (e) => pageErrors.push(e.message));
+  await clickButton(page, 'Make an island');
+  await clickButton(page, 'Flat Land', '#modal');
+  await clickButton(page, 'New name', '#modal');
+  await clickSwitch(page, '#modal .switch'); // Friends can visit: off
+  await clickSwitch(page, '#modal .switch[aria-label="Monsters"]');
+  await clickButton(page, 'Make it', '#modal');
+  await inGame(page);
+  // A clearing with you in it, and what blows say and do written down as they go.
+  await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    const g = kw.game;
+    const room = kw.session.link.room;
+    const w = room.world;
+    room.monsters.clear();
+    room.monsters.spawnAt = Infinity;
+    for (const c of [...room.critters.list]) room.critters.remove(c.id);
+    const x = Math.floor(w.spawn.x) + 14;
+    const y = Math.floor(w.spawn.y);
+    const z = Math.floor(w.spawn.z);
+    for (let cx = x - 5; cx <= x + 5; cx++) {
+      for (let cz = z - 8; cz <= z + 5; cz++) {
+        for (let cy = y; cy < y + 12; cy++) if (w.get(cx, cy, cz) !== 0) room.natureCell([cx, cy, cz], 0);
+      }
+    }
+    Object.assign(g.me.body, { x: x + 0.5, y, z: z + 0.5, vx: 0, vy: 0, vz: 0 });
+    g.sendMove(true);
+    window.blows = { said: [], jolts: [], sounds: [], toasts: [], words: [] };
+    const emit = g.emit.bind(g);
+    g.emit = (name, detail) => {
+      if (name.startsWith('hit-')) window.blows.said.push({ name, ...detail });
+      if (name === 'toast') window.blows.toasts.push(detail.text);
+      return emit(name, detail);
+    };
+    const jolt = kw.renderer.jolt.bind(kw.renderer);
+    kw.renderer.jolt = (dx, dz, look) => {
+      window.blows.jolts.push(look);
+      return jolt(dx, dz, look);
+    };
+    const play = g.sound.play.bind(g.sound);
+    g.sound.play = (name, opts) => {
+      window.blows.sounds.push({ name, ...opts });
+      return play(name, opts);
+    };
+    // Each word as it pops up: a critical hit's on its starburst, and how much
+    // of the screen's width that takes.
+    const hitWord = kw.ui.hitWord.bind(kw.ui);
+    kw.ui.hitWord = (word) => {
+      hitWord(word);
+      const el = [...document.querySelectorAll('.float-hit')].at(-1);
+      const span = el.firstChild;
+      const burst = getComputedStyle(span, '::after');
+      const wide = el.getBoundingClientRect().width + 1.28 * parseFloat(getComputedStyle(span).fontSize);
+      window.blows.words.push({ crit: el.classList.contains('crit'), burst: burst.content !== 'none' && burst.clipPath.startsWith('polygon'), share: wide / innerWidth });
+    };
+  });
+  await until(page, () => window.kidsWorld.game.critters.size === 0);
+  const id = await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    const b = kw.game.me.body;
+    const room = kw.session.link.room;
+    const m = room.monsters.add(room.world, b.x, b.y, b.z - 1.5);
+    Object.assign(m, { giggle: Infinity, hearts: 6, max: 6 });
+    kw.game.me.yaw = Math.PI;
+    return m.id;
+  });
+  const ready = () => until(page, (id) => window.kidsWorld.game.attackReady() && window.kidsWorld.game.monsters.get(id)?.drawn, id);
+  // Knocked back by each blow: right up to it again, and a fresh page of notes.
+  const closeUp = async () => {
+    await page.evaluate((id) => {
+      const g = window.kidsWorld.game;
+      const m = window.kidsWorld.session.link.room.monsters.get(id);
+      Object.assign(m.body, { x: g.me.body.x, y: g.me.body.y, z: g.me.body.z - 1.5, vx: 0, vy: 0, vz: 0 });
+      g.me.yaw = Math.PI;
+    }, id);
+    await until(page, (id) => {
+      const g = window.kidsWorld.game;
+      const e = g.monsters.get(id);
+      const p = e?.model.group.position;
+      return p && !e.kick && !e.recoil && Math.hypot(p.x - g.me.body.x, p.z - g.me.body.z) < 1.7;
+    }, id);
+    await page.evaluate(() => Object.assign(window.blows, { said: [], jolts: [], sounds: [], toasts: [], words: [] }));
+    await ready();
+  };
+  const hearts = (n) => until(page, ({ id, n }) => window.kidsWorld.session.link.room.monsters.get(id)?.hearts === n, { id, n });
+  // The luck turns: every swing the island deals from now is critical. It deals
+  // a swing ahead, so the first is plain still, and it says the next is not.
+  await page.evaluate(() => (window.kidsWorldLuck = 1));
+  await ready();
+  await page.keyboard.press('KeyX');
+  await hearts(5);
+  await until(page, () => window.kidsWorld.game.critSwing === 2);
+  const plain = await page.evaluate(() => structuredClone(window.blows));
+  assert.ok(!plain.said.some((s) => s.crit), `a plain blow: ${JSON.stringify(plain.said)}`);
+  assert.equal(plain.sounds.filter((s) => s.name === 'crit').length, 0);
+  // The critical one: two hearts off with a bare fist, and it says so.
+  await closeUp();
+  await page.keyboard.press('KeyX');
+  await hearts(3);
+  await until(page, () => window.blows.said.some((s) => s.name === 'hit-number'));
+  const crit = await page.evaluate(() => ({ ...structuredClone(window.blows), crits: window.kidsWorld.profile.data.stats.crits, sticker: Boolean(window.kidsWorld.profile.data.stickers['critical-hit']) }));
+  const word = crit.said.find((s) => s.name === 'hit-word');
+  assert.equal(word?.text, 'CRITICAL!', JSON.stringify(crit.said));
+  assert.ok(word.crit && word.big, 'big, and critical');
+  assert.equal(crit.words.length, 1, 'one word');
+  assert.ok(crit.words[0].crit && crit.words[0].burst, `on its starburst: ${JSON.stringify(crit.words)}`);
+  assert.ok(crit.words[0].share < 0.6, `the starburst as wide as the word, not the screen: ${crit.words[0].share}`);
+  const number = crit.said.find((s) => s.name === 'hit-number');
+  assert.deepEqual([number.n, number.crit], [2, true], 'two hearts, told as critical');
+  assert.ok(crit.said.some((s) => s.name === 'hit-lines'), 'lines rushing in');
+  assert.ok(crit.jolts.length === 1 && crit.jolts[0].kick > plain.jolts[0].kick, `a bigger jolt: ${crit.jolts[0]?.kick} over ${plain.jolts[0]?.kick}`);
+  assert.deepEqual(crit.sounds.filter((s) => s.name === 'whack' || s.name === 'crit').map((s) => s.name), ['whack', 'crit'], 'the whack, and a chime over it');
+  assert.equal(crit.crits, 1, 'counted');
+  assert.ok(crit.sticker, 'the first earns the 🎯 sticker');
+  assert.ok(crit.toasts.some((t) => t.startsWith('A critical hit!')), `and says what it was: ${JSON.stringify(crit.toasts)}`);
+  // One the page was not told of in time (here, it forgot): the blow lands as a
+  // plain one, and once the island says it was critical, the page says so too.
+  await closeUp();
+  await page.evaluate(() => (window.kidsWorld.game.critSwing = 0));
+  await page.keyboard.press('KeyX');
+  await hearts(1);
+  await until(page, () => window.blows.said.some((s) => s.name === 'hit-word' && s.crit));
+  const late = await page.evaluate(() => structuredClone(window.blows));
+  const words = late.said.filter((s) => s.name === 'hit-word');
+  assert.ok(words.length === 2 && !words[0].crit && words[1].text === 'CRITICAL!', `its word, then the island’s: ${JSON.stringify(words)}`);
+  assert.equal(late.sounds.filter((s) => s.name === 'crit').length, 1, 'one chime');
+  assert.equal(late.said.find((s) => s.name === 'hit-number')?.crit, true);
+  assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.stats.crits), 2);
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
+test('a friend’s blow lands on your screen too: the monster stops dead, goes white and is knocked back, to their weapon’s whack, their critical hit flashes gold with a chime, and their last blow flings it off', { skip }, async () => {
   const host = await openPlayer(p2p(), { name: 'Brave Fox' });
   const errors = [];
   host.on('pageerror', (e) => errors.push(e.message));
@@ -2503,6 +2645,36 @@ test('a friend’s blow lands on your screen too: the monster stops dead, goes w
   assert.deepEqual(blow.sounds.filter((s) => s.name === 'whack').map((s) => s.kind), ['sword'], 'to their weapon’s whack');
   assert.equal(blow.jolts, 0, 'your picture stays still: the blow is theirs');
   assert.deepEqual(blow.said, [], 'and the word over it is for them');
+  assert.equal(blow.sounds.filter((s) => s.name === 'crit').length, 0, 'a plain one');
+  // Their critical hit (the island says their next swing is one): twice the hearts,
+  // and on your screen a golden flash with a chime, quieter, still without a jolt or
+  // a word: those are theirs.
+  const n = await guest.evaluate(() => (window.kidsWorld.game.critSwing = window.kidsWorld.game.swings + 1));
+  await host.evaluate(({ id, pid, n }) => {
+    const room = window.kidsWorld.session.link.room;
+    room.players.get(pid).luck = { n, crit: true };
+    const m = room.monsters.get(id);
+    m.hearts = 9;
+    const p = room.players.get(pid);
+    Object.assign(m.body, { x: p.s[0], y: p.s[1], z: p.s[2] - 1.2, vx: 0, vz: 0 });
+    Object.assign(window.blows, { said: [], jolts: 0, sounds: [] });
+  }, { id, pid: guestPid, n });
+  await until(guest, (id) => {
+    const g = window.kidsWorld.game;
+    const e = g.monsters.get(id);
+    const p = e?.model.group.position;
+    return e?.hearts === 9 && !e.kick && !e.recoil && g.attackReady() && Math.hypot(p.x - g.me.body.x, p.z - g.me.body.z) < 1.8;
+  }, id);
+  await guest.evaluate(() => {
+    window.kidsWorld.game.me.yaw = Math.PI;
+    window.kidsWorld.game.attack();
+  });
+  await until(host, (id) => window.kidsWorld.game.monsters.get(id)?.hearts === 5, id);
+  await until(host, () => window.blows.sounds.some((s) => s.name === 'crit'));
+  const crit = await host.evaluate(() => window.blows);
+  assert.deepEqual(crit.sounds.filter((s) => s.name === 'crit').map((s) => s.near), [0.5], 'a chime, quieter');
+  assert.equal(crit.jolts, 0, 'no jolt');
+  assert.deepEqual(crit.said, [], 'no word');
   // Their last blow: flung off, and gone pop a moment on, on your screen as on theirs.
   await host.evaluate((id) => {
     const room = window.kidsWorld.session.link.room;
