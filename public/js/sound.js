@@ -401,6 +401,49 @@ export class Sound {
         [72, 76, 79, 84].forEach((n, i) => this.tone(NOTE(n), { at: i * 0.1, decay: i === 3 ? 0.7 : 0.18, gain: 0.15, type: 'triangle' }));
         this.noise(0.6, { at: 0.35, type: 'highpass', freq: 6000, gain: 0.06 });
         break;
+      // What a popped monster drops (shared/loot.js): a sparkling spill of it
+      // out of the monster (a boss's, a long shower and a chord), a tink as
+      // each piece lands (a plop on the water), and as each comes to you: a
+      // coin's bright two-note ding, a step higher for each in a run of them;
+      // a heart's warm rising chime; a potion's cork and gurgle; a jewel's
+      // glassy sparkle up the scale.
+      case 'loot': {
+        const n = Math.min(opts.big ? 16 : 6, Math.max(1, opts.n ?? 3));
+        for (let i = 0; i < n; i++) {
+          const at = i * (opts.big ? 0.05 : 0.04) + Math.random() * 0.02;
+          this.tone((2200 + Math.random() * 1600) * r(), { at, decay: 0.07, gain: 0.035, type: 'square' });
+          this.tone((3300 + Math.random() * 1200) * r(), { at: at + 0.01, decay: 0.05, gain: 0.02 });
+        }
+        this.noise(0.25, { type: 'highpass', freq: 5200, gain: 0.05, attack: 0.02 });
+        if (opts.big) [72, 76, 79, 84].forEach((m, i) => this.tone(NOTE(m), { at: 0.15 + i * 0.07, decay: i === 3 ? 0.9 : 0.25, gain: 0.1, type: 'triangle' }));
+        break;
+      }
+      case 'tink':
+        if (opts.wet) this.tone(520 * r(), { decay: 0.1, gain: 0.07, slide: 880, slideTime: 0.07 });
+        else if (opts.k === 'coin' || opts.k === 'bag') this.tone((opts.k === 'bag' ? 1400 : 2600) * r(), { decay: 0.06, gain: 0.05, type: 'square' });
+        else if (opts.k === 'heart') this.tone(420 * r(), { decay: 0.08, gain: 0.08, type: 'triangle', slide: 300 });
+        else this.tone(3400 * r(), { decay: 0.08, gain: 0.05, type: 'triangle' });
+        break;
+      case 'coin': {
+        const step = MAJOR[Math.min(Math.max(0, opts.n ?? 0), MAJOR.length - 1)];
+        this.tone(NOTE(83 + step), { decay: 0.07, gain: 0.07, type: 'square' });
+        this.tone(NOTE(88 + step), { at: 0.07, decay: 0.32, gain: 0.07, type: 'square' });
+        this.tone(NOTE(100 + step), { at: 0.07, decay: 0.2, gain: 0.02 });
+        break;
+      }
+      case 'heart':
+        [76, 81, 88].forEach((m, i) => this.tone(NOTE(m), { at: i * 0.07, decay: i === 2 ? 0.5 : 0.18, gain: 0.11, type: 'triangle' }));
+        this.tone(NOTE(64), { decay: 0.4, gain: 0.06, slide: NOTE(69), slideTime: 0.3 });
+        break;
+      case 'potion':
+        this.tone(900 * r(), { decay: 0.05, gain: 0.12, slide: 400, slideTime: 0.04 });
+        for (let i = 0; i < 3; i++) this.tone((420 + i * 120) * r(), { at: 0.08 + i * 0.07, decay: 0.07, gain: 0.08, type: 'triangle', slide: 700 });
+        this.tone(NOTE(91), { at: 0.32, decay: 0.35, gain: 0.08, type: 'triangle' });
+        break;
+      case 'jewel':
+        [84, 88, 91, 96, 100].forEach((m, i) => this.tone(NOTE(m), { at: i * 0.045, decay: i === 4 ? 0.6 : 0.12, gain: 0.07, type: 'triangle' }));
+        this.noise(0.4, { at: 0.05, type: 'highpass', freq: 7000, gain: 0.05 });
+        break;
       // A first of a kind of fish: its page fills in in the 🐟 Fish
       // Dictionary — a little splash of a cheer.
       case 'newfish':

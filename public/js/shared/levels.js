@@ -67,6 +67,8 @@ export const XP_FOR = {
   tornadoes: { xp: 10 },
   steps: { xp: 0.05 },
   popped: { xp: 5 },
+  // What popped monsters dropped, picked up (loot.js).
+  loot: { xp: 1, cap: 2000 },
   furnished: { xp: 2 },
   volcanohouses: { xp: 5 },
   laps: { xp: 10 },

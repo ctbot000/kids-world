@@ -109,6 +109,8 @@ export class NodGame {
     this.movePets(dt);
     this.fight.update(dt);
     this.chests.update(dt);
+    // (What popped frights dropped: loot-view.js.)
+    g.loot.update(dt);
     this.emotes(now);
     g.updateAdventure(dt);
     const r = g.renderer;

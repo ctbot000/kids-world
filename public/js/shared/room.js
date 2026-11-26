@@ -44,6 +44,7 @@ import { CHEST_REACH, isGoldChest } from './treasure.js';
 import { isBeast } from './beasts.js';
 import { isBoss } from './bosses.js';
 import { ARM_REACH, BOP_SLACK, bopGap, BUMP_HP, GHOST_FIRE, hpAfterBump, hpBack, isHeavy, KING_PUSH, KING_REACH, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, SPORES, STOMP } from './monsters.js';
+import { BOSS_LOOT_MS, HEART_HP, HELP_MS, Loot, lootOf, lootSpots, nodLootSpots, packLoot, TAKE_SLACK } from './loot.js';
 import { isNote, isPiano } from './piano.js';
 import { feedTank, isTank } from './fishtank.js';
 import { Party } from './party.js';
@@ -337,6 +338,8 @@ export class Room {
     // Never saved: an island opened again starts without any.
     this.monsters = new MonsterSim((this.world.seed ^ 0x7f4a7c15 ^ (t | 0)) >>> 0);
     this.monstersSent = false;
+    // What popped monsters dropped, lying about (loot.js): never saved either.
+    this.loot = new Loot((this.world.seed ^ 0x1b873593 ^ (t | 0)) >>> 0);
     this.arcade = new ArcadeSim((this.world.seed ^ 0x5a7d3b1f ^ (t | 0)) >>> 0);
     this.party = new Party();
     this.hookWorld();
@@ -707,6 +710,10 @@ export class Room {
       case 'bop':
         this.bop(p, msg);
         break;
+      // What a popped monster dropped, walked up to: picked up (loot.js).
+      case 'loot':
+        this.takeLoot(p, msg);
+        break;
       // A Bomb Rod's throw (shop.js bombrod): the bomb lands where the thrower
       // faces, a few steps off, and pops at once.
       case 'bomb':
@@ -990,6 +997,8 @@ export class Room {
       critters: this.critters.describe(),
       pack: this.critters.pack(),
       monsters: this.monsters.pack(),
+      // What popped monsters dropped, lying about (loot.js).
+      loot: this.loot.pack(),
       ...this.hpOf(this.players.get(c.pid)),
       env: this.envMessage(),
       fires: this.fires.pack(),
@@ -1255,6 +1264,7 @@ export class Room {
     }
     const t = this.now();
     this.monsters = new MonsterSim((world.seed ^ 0x7f4a7c15 ^ (t | 0)) >>> 0);
+    this.loot.shift(dx, dz);
     this.arcade = new ArcadeSim((world.seed ^ 0x5a7d3b1f ^ (t | 0)) >>> 0);
     this.go = new GoSim();
     this.hideseek = new HideSeekSim();
@@ -1660,6 +1670,7 @@ export class Room {
     if (dream) this.stepDream(dream, dt, now, where);
     else if (this.settings.monsters || this.adventure?.active || this.defense?.marching) this.stepMonsters(dt, now, where);
     this.stepDragons(now, where);
+    this.stepLoot(now);
     // The Monster Gashapon only ever turns up on the shared isle, Adventure Isle.
     if (this.adventure && this.shared && !dream) for (const news of this.adventure.stepGasha(this.world, now, [...where].map(([id, w]) => ({ id, ...w })))) this.gashaNews(news);
     // Jinx on his bell's cage, on a chapter told in challenges: watching
@@ -2061,7 +2072,9 @@ export class Room {
   popMonster(p, m, now) {
     this.monsters.remove(m.id);
     const b = m.body;
-    this.broadcast({ t: 'pop', id: m.id, by: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
+    // (Out of it comes what it drops: loot.js.)
+    const loot = this.dropLoot(m.kind, b, p, now, { hits: m.hits });
+    this.broadcast({ t: 'pop', id: m.id, by: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2), ...(loot ? { loot } : {}) });
     if (this.adventure?.active) this.adventure.credit(p.id, 'pops');
     // (A battle of Toon Isle may be waiting on it: isle-battles.js.)
     this.adventure?.popped(m);
@@ -2074,6 +2087,67 @@ export class Room {
         if (cub) Object.assign(cub.body, { vx: Math.cos(m.yaw) * side * 3, vy: 5, vz: -Math.sin(m.yaw) * side * 3 });
       }
     }
+  }
+
+  // ------------------------------------------------ loot (loot.js)
+
+  // What a monster of this kind popped by p at `at` drops (lootOf), where each
+  // thing comes down round it (lootSpots, or in the Land of Nod nodLootSpots),
+  // lying there for whoever popped it and whoever helped (hits: when each
+  // last bopped it) — or, for a boss (everyone), for everyone on the island,
+  // flying to them in a moment. For the wire, as the pop tells it; null when
+  // it drops nothing (in a duel with a weapon's soul, nothing does).
+  dropLoot(kind, at, p, now, { hits = null, march = false, nod = null, everyone = false } = {}) {
+    const adv = this.adventure;
+    if (adv?.duel) return null;
+    const rand = () => this.loot.rng.next();
+    const things = lootOf(kind, rand, { level: adv?.story?.level ?? 1, march, nod });
+    if (!things.length) return null;
+    const helpers = [...(hits ?? [])].filter(([pid, t]) => pid !== p.id && now - t <= HELP_MS).map(([pid]) => pid);
+    const to = everyone ? this.onlinePlayers().map((q) => q.id) : [p.id, ...helpers];
+    const from = { x: at.x, y: at.y, z: at.z };
+    const dream = adv?.dream;
+    const spots = dream ? nodLootSpots(dream.space, from, things.length, rand) : lootSpots(this.world, from, things.length, rand, { fallback: { x: p.s[0], y: p.s[1], z: p.s[2] } });
+    const made = this.loot.add(things, spots, to, now, everyone ? BOSS_LOOT_MS : undefined);
+    return made.map(packLoot);
+  }
+
+  // Someone walked up to what lies there (ids): theirs, if they are near
+  // enough to it as the island sees them, and not sitting dizzy.
+  takeLoot(p, msg) {
+    if (!Array.isArray(msg.ids) || !msg.ids.length) return;
+    const now = this.now();
+    if ((p.dizzyUntil ?? 0) > now) return;
+    const [x, y, z] = p.s;
+    const nod = Boolean(this.adventure?.dream);
+    const near = (d) => (nod ? Math.hypot(d.x - x, d.y - y, d.z - z) <= TAKE_SLACK + 1 : Math.hypot(d.x - x, d.z - z) <= TAKE_SLACK && Math.abs(d.y - y) <= TAKE_SLACK);
+    const got = this.loot.take(msg.ids.filter(Number.isInteger).slice(0, 32), near);
+    if (got.length) this.giveLoot(got, p.id);
+  }
+
+  // Loot gone to whoever it is for, everyone told: picked up by `by` (who
+  // gets it too, whether they helped or not), or (by 0) flown off by itself.
+  // A heart is HP back for each of them, at once.
+  giveLoot(list, by) {
+    const now = this.now();
+    for (const d of list) {
+      d.to = [...new Set([...(by ? [by] : []), ...d.to])].filter((pid) => this.players.get(pid)?.online);
+      if (d.k !== 'heart') continue;
+      for (const pid of d.to) {
+        const q = this.players.get(pid);
+        if ((q.dizzyUntil ?? 0) > now || q.hp >= q.maxHp) continue;
+        q.hp = Math.min(q.maxHp, q.hp + HEART_HP * d.n);
+        this.sendToPid(pid, { t: 'hp', ...this.hpOf(q) });
+      }
+    }
+    this.broadcast({ t: 'took', by, got: list.map((d) => ({ id: d.id, k: d.k, n: d.n, to: d.to })) });
+  }
+
+  // What has been lying about long enough flies off to whoever it is for.
+  stepLoot(now) {
+    if (!this.loot.list.length && !this.loot.over?.length) return;
+    const due = this.loot.due(now);
+    if (due.length) this.giveLoot(due, 0);
   }
 
   // Whether a monster's body stands in the flames a dragon breathes from
@@ -2398,9 +2472,10 @@ export class Room {
       this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts, march: true });
       return;
     }
-    this.defense.popped(m, this.monsters);
+    const { bricks } = this.defense.popped(m, this.monsters);
     const b = m.body;
-    this.broadcast({ t: 'pop', id: m.id, by: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
+    const loot = this.dropLoot(m.kind, b, p, now, { hits: m.hits, march: true });
+    this.broadcast({ t: 'pop', id: m.id, by: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2), bricks, ...(loot ? { loot } : {}) });
     this.sendDefense();
   }
 
@@ -2596,7 +2671,7 @@ export class Room {
           zaps.push([n.pad.id, n.monster.id, n.hearts]);
           break;
         case 'pop':
-          this.broadcast({ t: 'pop', id: n.monster.id, by: 0, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
+          this.broadcast({ t: 'pop', id: n.monster.id, by: 0, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2), bricks: n.bricks });
           break;
         case 'leak':
           this.broadcast({ t: 'leak', id: n.monster.id, hearts: n.hearts, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
@@ -3132,9 +3207,15 @@ export class Room {
 
   nodPop(p, f) {
     if (this.adventure.active) this.adventure.credit(p.id, f.spec.boss ? 'boss' : 'pops', f.spec.boss ? 8 : f.spec.guard === 'none' ? 1 : 3);
-    this.broadcast({ t: 'nx', k: 'pop', pid: p.id, f: f.id, kind: f.kind, p: [f.x, f.y, f.z].map((v) => +v.toFixed(2)) });
+    const now = this.now();
+    // (What it drops, on the ground of its body: loot.js; a boss's, for everyone.)
+    const loot = this.dropLoot(f.kind, f, p, now, { hits: f.hits, nod: f.spec, everyone: Boolean(f.spec.boss) });
+    this.broadcast({ t: 'nx', k: 'pop', pid: p.id, f: f.id, kind: f.kind, p: [f.x, f.y, f.z].map((v) => +v.toFixed(2)), ...(loot ? { loot } : {}) });
     const { boss } = this.adventure.dream;
-    if (boss.hero && f.id !== boss.fright && !this.adventure.won) this.broadcast({ t: 'nx', k: 'pop', pid: p.id, f: boss.fright, kind: boss.spec.kind, p: [f.x, f.y, f.z].map((v) => +v.toFixed(2)) });
+    if (boss.hero && f.id !== boss.fright && !this.adventure.won) {
+      const won = this.dropLoot(boss.spec.kind, f, p, now, { nod: { boss: true }, everyone: true });
+      this.broadcast({ t: 'nx', k: 'pop', pid: p.id, f: boss.fright, kind: boss.spec.kind, p: [f.x, f.y, f.z].map((v) => +v.toFixed(2)), ...(won ? { loot: won } : {}) });
+    }
     if ((f.id === boss.fright || boss.hero) && boss.done && !this.adventure.won) this.nightmareOver(boss, [...new Set([...boss.by, p.id])], p.id);
   }
 
@@ -3258,9 +3339,12 @@ export class Room {
     // Cloud Blanket blown away.)
     const battles = adv.battles ? adv.lampCells(adv.battles.list.filter((b) => !b.done).map((b) => b.id)) : [];
     const fog = adv.battles ? adv.battles.fog.revealAll() : [];
+    const now = this.now();
     for (const m of adv.win(this.monsters)) {
       const b = m.body;
-      this.broadcast({ t: 'pop', id: m.id, by: m === king ? p.id : 0, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
+      // (Out of the boss, a fountain of treasure for everyone: loot.js.)
+      const loot = m === king ? this.dropLoot(m.kind, b, p, now, { everyone: true }) : null;
+      this.broadcast({ t: 'pop', id: m.id, by: m === king ? p.id : 0, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2), ...(loot ? { loot } : {}) });
     }
     const castle = adv.castle;
     if (castle) this.ungloom(castle);
@@ -3284,6 +3368,9 @@ export class Room {
   // can bump anyone now, so everyone has all their HP.
   allWell() {
     const now = this.now();
+    // Whatever monsters dropped flies to whoever it is for, once a boss's
+    // fountain has had its moment (loot.js).
+    this.loot.hurry(now + BOSS_LOOT_MS);
     for (const p of this.players.values()) {
       if ((p.dizzyUntil ?? 0) > now) {
         p.dizzyUntil = 0;

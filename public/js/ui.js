@@ -39,6 +39,7 @@ import { towerTop } from './shared/defense.js';
 import { OLYMPIADS, QUIZ_LEVELS, quizCoins, quizProgress, SCHOOLS } from './shared/quiz.js';
 import { LEARNT_AFTER } from './shared/quizbook.js';
 import { isChest } from './shared/treasure.js';
+import { dropsOf, HEART_HP } from './shared/loot.js';
 import { CLASS_BREAK_MS, CLASS_SIZE } from './shared/school.js';
 import { COOK_BREAK_MS, cookCoins, doneness, RECIPES, recipeByKey } from './shared/cooking.js';
 import { drawKitchen, KITCHEN_H, KITCHEN_W, rubPoints, VESSEL } from './render/kitchen.js';
@@ -482,6 +483,84 @@ export class UI {
     button.classList.add('gain');
     clearTimeout(this.gainTimer);
     this.gainTimer = setTimeout(() => button.classList.remove('gain'), 700);
+  }
+
+  // Something a popped monster dropped, come to you (game.js lootShown): a
+  // pill over your head of what it was, a run of them adding up in the same
+  // one (+7 🪙), and for coins your purse by your HP, counting up to all you
+  // have now.
+  lootGained({ k, n, friend = '' }) {
+    const g = this.game;
+    const b = g?.me?.body;
+    if (!b || !(n > 0)) return;
+    const coins = k === 'coin' || k === 'bag';
+    // (A jewel as the basket shows it.)
+    const jewel = B.COLLECTABLES.find((c) => c.key === k && !coins);
+    const icon = coins ? '🪙' : k === 'heart' ? '❤️' : k === 'potion' ? '🧪' : jewel ? `img:${k}` : '✨';
+    const amount = k === 'heart' ? n * HEART_HP : n;
+    const now = performance.now();
+    // (One pill for each kind of thing, a run of it adding up in it; another
+    // kind's goes over the ones still showing.)
+    this.lootPills = new Map([...(this.lootPills ?? [])].filter(([, p]) => p.el.isConnected && now - p.at < 1500));
+    const last = this.lootPills.get(icon);
+    const up = g.nod ? g.nod.w.up : null;
+    const at = up ? { x: b.x + up.x * 1.3, y: b.y + up.y * 1.3, z: b.z + up.z * 1.3, up: { ...up } } : { x: b.x, y: b.y + 1.3, z: b.z };
+    if (last && now - last.at < 1100) {
+      last.n += amount;
+      last.at = now;
+      last.count.textContent = ` +${last.n.toLocaleString()}`;
+      const f = this.floats.get(last.key);
+      if (f) Object.assign(f, at, { at: now });
+      last.text.classList.remove('bump');
+      void last.text.offsetWidth;
+      last.text.classList.add('bump');
+    } else {
+      const count = h('b', {}, ` +${amount.toLocaleString()}`);
+      const text = h('span', {}, jewel ? this.img(jewel.item, jewel.name) : icon, count);
+      const el = h('div', { class: `float-reward float-loot ${coins ? 'coins' : k}`, title: friend ? `Picked up by ${friend}` : '' }, text);
+      this.addFloat(el, { ...at, secs: 1.5, lift: 0.5 + 0.42 * this.lootPills.size, rise: 0.9 });
+      this.lootPills.set(icon, { el, text, count, n: amount, at: now, key: `float-${this.floatId - 1}` });
+    }
+    if (coins) this.renderPurse(true);
+  }
+
+  // A word over something, rising and fading: the bricks a marching monster
+  // was worth (game.js bricksOut).
+  lootFloat({ x, y, z, text, kind = '' }) {
+    if (![x, y, z].every(Number.isFinite)) return;
+    this.addFloat(h('div', { class: `float-reward float-loot ${kind}` }, h('span', {}, text)), { x, y, z, secs: 1.3, lift: 0.3, rise: 1 });
+  }
+
+  // Your purse by your HP, a few seconds after coins come in, counting up
+  // from what it said to what you have now (come: coins just came).
+  renderPurse(come = false) {
+    const el = $('purse');
+    if (!el) return;
+    const coins = this.profile?.data.coins ?? 0;
+    if (come) {
+      clearTimeout(this.purseTimer);
+      this.purseTimer = setTimeout(() => {
+        el.hidden = true;
+        this.purseShown = null;
+      }, 4000);
+      const from = this.purseShown ?? Math.max(0, coins - 1);
+      this.purseShown = from;
+      el.hidden = false;
+      el.classList.remove('gain');
+      void el.offsetWidth;
+      el.classList.add('gain');
+      const t0 = performance.now();
+      cancelAnimationFrame(this.purseFrame);
+      const count = () => {
+        const k = Math.min(1, (performance.now() - t0) / 500);
+        const now = Math.round(from + (coins - from) * (1 - (1 - k) ** 3));
+        el.textContent = `🪙 ${now.toLocaleString()}`;
+        el.setAttribute('aria-label', `${coins.toLocaleString()} coins`);
+        this.purseShown = now;
+        if (k < 1 && !el.hidden) this.purseFrame = requestAnimationFrame(count);
+      };
+      count();
+    }
   }
 
   loading(text, onCancel = null) {
@@ -2156,6 +2235,7 @@ export class UI {
               pic(m, true),
               h('b', {}, m.name),
               h('span', { class: 'muted popped' }, `Popped ×${popped.toLocaleString()}`),
+              lootLine(m.kind),
               h(
                 'div',
                 { class: 'monster-stats' },
@@ -2880,6 +2960,7 @@ export class UI {
           card('📺', 'TVs', ['Put down a TV, a Retro TV or a Wall TV (on a wall) from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Watch). Flip through the channels with ◀ ▶ (or the arrow keys, or 1 to ' + CHANNELS.length + '): fish, a bunny, a rocket, your island\'s weather and a dance party! On 🪩 Dance Party you dance along until you flip away. When the grown-ups put a show on, every TV gets 📡 Live after those.']),
           card('📹', 'Broadcast Station', ['Put down a Broadcast Station (a TV camera on a tripod) from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Go live). Say yes to your camera and microphone, tap 🔴 Go live, and you\'re on every TV on every island, on the 📹 On Air channel! One at a time; close the window to stop.']),
           card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it and press ', h('kbd', {}, 'X'), ' or the 👊 button to swing: the swing sweeps round in front of you and bops every monster it passes, flashing it white. When one crouches, a red strip on the ground shows where it will pounce: step out of it (or jump over it), then bop it while it’s dizzy — every bop counts twice! With nothing in your hand — or the 🥊 King’s Punch Glove on — hold it down for a second and let go for a 👑 King Punch that bops everything in front of you, golden and far wider with the glove! A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. Press ', h('kbd', {}, 'N'), ' (or the weapon button by the 👊 button) to carry the next of the weapons you own. Weapons wear out as they bop: fix them in the 🛒 shop before they break. A big red Bruiser takes a few jumps and bumps hard, never jump on a prickly orange Spiky or a darting giant mosquito: bop them! And a giant spider scuttles quicker than you walk, so run — two jumps or four bops see it off.']),
+          card('🪙', 'Treasure', ['Every monster you pop drops something: 🪙 coins (a 💰 bag of them from the big ones), and now and then a ❤️ heart for HP back, a 🧪 HP potion or a jewel. Walk up to it and it flies to you. Friends who helped pop it get the same, whoever picks it up, and what is left lying comes to you by itself after a while. The tougher the monster, the more it drops!']),
           card('🧪', 'HP potions', ['A bump from a monster takes some of your HP, and it comes back by itself. In a fix? Buy a 🧪 potion at the 🛒 shop and drink it with the 🧪 button by your HP (or press ', h('kbd', {}, 'Y'), '): all your HP back at once, and up you get on your own if you were sitting dizzy!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
           card('⚔️', 'Freeing camps', ['On 🌟 Adventure Isle, pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. Out of HP? Sit tight until a friend taps you to help you up. A 👾 Monster Gashapon turns up now and then: follow its beam of light, and turn it for a figure of a real monster — the higher the stage, the likelier a rare one! Locked 🧰 treasure chests lie about the isle too: each camp you help free offers a quiz for a 🔑 key, and a stage won one for a 👑 golden key, which opens the golden chest.']),
@@ -3989,6 +4070,10 @@ export class UI {
     on('undo', () => this.buildToolbar());
     on('toast', (e) => this.toast(e.detail.icon, e.detail.text));
     on('reward', (e) => this.reward(e.detail));
+    // What a popped monster dropped, come to you (game.js lootShown), and the
+    // bricks one marching on a tower defense island was worth.
+    on('loot', (e) => this.lootGained(e.detail));
+    on('loot-float', (e) => this.lootFloat(e.detail));
     // A first of a kind of fish: the dictionary's page filled in, said out
     // loud over the catch itself, and marked new there for a little while.
     on('newfish', (e) => {
@@ -8968,6 +9053,16 @@ export class UI {
     const clock = $('clock');
     if (clock.textContent !== `${sky}${weather}`) clock.replaceChildren(sky, weather ? h('span', { class: 'weather' }, weather) : '');
   }
+}
+
+// What a kind of monster drops, as its card in the monster collection says
+// (shared/loot.js dropsOf): its coins, and a heart, an HP potion and a jewel
+// when they come with them.
+function lootLine(kind) {
+  const d = dropsOf(kind);
+  const coins = d.coins[0] === d.coins[1] ? `${d.coins[0]}` : `${d.coins[0]}–${d.coins[1]}`;
+  const also = [d.heart ? '❤️' : '', d.potion ? '🧪' : '', d.jewel ? '💎' : ''].filter(Boolean);
+  return h('span', { class: 'muted drops', title: `What it drops when popped: ${coins} coins${also.length ? ', and now and then more' : ''}` }, `Drops 🪙 ${coins}${also.length ? ` ${also.join('')}` : ''}`);
 }
 
 // How the page sits on the screen, for a problem report: what a browser

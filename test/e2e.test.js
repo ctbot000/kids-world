@@ -204,6 +204,21 @@ async function until(page, fn, arg, timeout = 30000 * SLOW) {
 }
 const inGame = (page) => until(page, () => window.kidsWorld.session?.started && window.kidsWorld.game?.world, null, 60000 * SLOW);
 
+// Walks onto whatever popped monsters dropped (loot-view.js), one thing after
+// another as each lands, until none is left lying about.
+function pickUpLoot(page) {
+  return until(page, () => {
+    const g = window.kidsWorld.game;
+    const all = [...g.loot.items.values()];
+    const d = all.find((o) => !o.take && !o.fly);
+    if (d) {
+      Object.assign(g.me.body, { x: d.at.x, y: d.at.y, z: d.at.z, vx: 0, vy: 0, vz: 0 });
+      g.sendMove(true);
+    }
+    return all.length === 0;
+  });
+}
+
 // Fills the basket with every kind of treasure, or empties it, and switches the touch controls
 // on or off. Upright, those stand on the hotbar and the basket, at a height that a
 // ResizeObserver keeps, a frame later: this waits for it, which a new screen size needs too.
@@ -2115,6 +2130,112 @@ test('monsters, turned on in Make an island: HP on screen, one aimed at through 
   await page.browserContext().close();
 });
 
+test('a popped monster drops treasure: out of it for everyone to see, lying there until walked up to, then in your purse, with a heart HP back', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Lucky Magpie' });
+  await clickButton(page, 'Make an island');
+  await clickButton(page, 'Flat Land', '#modal');
+  await clickButton(page, 'New name', '#modal');
+  await clickSwitch(page, '#modal .switch'); // Friends can visit: off
+  await clickSwitch(page, '#modal .switch[aria-label="Monsters"]');
+  await clickButton(page, 'Make it', '#modal');
+  await inGame(page);
+  // A clearing with you in it, well away from the safe start, and the sounds
+  // the page plays written down.
+  const before = await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    const g = kw.game;
+    const room = kw.session.link.room;
+    const w = room.world;
+    room.monsters.clear();
+    room.monsters.spawnAt = Infinity;
+    for (const c of [...room.critters.list]) room.critters.remove(c.id);
+    const x = Math.floor(w.spawn.x) + 24;
+    const y = Math.floor(w.spawn.y);
+    const z = Math.floor(w.spawn.z);
+    for (let cx = x - 14; cx <= x + 14; cx++) for (let cz = z - 14; cz <= z + 14; cz++) for (let cy = y; cy < y + 14; cy++) if (w.get(cx, cy, cz) !== 0) room.natureCell([cx, cy, cz], 0);
+    Object.assign(g.me.body, { x: x + 0.5, y, z: z + 0.5, vx: 0, vy: 0, vz: 0 });
+    g.sendMove(true);
+    window.spot = { x: x + 0.5, y, z: z + 0.5 };
+    window.sounds = [];
+    const play = g.sound.play.bind(g.sound);
+    g.sound.play = (name, opts) => {
+      window.sounds.push(name);
+      return play(name, opts);
+    };
+    return { coins: kw.profile.data.coins, loot: kw.profile.data.stats.loot ?? 0 };
+  });
+  await until(page, () => window.kidsWorld.game.critters.size === 0);
+  // A Big Bruiser seven steps off goes pop (by your bop, as the island has it):
+  // out of it comes what it drops, tumbling down round where it went pop.
+  await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const { x, y, z } = window.spot;
+    const m = room.monsters.add(room.world, x + 7, y, z, { kind: 'big' });
+    m.giggle = Infinity;
+    window.bruiser = m;
+  });
+  await until(page, () => window.kidsWorld.game.monsters.has(window.bruiser.id));
+  await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    room.popMonster(room.players.get(kw.game.pid), window.bruiser, Date.now());
+  });
+  await until(page, () => window.kidsWorld.game.loot.items.size > 0);
+  assert.ok(await page.evaluate(() => window.sounds.includes('loot')), 'out it comes with a sparkling spill');
+  // Landed, it lies there, drawn in the world, and nothing is yours yet.
+  await until(page, () => [...window.kidsWorld.game.loot.items.values()].every((d) => !d.fly));
+  const lying = await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    return {
+      things: [...kw.game.loot.items.values()].map((d) => ({ k: d.k, n: d.n, shown: d.model.group.visible && d.model.group.parent === kw.renderer.entities, far: Math.hypot(d.at.x - window.bruiser.body.x, d.at.z - window.bruiser.body.z) })),
+      island: kw.session.link.room.loot.list.length,
+      coins: kw.profile.data.coins,
+    };
+  });
+  assert.ok(lying.things.length >= 2 && lying.things.length === lying.island, `what it dropped: ${JSON.stringify(lying.things)}`);
+  for (const d of lying.things) {
+    assert.ok(d.shown, `${d.k} is to be seen`);
+    assert.ok(d.far < 3.6, `${d.k} near where it went pop`);
+  }
+  const coins = lying.things.reduce((n, d) => n + (d.k === 'coin' || d.k === 'bag' ? d.n : 0), 0);
+  assert.ok(coins >= 2, 'a Big Bruiser drops a few coins');
+  assert.equal(lying.coins, before.coins, 'nothing yours until you pick it up');
+  // Walked up to, each flies to you, and into your purse it goes: a pill over
+  // your head adds it up, and your purse shows by your HP.
+  await pickUpLoot(page);
+  const after = await page.evaluate(() => ({
+    coins: window.kidsWorld.profile.data.coins,
+    loot: window.kidsWorld.profile.data.stats.loot,
+    pill: [...document.querySelectorAll('.float-loot')].map((el) => el.textContent),
+    purse: document.getElementById('purse').hidden ? null : document.getElementById('purse').textContent,
+    sounds: window.sounds,
+    island: window.kidsWorld.session.link.room.loot.list.length,
+  }));
+  assert.equal(after.coins, before.coins + coins, 'every coin of it');
+  assert.equal(after.loot, before.loot + lying.things.length, 'counted');
+  assert.equal(after.island, 0, 'none of it left on the island');
+  assert.ok(after.pill.some((t) => t.includes('🪙') && t.includes(`+${coins}`)), `the pill over your head: ${after.pill}`);
+  assert.ok(after.sounds.includes('coin'));
+  await until(page, (n) => document.getElementById('purse').textContent === `🪙 ${n}`, after.coins);
+  // A heart dropped by another, with some HP gone: HP back as you pick it up.
+  await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const p = room.players.get(kw.game.pid);
+    // (Just bumped, as it were: none of it comes back by itself for a while.)
+    Object.assign(p, { hp: 40, bumpAt: Date.now(), healAt: Date.now() });
+    room.sendToPid(p.id, { t: 'hp', ...room.hpOf(p) });
+    const { x, y, z } = window.spot;
+    const made = room.loot.add([{ k: 'heart', n: 1 }], [{ x: x - 4, y, z }], [p.id], Date.now());
+    room.broadcast({ t: 'pop', id: -1, by: p.id, x: x - 4, y, z, loot: made.map((d) => [d.id, 2, 1, Math.round(d.x * 100), Math.round(d.y * 100), Math.round(d.z * 100)]) });
+  });
+  await until(page, () => window.kidsWorld.game.hp === 40 && window.kidsWorld.game.loot.items.size === 1);
+  await pickUpLoot(page);
+  await until(page, () => window.kidsWorld.game.hp === 80 && window.sounds.includes('heart'));
+  await page.browserContext().close();
+});
+
 test('a blow lands hard: the picture jolts, the monster stops dead and goes white, a word pops up, and its last blow flings it off to go pop', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Heavy Hitter' });
   const pageErrors = [];
@@ -2782,6 +2903,8 @@ test('the beasts in a real page: each one drawn and told of, a Mimic a chest unt
   await new Promise((r) => setTimeout(r, 500));
   await page.evaluate((id) => window.kidsWorld.game.bop(id), bones);
   await until(page, (id) => !window.kidsWorld.game.monsters.has(id), bones);
+  // Its coins come in what it drops (shared/loot.js), picked up.
+  await pickUpLoot(page);
   const after = await page.evaluate(() => ({ beasts: window.kidsWorld.profile.data.stats.beasts, popped: window.kidsWorld.profile.data.stats.popped, coins: window.kidsWorld.profile.data.coins }));
   assert.equal(after.beasts, before.beasts + 1);
   assert.equal(after.popped, before.popped + 1);

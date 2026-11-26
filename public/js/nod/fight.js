@@ -1221,7 +1221,11 @@ export class Fight {
   popped(m, mine) {
     const f = this.frights.get(m.f);
     const g = this.g;
-    if (!f) return;
+    if (!f) {
+      // (One never seen here: what it dropped comes out where it was.)
+      if (Array.isArray(m.loot) && finite(m.p, 3)) g.loot.burst(m.loot, at3(m.p));
+      return;
+    }
     // (The Night Mare does not pop: she lies down, and sleeps.)
     const sleeps = f.kind === 'mare';
     if (!sleeps) this.poof(f, f.spec.boss ? 60 : 18);
@@ -1233,6 +1237,8 @@ export class Fight {
       g.renderer.shake(0.8);
       this.domes.push(new BurstDome(this.scene, c, 14, '#ffe27a', 1400));
     }
+    // What it drops, on the ground of its body (shared/loot.js).
+    if (Array.isArray(m.loot)) g.loot.burst(m.loot, c, { big: Boolean(f.spec.boss) });
     if (mine) {
       g.profile.count('popped');
       this.braver(f.spec.guard === 'none' ? 0.2 : 0.5);

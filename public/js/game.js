@@ -39,6 +39,8 @@ import { chapterOf, ticketOf, ticketsHeld, tokensBack, toldKey } from './shared/
 import { questBeaten, questFrame, questFx, readQuests, readRow } from './isle-quests-view.js';
 import { battleFrame, battleFx, battleWon, fogNews, fogSeen, readBattleRow, readBattles, readFog } from './isle-battles-view.js';
 import { NodGame } from './nod/nod-game.js';
+import { LootView } from './loot-view.js';
+import { JEWELS } from './shared/loot.js';
 import { NOD_BOSSES } from './shared/nod/bosses.js';
 import { duelStory } from './shared/nod/duel.js';
 import { isNodKey } from './shared/nod/worlds/index.js';
@@ -397,6 +399,7 @@ const OPEN_BURST_MS = CHEST_RATTLE_MS + 120;
 const TREASURE_SHOW_MS = 1400;
 // What popping the Queen Mosquito pays over an ordinary monster's pop (see
 // popped): a few coins, on top of the XP her own count carries (levels.js).
+// (Only on an island from before loot: she drops them now, shared/loot.js.)
 const QUEEN_POP = { coins: 5 };
 
 // Which way is up on an island.
@@ -453,6 +456,11 @@ export class Game extends EventTarget {
     this.monsters = new Map();
     // Monsters popped by a blow, still flying off (fling).
     this.flung = [];
+    // What popped monsters dropped, lying about (loot-view.js).
+    this.loot = new LootView(this);
+    // What has come of it to you lately (lootShown): a run of coins sounds
+    // higher and higher.
+    this.lootRun = { n: 0, at: 0 };
     // The volcano island's crater erupting (shared/volcano.js): the show as
     // this page draws it — the eruption going and the glowing splashes
     // cooling where the bombs came down. Never in the world.
@@ -891,6 +899,10 @@ export class Game extends EventTarget {
       case 'pop':
         this.popped(msg);
         break;
+      // What popped monsters dropped, picked up (or flown off by itself).
+      case 'took':
+        this.loot.took(msg);
+        break;
       case 'adv':
         this.adventureNews(msg);
         break;
@@ -1157,6 +1169,9 @@ export class Game extends EventTarget {
     this.spent = Number.isFinite(msg.spent) ? msg.spent : 0;
     this.setKits(msg.kits ?? []);
     this.setBots(msg.bots ?? []);
+    // What popped monsters dropped, lying about as you come (room.js loot),
+    // once it is known which way is up here.
+    this.loot.reset(msg.loot ?? []);
     this.setEnv(msg.env);
     this.renderer.fires.reset(this.world, msg.fires ?? []);
     // An eruption already going as you came in (room.js volcano): the
@@ -1938,8 +1953,14 @@ export class Game extends EventTarget {
     const away = near && entry && !boss && beast?.tier !== 2 ? this.blownAway(entry, msg.by) : null;
     const queen = entry?.kind === 'queen';
     const xp = XP_FOR.popped.xp + (queen ? XP_FOR.queens.xp : 0) + (beast ? XP_FOR.beasts.xp : 0);
+    // What it drops, out of it as it goes pop (shared/loot.js), for everyone
+    // to see; and on a tower defense island, the bricks it is worth.
+    // (An island from before loot pays a beast's coins and the Queen's straight away.)
+    const loot = Array.isArray(msg.loot) ? msg.loot : null;
     const pop = (x, y, z) => {
       if (near) this.popBurst(entry, x, y, z);
+      if (loot) this.loot.burst(loot, { x, y: y + bodyOf(entry?.kind ?? 'blob').height * 0.5, z }, { big: boss });
+      if (near && msg.bricks > 0) this.bricksOut(x, y, z, msg.bricks, mine || (!msg.by && this.near(x, y, z, 20)));
       // The reward for it, where it happened: stars out of the monster, and
       // a "+N ⭐" float over the spot (ui.js reward), with the XP it really
       // gave (levels.js), so what it says is what you got.
@@ -1973,15 +1994,22 @@ export class Game extends EventTarget {
       // few coins and the XP that comes with it, over and above a monster's.
       if (queen) {
         this.profile.count('queens');
-        this.profile.earn(QUEEN_POP.coins);
+        if (!loot) this.profile.earn(QUEEN_POP.coins);
       }
-      // And a beast, each worth a few coins of its own (a Mimic, a lot).
+      // And a beast, each worth a few coins of its own (a Mimic, a lot), in
+      // what it drops.
       if (beast) {
         this.profile.count('beasts');
-        this.profile.earn(beast.coins);
+        if (!loot) this.profile.earn(beast.coins);
         if (entry.kind === 'mimic' && near) fx.sparkles(p.x, p.y + 0.8, p.z, 40, ['#ffd84d', '#ffcc33', '#ffffff']);
       }
       if (first && !boss) this.emit('toast', { icon: '👾', text: 'Pop! Jump on a monster to pop it at once, or walk up to it and bop it until it pops.' });
+      // The first time something drops for you: what to do with it.
+      else if (loot?.length && !this.profile.data.stats.loot && !this.toldLoot) {
+        this.toldLoot = true;
+        const world = this.world;
+        setTimeout(() => this.world === world && this.emit('toast', { icon: '🪙', text: 'It dropped treasure! Walk up to it to pick it up — and your friends who helped pop it get it too.' }), 900);
+      }
     }
   }
 
@@ -2033,6 +2061,51 @@ export class Game extends EventTarget {
       fx.firework(x, y + 2, z);
     }
     this.sound.play('splat');
+  }
+
+  // ------------------------------------------------ loot (shared/loot.js)
+
+  // Something a monster dropped, yours now (loot-view.js took): coins in
+  // your purse, an HP potion in your pocket, a jewel in your basket. (A
+  // heart's HP the island gave you already.) Counted, for the stickers.
+  lootGot(k, n) {
+    const p = this.profile;
+    if (k === 'coin' || k === 'bag') p.earn(n);
+    else if (k === 'potion') for (let i = 0; i < n; i++) p.findPotion();
+    else if (JEWELS.includes(k)) p.addToBasket(k, n);
+    p.count('loot');
+  }
+
+  // ...and as it reaches you: its sound (coins higher and higher, one after
+  // another), and what it was over your head (ui.js lootGained). by: who
+  // picked it up (0: it flew to you by itself).
+  lootShown(k, n, by = this.pid) {
+    const now = performance.now();
+    const run = this.lootRun;
+    run.n = now - run.at < 1200 ? run.n + 1 : 0;
+    run.at = now;
+    // (Many at once, a fountain's, one after another, not all in the same blink.)
+    const wait = Math.max(0, (run.next ?? 0) - now);
+    run.next = now + wait + 55;
+    const sound = k === 'coin' || k === 'bag' ? 'coin' : k === 'heart' ? 'heart' : k === 'potion' ? 'potion' : 'jewel';
+    const step = run.n;
+    if (wait < 1500) setTimeout(() => !this.closed && this.sound.play(sound, { n: step, k }), wait);
+    if (k === 'heart' && this.me) this.renderer.effects.hearts(this.me.body.x, this.me.body.y + 1.5, this.me.body.z, 4);
+    this.emit('loot', { k, n, by, friend: by && by !== this.pid ? (this.players.get(by)?.name ?? '') : '' });
+  }
+
+  // A monster marching on a tower defense island popped: the toy bricks it
+  // was worth, bursting out of it for everyone to see, and how many over it
+  // (told: by you, or by a tower).
+  bricksOut(x, y, z, n, told) {
+    const fx = this.renderer.effects;
+    const colors = ['#e23b33', '#ffd23f', '#3f8fe0', '#4cc46a', '#ff8a2a', '#ffffff'];
+    for (let i = 0; i < Math.min(14, 4 + n * 2); i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = 1.2 + Math.random() * 1.8;
+      fx.add('square', x, y + 0.6, z, { vx: Math.cos(a) * s, vy: 3.5 + Math.random() * 2.5, vz: Math.sin(a) * s, size: 0.13 + Math.random() * 0.06, life: 0.8 + Math.random() * 0.3, gravity: 13, color: colors[i % colors.length] });
+    }
+    if (told) this.emit('loot-float', { x, y: y + 1, z, text: `🧱 +${n}`, kind: 'bricks' });
   }
 
   // A monster's last blow: gone as far as the game goes, but what you see of
@@ -8517,6 +8590,7 @@ export class Game extends EventTarget {
     this.seatPassengers(dt);
     this.updatePets(dt);
     this.updateMonsters(dt);
+    this.loot.update(dt);
     this.updateAdventure(dt);
     // The bop button held down (input.bop): a bare fist charges up a King
     // Punch while it is held, and swings when it is let go.
@@ -9174,6 +9248,7 @@ export class Game extends EventTarget {
     for (const id of [...this.critters.keys()]) this.renderer.removeCritter(id);
     for (const id of [...this.monsters.keys()]) this.renderer.removeMonster(id);
     this.clearFlung();
+    this.loot.clear();
     this.renderer.clearFlags();
     this.players.clear();
     this.critters.clear();
