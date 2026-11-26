@@ -178,8 +178,9 @@ function cleanEnv() {
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'commit.gpgsign=false', ...args], { cwd, encoding: 'utf8', env: { ...cleanEnv(), GIT_AUTHOR_NAME: 'T', GIT_AUTHOR_EMAIL: 't@example.com', GIT_COMMITTER_NAME: 'T', GIT_COMMITTER_EMAIL: 't@example.com' } }).trim();
 
 // A project of its own with this test.mjs, an end-to-end test file (as every
-// project test.mjs runs has) and one more, committed.
-async function project({ fail = false } = {}) {
+// project test.mjs runs has) and one more, committed; uses: a package one more
+// imports, which the project's own node_modules has.
+async function project({ fail = false, uses = '' } = {}) {
   const dir = await tempDir();
   const repo = join(dir, 'repo');
   await mkdir(join(repo, 'scripts'), { recursive: true });
@@ -188,6 +189,16 @@ async function project({ fail = false } = {}) {
   const file = (name, body) => `import assert from 'node:assert/strict';\nimport { test } from 'node:test';\ntest('${name}', () => ${body});\n`;
   await writeFile(join(repo, 'test/e2e.test.js'), file('end to end', '{}'));
   await writeFile(join(repo, 'test/sums.test.js'), file('sums', fail ? 'assert.equal(1 + 1, 3)' : 'assert.equal(1 + 1, 2)'));
+  if (uses) {
+    await writeFile(join(repo, 'test/uses.test.js'), `import two from '${uses}';\n${file('uses', 'assert.equal(two, 2)')}`);
+    await writeFile(join(repo, '.gitignore'), 'node_modules/\n');
+    const pkg = join(repo, 'node_modules', uses);
+    await mkdir(pkg, { recursive: true });
+    await writeFile(join(pkg, 'package.json'), JSON.stringify({ name: uses, type: 'module', exports: './index.js' }));
+    await writeFile(join(pkg, 'index.js'), 'export default 2;\n');
+    // (What npm leaves in every node_modules it installs.)
+    await writeFile(join(repo, 'node_modules/.package-lock.json'), '{}');
+  }
   git(dir, 'init', '--quiet', '-b', 'main', repo);
   git(repo, 'add', '.');
   git(repo, 'commit', '--quiet', '-m', 'Add the sums');
@@ -235,6 +246,20 @@ test('check.mjs times a run from the pre-push hook: in all, copying the commit o
   const anyway = check(repo, blocked);
   assert.equal(anyway.status, 0, anyway.stdout + anyway.stderr);
   assert.match(anyway.stdout, /passes/);
+});
+
+// From a worktree with no install of its own the packages are the main
+// checkout's, though a run of test.mjs there keeps its timings in a node_modules
+// of the worktree's, with nothing else in it.
+test('check.mjs, pushed from a worktree with no install of its own, tests with the main checkout’s packages, even where test.mjs has kept its timings', async () => {
+  const { repo, data } = await project({ uses: 'two' });
+  const tree = join(repo, '.worktrees/one');
+  git(repo, 'worktree', 'add', '--quiet', tree);
+  await mkdir(join(tree, 'node_modules/.cache/kids-world'), { recursive: true });
+  await writeFile(join(tree, 'node_modules/.cache/kids-world/test-times.json'), '{}');
+  const run = check(tree, data);
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+  assert.match(run.stdout, /passes/);
 });
 
 test('check.mjs times a failing run by hand, with the test file that failed and the time it took run again', async () => {

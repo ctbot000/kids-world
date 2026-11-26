@@ -44,10 +44,13 @@ const clean = Object.fromEntries(Object.entries(process.env).filter(([key]) => !
 
 // The packages: this checkout's, or, in a worktree without an npm install of
 // its own, the main checkout's (beside the repository's shared git folder).
+// An install, not just a node_modules: test.mjs keeps its timings in one, and so
+// makes one in a worktree that has none. npm leaves .package-lock.json in every
+// node_modules it installs.
 function modules() {
   const own = join(root, 'node_modules');
-  if (existsSync(own)) return own;
-  return join(dirname(resolve(root, git('rev-parse', '--git-common-dir'))), 'node_modules');
+  const main = join(dirname(resolve(root, git('rev-parse', '--git-common-dir'))), 'node_modules');
+  return [own, main].find((dir) => existsSync(join(dir, '.package-lock.json'))) ?? (existsSync(own) ? own : main);
 }
 
 // Niced, which every test and browser started from here inherits, so the
