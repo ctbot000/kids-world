@@ -1,12 +1,14 @@
 // Makes Adventure Isle's intro and ending films (films.js: each episode's,
 // intro and ending the first's, intro2 and ending2 the second's) as videos in
 // public/video/: each frame drawn in a real browser by the game's own renderer
-// (stage.js), on a clock of the film's own, its music and sound made there too
-// (score.js), and ffmpeg putting them together as an MP4 (H.264 and AAC, which
-// every browser plays) and a still for its poster.
+// (stage.js), on a clock of the film's own, everything said in it spoken by the
+// voices of its cast (voices.mjs, cast.js), its music and sound made in the
+// browser too, round the words (score.js), and ffmpeg putting them together as
+// an MP4 (H.264 and AAC, which every browser plays) and a still for its poster.
 //
 // npm run films [-- intro|ending|intro2|ending2|intro3|ending3|intro4|ending4|intro5|ending5|intro6|ending6] (FROM=s TO=s for a part, PREVIEW=1 for a
-// quick small one in the scratch folder of your choice, OUT=dir)
+// quick small one in the scratch folder of your choice, OUT=dir; VOICES=dir
+// for where the spoken lines are kept, ~/.cache/kids-world-voices if not)
 // Needs Google Chrome and ffmpeg (Homebrew's: /opt/homebrew/bin).
 import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -15,6 +17,16 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 import serveStatic from 'serve-static';
+import { clipsDir, speak } from './voices.mjs';
+
+// (Said plainly, before the voice model's own handlers throw it again with the
+// whole of its source.)
+for (const e of ['uncaughtException', 'unhandledRejection']) {
+  process.on(e, (err) => {
+    console.error(`\n${e}:`, err?.stack ?? err);
+    process.exit(1);
+  });
+}
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..');
@@ -26,9 +38,11 @@ const which = names.length ? names : ['intro', 'ending', 'intro2', 'ending2', 'i
 const preview = Boolean(process.env.PREVIEW);
 mkdirSync(OUT, { recursive: true });
 
-// The game's files, and the film's own beside them.
+// The game's files, the film's own beside them, and the lines said in them.
 const game = serveStatic(join(root, 'public'), { index: false });
 const films = serveStatic(here, { index: false });
+mkdirSync(clipsDir, { recursive: true });
+const said = serveStatic(clipsDir, { index: false });
 const server = createServer((req, res) => {
   const done = () => {
     res.statusCode = 404;
@@ -37,6 +51,9 @@ const server = createServer((req, res) => {
   if (req.url.startsWith('/films/')) {
     req.url = req.url.slice('/films'.length);
     films(req, res, done);
+  } else if (req.url.startsWith('/voices/')) {
+    req.url = req.url.slice('/voices'.length);
+    said(req, res, done);
   } else game(req, res, done);
 });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -66,7 +83,12 @@ const run = (cmd, args, input) =>
 
 for (const name of which) {
   const t0 = Date.now();
+  // What is said in it, spoken (or kept from before), then the film again with
+  // every line as long as it really is.
   await page.evaluate((n) => window.film.load(n), name);
+  const lines = await page.evaluate(() => window.film.lines());
+  const voices = await speak(lines);
+  await page.evaluate((n, v) => window.film.load(n, v), name, voices);
   const length = await page.evaluate(() => window.film.length());
   const from = Number(process.env.FROM ?? 0);
   const to = Math.min(length, Number(process.env.TO ?? length));

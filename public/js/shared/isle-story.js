@@ -121,7 +121,7 @@ export const EPISODES = [
     title: STORY_TITLE,
     villain: 'King Grumble',
     token: { one: 'Star Shard', many: 'Star Shards' },
-    films: { intro: 'intro', ending: 'ending', endingMs: 72000 },
+    films: { intro: 'intro', ending: 'ending', endingMs: 79000 },
     again: (journey) =>
       `Journey ${journey}! King Grumble puffed himself up again, grumpier than ever, broke the Star all over again and gave the shards back to his captains — and the isle has turned itself about, so the way goes round the other side.`,
   },
@@ -133,7 +133,7 @@ export const EPISODES = [
     villain: 'Queen Grizzle',
     token: { one: 'colour', many: 'colours of the rainbow', colours: RAINBOW },
     ticket: { icon: '🎫', name: 'Rainbow Ticket' },
-    films: { intro: 'intro2', ending: 'ending2', endingMs: 44000 },
+    films: { intro: 'intro2', ending: 'ending2', endingMs: 50000 },
     again: (journey) =>
       `Journey ${journey}! Queen Grizzle is back with a bigger umbrella, caught the rainbow all over again and gave its colours back to her helpers — and the Rainbow Lands have turned themselves about, so the way goes round the other side.`,
   },
@@ -148,7 +148,7 @@ export const EPISODES = [
     real: true,
     token: { one: 'Sunstone', many: 'Sunstones', icon: '☀️' },
     ticket: { icon: '🧭', name: 'Wild Isle Compass' },
-    films: { intro: 'intro3', ending: 'ending3', endingMs: 44000 },
+    films: { intro: 'intro3', ending: 'ending3', endingMs: 53000 },
     again: (journey) =>
       `Journey ${journey}! Old Murk crept back out of the sea fog, greyer and grumpier than ever, and took the Sunstones all over again — and the Wild Isle has turned itself about, so the way goes round the other side.`,
   },
@@ -164,7 +164,7 @@ export const EPISODES = [
     beaten: { verb: 'catch', ing: 'catching' },
     token: { one: 'Golden Bell', many: 'Golden Bells', icon: '🔔' },
     ticket: { icon: '🪶', name: 'Magpie Feather' },
-    films: { intro: 'intro4', ending: 'ending4', endingMs: 44000 },
+    films: { intro: 'intro4', ending: 'ending4', endingMs: 51000 },
     again: (journey) =>
       `Journey ${journey}! Jinx the Magpie never could keep away from anything shiny for long: he carried off the Golden Bells all over again — and the Puzzle Isles have turned themselves about, so everything is round the other side.`,
   },
@@ -185,7 +185,7 @@ export const EPISODES = [
     side: 256,
     token: { one: 'Sky Lantern', many: 'Sky Lanterns', icon: '🏮' },
     ticket: { icon: '🗺️', name: 'Toon Isle Map' },
-    films: { intro: 'intro5', ending: 'ending5', endingMs: 44000 },
+    films: { intro: 'intro5', ending: 'ending5', endingMs: 62000 },
     again: (journey) =>
       `Journey ${journey}! Baron Bluster huffed and puffed himself back up out of the sea mist, blew the Sky Lanterns out all over again and pulled his Cloud Blanket back over Toon Isle — and the island has turned itself about, so everything is round the other side.`,
   },
@@ -201,7 +201,7 @@ export const EPISODES = [
     beaten: { verb: 'calm', ing: 'calming' },
     token: { one: 'Sweet Dream', many: 'Sweet Dreams', icon: '💤' },
     ticket: { icon: '🛏️', name: 'Cloud Pillow' },
-    films: { intro: 'intro6', ending: 'ending6', endingMs: 44000 },
+    films: { intro: 'intro6', ending: 'ending6', endingMs: 65000 },
     again: (journey) =>
       `Journey ${journey}! One night the Night Mare’s night-light went out, and off she bolted again, in a worse fright than ever, trampling every dream in the Land of Nod as she went — and her frights have learnt a thing or two since last time.`,
   },

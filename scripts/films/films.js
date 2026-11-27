@@ -38,7 +38,7 @@ import { CHAPTERS, RAINBOW } from '/js/shared/isle-story.js';
 import { laneAt } from '/js/shared/nod/attacks.js';
 import { NOD_BOSSES } from '/js/shared/nod/bosses.js';
 import { add as plus, cross, flatUnit, sub, turn, unit } from '/js/shared/nod/shape.js';
-import { ANIM, B, caption, critter, dreamOf, fright, isle, kid, monster, nameCard, NightLight, prop, renderer, roll, star, THREE, titleCard, toon } from './stage.js';
+import { ANIM, B, critter, dreamOf, fright, isle, kid, monster, nameCard, NightLight, prop, reel, renderer, roll, star, THREE, titleCard, toon, voiced } from './stage.js';
 
 const SEA = 20;
 const lerp = (a, b, k) => a + (b - a) * k;
@@ -77,6 +77,13 @@ function orbit([cx, cy, cz], r, high, a0, a1, dur, fov = 50) {
 // The yaw that turns something at (x, z) to face `pos` (a camera's, say):
 // models face +z at yaw 0.
 const towards = (pos, x, z) => Math.atan2(pos[0] - x, pos[2] - z);
+// From yaw a to yaw b, k of the way, the short way round.
+const turnTo = (a, b, k) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * k;
+// (dx, dz) a step long.
+const flat2 = (dx, dz) => {
+  const d = Math.hypot(dx, dz) || 1;
+  return [dx / d, dz / d];
+};
 
 // Something to do once, the first frame at or past `at` in a shot.
 function once(shot, key, t, at, fn) {
@@ -112,27 +119,60 @@ function shoreSpots(m) {
 
 // ------------------------------------------------------------ the intro
 
+// A camera made once the shot's lines are placed (its keys going by when they
+// are said): make(shot) → a camera, made the first time it is needed.
+function later(make) {
+  let cam = null;
+  return function (t) {
+    cam ??= make(this);
+    return cam(t);
+  };
+}
+
+// The three of you, each with a voice of their own (cast.js).
+const VOICE_OF = ['boy', 'girl', 'bunny'];
+const hero = (i, act) => voiced(kid(KIDS[i], act), VOICE_OF[i]);
+
+// What each of King Grumble's captains says, shown with its shard.
+const CAPTAIN_SAYS = {
+  clawbeard: 'Arr! Finders keepers!',
+  puffcap: 'Shh! It’s mine now.',
+  frostfang: 'Brrr! Hands off!',
+  gumbo: 'Gumbo… likes… shiny!',
+  scarabold: 'Halt! None shall pass!',
+  bogmaw: 'Ribbit! Mine! Ribbit!',
+  glimmershell: 'Come and get it… slowly.',
+  baronboo: 'Boo! Ha ha ha!',
+  moltok: 'Too hot to handle!',
+  sprocket: 'Shard. Secured. Beep.',
+  nimbus: 'Rumble rumble! Go away!',
+};
+
+// Villagers of the happy isle (not you: you come later, by boat).
+const VILLAGERS = [
+  { animal: 'pig', fur: 'pink', shirt: 4, hat: 'party' },
+  { animal: 'fox', fur: 'orange', shirt: 9, hat: 'none' },
+];
+
 function intro() {
   const shore = isle(1);
   const happy = isle(1, { freed: true });
   const S = shoreSpots(shore);
   const L = S.light;
-  const shots = [];
-  const overlays = [];
-  let at = 0;
-  const add = (shot) => {
-    shot.start = at;
-    shots.push(shot);
-    at += shot.dur;
-    return shot;
-  };
+  const r = reel();
 
   // 1. Night over the sea, the Star shining on the lighthouse.
-  add({
+  r.add({
+    name: 'night',
     dur: 7,
     world: shore,
     time: 0.03,
     cut: 'fade',
+    speak: 0.9,
+    lines: [
+      ['teller', 'Far out in the sparkling sea lies Adventure Isle.'],
+      ['teller', 'And high on its lighthouse shines the Star.', { gap: 0.5 }],
+    ],
     setup() {
       const s = star(1.1);
       prop(s, (t) => ({ x: L[0], y: L[1] + 2.4, z: L[2], ry: t * 0.8 }));
@@ -142,14 +182,16 @@ function intro() {
       { t: 7, pos: [L[0] - 14, L[1] + 3, L[2] - 13], look: [L[0], L[1] + 1.5, L[2]], fov: 46 },
     ]),
   });
-  overlays.push(caption(0.9, 5.8, 'Far out in the sea lies Adventure Isle, and high on its lighthouse shines the Star.'));
 
-  // 2. A happy isle in the sunshine: the village, its animals, the lighthouse far off.
-  add({
+  // 2. A happy isle in the sunshine: the village, its animals and villagers
+  // dancing, the lighthouse far off.
+  r.add({
+    name: 'village',
     dur: 7.5,
     world: happy,
     time: 0.38,
     cut: 'fade',
+    lines: [['teller', 'The Star kept the whole isle happy and bright, from the sandy shore to the tallest mountain.']],
     setup() {
       const v = S.village;
       for (let i = 0; i < 6; i++) {
@@ -162,7 +204,7 @@ function intro() {
           return { x, y: groundY(happy.world, x, z), z, yaw: a + Math.PI / 2, state: 'walk', moving: true };
         });
       }
-      kid(KIDS[2], () => ({ x: v.x + 2, y: v.y, z: v.z + 3, yaw: Math.PI, emote: 'dance' }));
+      for (const [i, look] of VILLAGERS.entries()) kid(look, () => ({ x: v.x + 2 - i * 3, y: v.y, z: v.z + 3 - i, yaw: Math.PI - i * 0.6, emote: i ? 'clap' : 'dance' }));
     },
     camera: keys([
       { t: 0, pos: [S.village.x - 21, S.village.y + 17, S.village.z + 19], look: [S.village.x, S.village.y + 1, S.village.z], fov: 46 },
@@ -170,27 +212,38 @@ function intro() {
       { t: 7.5, pos: [S.village.x + 9, S.village.y + 21, S.village.z + 22], look: [L[0], L[1], L[2]], fov: 44 },
     ]),
   });
-  overlays.push(caption(7.5 + 0.6, 6.4, 'The Star kept the whole isle happy and bright, from the sandy shore to the tallest mountain.'));
 
-  // 3. A stormy night: King Grumble creeps up the lighthouse and takes the Star.
+  // 3. A stormy night: King Grumble creeps up the lighthouse, grabs the Star
+  // as the storyteller says who it is, gloats over it, and leaps off into the
+  // dark with it.
   const kingStand = [L[0] + 1.5, L[1] - 0.6, L[2] - 0.9];
-  add({
+  const storm = r.add({
+    name: 'storm',
     dur: 8,
     world: shore,
     time: 0.92,
     weather: 'storm',
     cut: 'flash',
+    speak: 0.6,
+    lines: [
+      ['teller', 'Then, one stormy night, somebody very grumpy crept up the lighthouse…'],
+      ['grumble', 'Hee hee! It’s mine! All mine!', { gap: 0.6 }],
+      ['grumble', 'Off I go!', { gap: 0.35 }],
+    ],
+    hold: 2.6,
+    keepCamera: true,
+    marks: (s) => ({ grab: s.said[0].end - 0.4, leap: s.said[2].at }),
     setup(shot) {
+      const { grab, leap } = shot.marks(shot);
       const s = star(1.1);
-      shot.star = s;
       prop(s, (t) => {
-        // Grabbed at 3.4 s, held up over his head, and off he goes with it.
-        if (t < 3.4) return { x: L[0], y: L[1] + 2.4, z: L[2], ry: t * 0.8 };
+        // Grabbed, held up over his head, and off he goes with it.
+        if (t < grab) return { x: L[0], y: L[1] + 2.4, z: L[2], ry: t * 0.8 };
         const k = shot.king;
         return { x: k.x, y: k.y + 2.8, z: k.z, ry: t * 3, scale: 0.8 };
       });
       shot.king = { x: kingStand[0], y: kingStand[1], z: kingStand[2] };
-      monster('king', (t) => {
+      const king = monster('king', (t) => {
         const k = shot.king;
         if (t < 1.6) {
           // Climbing up over the gallery's rail.
@@ -198,112 +251,145 @@ function intro() {
           Object.assign(k, { x: kingStand[0] + 3 * (1 - u), y: kingStand[1] - 6 * (1 - u) + Math.sin(u * Math.PI) * 2, z: kingStand[2] });
           return { ...k, yaw: -Math.PI / 2, state: 'hop', air: 1 - u };
         }
-        if (t < 5.6) {
+        if (t < leap) {
           Object.assign(k, { x: kingStand[0], y: kingStand[1], z: kingStand[2] });
-          return { ...k, yaw: Math.atan2(L[0] - k.x, L[2] - k.z), state: t < 3.4 ? 'hurl' : 'giggle' };
+          // (Tiptoeing round to it, then holding it up, delighted.)
+          return { ...k, yaw: Math.atan2(L[0] - k.x, L[2] - k.z), state: t < grab ? 'idle' : 'giggle' };
         }
         // And away, leaping down off the lighthouse into the dark.
-        const u = (t - 5.6) / 2.4;
+        const u = (t - leap) / 2.4;
         Object.assign(k, { x: kingStand[0] + u * 14, y: kingStand[1] + Math.sin(Math.min(1, u * 1.4) * Math.PI) * 4 - u * u * 18, z: kingStand[2] + u * 8 });
         return { ...k, yaw: Math.PI / 2, state: 'leap', air: 2 };
       });
+      voiced(king, 'grumble');
     },
-    fx(t, dt) {
-      const shot = shots[2];
-      once(shot, 'bolt1', t, 0.4, () => strike(shore.world, L[0] - 20, L[2] + 10, shot.camera(t).pos));
-      once(shot, 'grab', t, 3.4, () => renderer.effects.sparkles(L[0], L[1] + 2.4, L[2], 40, ['#ffd84d', '#ffffff', '#ffe680']));
-      once(shot, 'bolt2', t, 3.5, () => strike(shore.world, L[0] + 12, L[2] + 16, shot.camera(t).pos));
-      once(shot, 'bolt3', t, 6.4, () => strike(shore.world, L[0] - 6, L[2] + 24, shot.camera(t).pos));
+    fx(t) {
+      const { grab, leap } = storm.marks(storm);
+      once(storm, 'bolt1', t, 0.4, () => strike(shore.world, L[0] - 20, L[2] + 10, storm.camera(t).pos));
+      once(storm, 'grab', t, grab, () => renderer.effects.sparkles(L[0], L[1] + 2.4, L[2], 40, ['#ffd84d', '#ffffff', '#ffe680']));
+      once(storm, 'bolt2', t, grab + 0.1, () => strike(shore.world, L[0] + 12, L[2] + 16, storm.camera(t).pos));
+      once(storm, 'bolt3', t, leap + 0.8, () => strike(shore.world, L[0] - 6, L[2] + 24, storm.camera(t).pos));
     },
-    camera: keys([
-      { t: 0, pos: [L[0] - 9, L[1] - 1, L[2] + 8], look: [L[0], L[1] - 2, L[2]], fov: 52 },
-      { t: 5, pos: [L[0] - 7.5, L[1] + 0.5, L[2] + 6.5], look: [L[0] + 1, L[1] - 2, L[2] - 1], fov: 50 },
-      { t: 8, pos: [L[0] - 9, L[1] + 2, L[2] + 9], look: [L[0] + 8, L[1] - 8, L[2] + 6], fov: 52 },
-    ]),
+    camera: later((shot) => {
+      const { grab, leap } = shot.marks(shot);
+      return keys([
+        { t: 0, pos: [L[0] - 9, L[1] - 1, L[2] + 8], look: [L[0], L[1] - 2, L[2]], fov: 52 },
+        { t: grab, pos: [L[0] - 7.5, L[1] + 0.2, L[2] + 6.5], look: [L[0] + 0.6, L[1] - 1, L[2] - 0.6], fov: 50 },
+        // (In close on him while he gloats.)
+        { t: leap - 0.2, pos: [L[0] - 4.2, L[1] + 2.2, L[2] + 3.8], look: [kingStand[0], kingStand[1] + 1.4, kingStand[2]], fov: 46 },
+        { t: leap + 2.4, pos: [L[0] - 9, L[1] + 2, L[2] + 9], look: [L[0] + 8, L[1] - 8, L[2] + 6], fov: 52 },
+      ]);
+    }),
   });
-  overlays.push(caption(shots[2].start + 0.7, 6.8, 'Then one stormy night, grumpy King Grumble crept up the lighthouse… and stole the Star!'));
 
-  // 4. On the cliff top, he breaks it into twelve Star Shards.
+  // 4. On the cliff top: no more shiny Star. He breaks it into twelve Star
+  // Shards, and off they fly.
   const cliff = [84.5, groundY(shore.world, 84, 34), 34.5];
-  add({
+  const smash = r.add({
+    name: 'break',
     dur: 6.5,
     world: shore,
     time: 0.95,
     weather: 'storm',
     cut: 'cut',
+    speak: 0.3,
+    lines: [
+      ['grumble', 'No more shiny Star!'],
+      ['teller', 'He broke it into twelve Star Shards, and gave them to his captains to keep, all over the isle.', { gap: 0.9 }],
+    ],
+    marks: (s) => ({ smash: s.said[0].end + 0.25 }),
     setup(shot) {
+      const { smash: at } = shot.marks(shot);
       const whole = star(0.9);
-      prop(whole, (t) => ({ x: cliff[0], y: cliff[1] + 3, z: cliff[2], ry: t * 2, scale: t < 2.2 ? 1 + Math.sin(t * 30) * 0.05 * t : 0.001, visible: t < 2.2 }));
-      monster('king', (t) => ({ x: cliff[0], y: cliff[1], z: cliff[2], yaw: -2.6, state: t < 2.2 ? 'hurl' : 'giggle' }));
-      shot.shards = [];
+      prop(whole, (t) => ({ x: cliff[0], y: cliff[1] + 3, z: cliff[2], ry: t * 2, scale: t < at ? 1 + Math.sin(t * 30) * 0.05 * t : 0.001, visible: t < at }));
+      voiced(
+        monster('king', (t) => ({ x: cliff[0], y: cliff[1], z: cliff[2], yaw: -2.6, state: t < at ? 'hurl' : 'giggle' })),
+        'grumble',
+      );
       for (let i = 0; i < 12; i++) {
         const s = star(0.32);
         const a = (i / 12) * Math.PI * 2;
         const up = 0.5 + (i % 3) * 0.35;
         prop(s, (t) => {
-          const u = Math.max(0, t - 2.2);
-          return { x: cliff[0] + Math.cos(a) * u * 9, y: cliff[1] + 3 + u * (6 * up) + u * u * 0.6, z: cliff[2] + Math.sin(a) * u * 9, ry: t * 5, visible: t >= 2.2 };
+          const u = Math.max(0, t - at);
+          return { x: cliff[0] + Math.cos(a) * u * 9, y: cliff[1] + 3 + u * (6 * up) + u * u * 0.6, z: cliff[2] + Math.sin(a) * u * 9, ry: t * 5, visible: t >= at };
         });
       }
     },
     fx(t) {
-      const shot = shots[3];
-      once(shot, 'break', t, 2.2, () => {
+      const { smash: at } = smash.marks(smash);
+      once(smash, 'break', t, at, () => {
         renderer.effects.sparkles(cliff[0], cliff[1] + 3, cliff[2], 80, ['#ffd84d', '#ffffff', '#ffe680', '#ff9a3d']);
         renderer.effects.bang(cliff[0], cliff[1] + 3, cliff[2]);
         renderer.sky.flash = 1;
       });
-      if (t > 2.2 && t < 5) {
+      if (t > at && t < at + 2.8) {
         for (let i = 0; i < 12; i += 3) {
           const a = (i / 12) * Math.PI * 2;
-          const u = t - 2.2;
+          const u = t - at;
           renderer.effects.add('sparkle', cliff[0] + Math.cos(a) * u * 9, cliff[1] + 3 + u * 4, cliff[2] + Math.sin(a) * u * 9, { size: 0.16, life: 0.6, vy: -0.5, color: '#ffe680' });
         }
       }
     },
     camera: keys([
-      { t: 0, pos: [cliff[0] - 5.5, cliff[1] + 0.8, cliff[2] + 5], look: [cliff[0], cliff[1] + 2.4, cliff[2]], fov: 48 },
+      { t: 0, pos: [cliff[0] - 4.2, cliff[1] + 1, cliff[2] + 3.8], look: [cliff[0], cliff[1] + 2.4, cliff[2]], fov: 48 },
       { t: 6.5, pos: [cliff[0] - 9, cliff[1] + 1.5, cliff[2] + 9], look: [cliff[0], cliff[1] + 5, cliff[2]], fov: 56 },
     ]),
   });
-  overlays.push(caption(shots[3].start + 0.5, 5.8, 'He broke it into twelve Star Shards, and gave them to his captains to keep, all over the isle.'));
 
-  // 5. The captains, each in its lair with its shard.
+  // 5. The captains, each in its lair with its shard, a bar of the music
+  // each, and each with something to say about it.
   for (const [i, ch] of STAR_CHAPTERS.slice(0, 11).entries()) {
     const m = isle(i + 1);
     const lair = m.camps.at(-1);
     const c = [lair.x, lair.y, lair.z];
     const a0 = 0.6 + i * 0.9;
-    const shot = add({
+    const shot = r.add({
+      name: `cap${i}`,
       dur: 2.5,
+      fixed: true,
       world: m,
       time: dayOf(ch),
       cut: i === 0 ? 'flash' : 'cut',
+      speak: 0.3,
+      lines: [[ch.boss, CAPTAIN_SAYS[ch.boss], { max: 1.95 }]],
       setup() {
         const plan = BOSSES[ch.boss];
         const tall = plan.body.height;
-        monster(ch.boss, (t) => ({ x: c[0], y: c[1] + 1, z: c[2], yaw: a0 + 0.3, state: t % 2.5 < 1.2 ? 'idle' : 'giggle' }));
+        voiced(
+          monster(ch.boss, (t) => ({ x: c[0], y: c[1] + 1, z: c[2], yaw: a0 + 0.3, state: t < 2.1 ? 'idle' : 'giggle' })),
+          ch.boss,
+        );
         prop(star(0.4), (t) => ({ x: c[0], y: c[1] + 1 + tall + 1.4 + Math.sin(t * 3) * 0.15, z: c[2], ry: t * 2 }));
       },
       camera: (t) => {
         const tall = BOSSES[ch.boss].body.height;
-        return orbit([c[0], c[1] + 1 + tall * 0.55, c[2]], 6.4 + tall, 1.6, a0, a0 + 0.35, 2.5, 46)(t);
+        return orbit([c[0], c[1] + 1 + tall * 0.55, c[2]], 5.6 + tall, 1.4, a0, a0 + 0.35, 2.5, 46)(t);
       },
     });
-    overlays.push(nameCard(shot.start + 0.15, 2.2, `${BOSSES[ch.boss].icon} ${BOSSES[ch.boss].name}`, `${ch.icon} ${ch.name} · ${ch.lair}`));
+    r.over(nameCard(shot.start + 0.15, 2.2, `${BOSSES[ch.boss].icon} ${BOSSES[ch.boss].name}`, `${ch.icon} ${ch.name} · ${ch.lair}`, { top: true }));
   }
 
   // 6. The last shard, with King Grumble himself on Gloom Rock.
   const castle = isle(12);
   const throne = castle.camps.at(-1);
-  add({
+  r.add({
+    name: 'throne',
     dur: 6,
     world: castle,
     time: 0.74,
     weather: 'cloudy',
     cut: 'flash',
-    setup() {
-      monster('king', (t) => ({ x: throne.x, y: throne.y + 1, z: throne.z, yaw: 0.4, state: t < 2.5 ? 'idle' : 'giggle' }));
+    lines: [
+      ['teller', 'The last shard, King Grumble kept for himself, high up on Gloom Rock.'],
+      ['grumble', 'And nobody will ever, ever get them back! Hee hee hee!', { gap: 0.4 }],
+    ],
+    setup(shot) {
+      const gloat = shot.said[1].at;
+      voiced(
+        monster('king', (t) => ({ x: throne.x, y: throne.y + 1, z: throne.z, yaw: 0.4, state: t < gloat ? 'idle' : 'giggle' })),
+        'grumble',
+      );
       prop(star(0.45), (t) => ({ x: throne.x, y: throne.y + 4.6 + Math.sin(t * 2) * 0.2, z: throne.z, ry: t * 1.5 }));
       for (let i = 0; i < 4; i++) {
         const a = (i / 4) * Math.PI * 2 + 0.4;
@@ -311,67 +397,109 @@ function intro() {
       }
     },
     camera: keys([
-      { t: 0, pos: [throne.x + 2, throne.y + 2.2, throne.z + 7.5], look: [throne.x, throne.y + 2.4, throne.z], fov: 50 },
-      { t: 6, pos: [throne.x + 4, throne.y + 11, throne.z + 9], look: [throne.x, throne.y + 2, throne.z], fov: 52 },
+      { t: 0, pos: [throne.x + 4, throne.y + 11, throne.z + 9], look: [throne.x, throne.y + 2, throne.z], fov: 52 },
+      { t: 6, pos: [throne.x + 2, throne.y + 2.4, throne.z + 7], look: [throne.x, throne.y + 2.4, throne.z], fov: 48 },
     ]),
   });
-  overlays.push(caption(shots.at(-1).start + 0.6, 5.2, 'The last shard King Grumble kept for himself, high up on Gloom Rock.'));
 
-  // 7. That same night, a little boat tossed on the stormy sea.
+  // 7. That same night, a little boat tossed on the stormy sea, and the three
+  // of you in it, holding on.
   const boatAt = [6.5, SEA + 0.75, 120.5];
-  add({
+  const boat = r.add({
+    name: 'boat',
     dur: 7,
     world: shore,
     time: 0.94,
     weather: 'storm',
     cut: 'fade',
-    setup(shot) {
+    lines: [
+      ['teller', 'That same stormy night, a little boat was tossed this way and that, far out at sea…'],
+      ['girl', 'Whoa! Hold on tight!', { gap: 0.35, pan: 0.15 }],
+      ['boy', 'Here comes a big one!', { gap: 0.2, pan: -0.15 }],
+    ],
+    setup() {
       const roll = (t) => Math.sin(t * 2.1) * 0.22;
       const bob = (t) => Math.sin(t * 2.7) * 0.28;
-      shot.boat = critter('boat', (t) => ({ x: boatAt[0] + t * 0.9, y: boatAt[1] + bob(t), z: boatAt[2] - t * 0.6, yaw: -0.9, roll: roll(t), pitch: Math.sin(t * 1.7) * 0.12 }));
-      for (const [i, look] of KIDS.entries()) {
+      critter('boat', (t) => ({ x: boatAt[0] + t * 0.9, y: boatAt[1] + bob(t), z: boatAt[2] - t * 0.6, yaw: -0.9, roll: roll(t), pitch: Math.sin(t * 1.7) * 0.12 }));
+      for (const i of [0, 1, 2]) {
         const off = (i - 1) * 0.55;
-        kid(look, (t) => ({ x: boatAt[0] + t * 0.9 + Math.cos(-0.9) * off, y: boatAt[1] + bob(t) + 0.35, z: boatAt[2] - t * 0.6 + Math.sin(-0.9) * off, yaw: -0.9, anim: ANIM.sit }));
+        hero(i, (t) => ({ x: boatAt[0] + t * 0.9 + Math.cos(-0.9) * off, y: boatAt[1] + bob(t) + 0.35, z: boatAt[2] - t * 0.6 + Math.sin(-0.9) * off, yaw: -0.9, anim: ANIM.sit }));
       }
     },
     fx(t) {
-      const shot = shots.at(-2);
-      once(shot, 'b1', t, 1.2, () => strike(shore.world, 30, 108, [boatAt[0], 0, boatAt[2]]));
-      once(shot, 'b2', t, 4.6, () => strike(shore.world, 18, 96, [boatAt[0], 0, boatAt[2]]));
+      once(boat, 'b1', t, 1.2, () => strike(shore.world, 30, 108, [boatAt[0], 0, boatAt[2]]));
+      once(boat, 'b2', t, 4.6, () => strike(shore.world, 18, 96, [boatAt[0], 0, boatAt[2]]));
       if (Math.random() < 0.4) renderer.effects.splash(boatAt[0] + t * 0.9 + (Math.random() - 0.5) * 3, SEA + 1, boatAt[2] - t * 0.6 + (Math.random() - 0.5) * 3);
     },
+    keepCamera: true,
     camera: (t) => ({ pos: [boatAt[0] + t * 0.9 - 3.4, SEA + 2.7 + Math.sin(t * 2.2) * 0.35, boatAt[2] - t * 0.6 + 3.6], look: [boatAt[0] + t * 0.9, SEA + 1.5, boatAt[2] - t * 0.6], fov: 44 }),
   });
-  overlays.push(caption(shots.at(-1).start + 0.6, 6, 'That same stormy night, a little boat was tossed this way and that, far out at sea…'));
 
-  // 8. Morning on the beach: the heroes, and the dark lighthouse far off.
+  // 8. Morning on the beach: you, waking up, wondering where you are, seeing
+  // the lighthouse dark far off — and off to win back the Star. The title.
   const sp = S.spawn;
-  add({
+  const morning = r.add({
+    name: 'morning',
     dur: 10,
     world: shore,
     time: 0.29,
     cut: 'white',
     out: 'fade',
-    setup() {
-      for (const [i, look] of KIDS.entries()) {
+    speak: 0.6,
+    lines: [
+      ['teller', 'In the morning, the boat lay on the beach… and out of it climbed… you!'],
+      ['girl', 'Where are we?', { gap: 0.5 }],
+      ['boy', 'Look! The lighthouse has gone dark!', { gap: 0.3 }],
+      ['bunny', 'Let’s win back the Star, together!', { gap: 1.1 }],
+      ['teller', 'The Star of Adventure Isle!', { gap: 0.6, quiet: true }],
+    ],
+    hold: 3.4,
+    keepCamera: true,
+    marks: (s) => ({ title: s.said[4].at - 0.2 }),
+    setup(shot) {
+      const [, where, look, go] = shot.said;
+      const cam = [sp.x - 2, sp.y + 1.8, sp.z + 7];
+      for (const i of [0, 1, 2]) {
         const x = sp.x - 1.6 + i * 1.6;
         const z = sp.z + 1 + Math.abs(i - 1) * 0.6;
-        kid(look, (t) => ({ x, y: groundY(shore.world, x, z), z, yaw: Math.PI + 0.6, emote: t < 2.4 ? 'surprise' : t < 5.5 ? 'wave' : 'cheer', anim: ANIM.idle }));
+        // (Turning to the lighthouse when it is pointed out, and back.)
+        hero(i, (t) => {
+          const k = t < look.at ? 0 : t < go.at - 0.3 ? ease((t - look.at) / 0.5) : 1 - ease((t - go.at + 0.3) / 0.5);
+          return { x, y: groundY(shore.world, x, z), z, yaw: turnTo(towards(cam, x, z), towards(L, x, z), k), emote: t < where.end ? 'surprise' : t < look.at ? 'wave' : t < go.at ? undefined : 'cheer', anim: ANIM.idle };
+        });
       }
     },
-    camera: keys([
-      { t: 0, pos: [sp.x - 2, sp.y + 1.8, sp.z + 7], look: [sp.x, sp.y + 1, sp.z + 1], fov: 46 },
-      { t: 3, pos: [sp.x - 3, sp.y + 2.5, sp.z + 8], look: [sp.x, sp.y + 1.2, sp.z + 1], fov: 46 },
-      { t: 10, pos: [sp.x - 8, sp.y + 16, sp.z + 18], look: [L[0], L[1] - 6, L[2]], fov: 52 },
-    ]),
+    camera: later((shot) => {
+      const [, , look, go] = shot.said;
+      // (Behind them, the way they look, the lighthouse far off over them.)
+      const away = flat2(L[0] - sp.x, L[2] - sp.z);
+      return keys([
+        { t: 0, pos: [sp.x - 2, sp.y + 1.8, sp.z + 7], look: [sp.x, sp.y + 1, sp.z + 1], fov: 46 },
+        { t: look.at + 0.1, pos: [sp.x - 3, sp.y + 2.3, sp.z + 8], look: [sp.x, sp.y + 1.2, sp.z + 1], fov: 46 },
+        // (Rising up behind them over the village's roofs, to see it.)
+        { t: look.end + 0.1, pos: [sp.x - away[0] * 4, sp.y + 12, sp.z + 1.2 - away[1] * 4], look: [L[0], L[1] - 2, L[2]], fov: 26 },
+        { t: go.at - 0.1, pos: [sp.x - away[0] * 4.5, sp.y + 13, sp.z + 1.2 - away[1] * 4.5], look: [L[0], L[1] - 1, L[2]], fov: 23 },
+        { t: go.at + 0.7, pos: [sp.x - 2.5, sp.y + 2.2, sp.z + 7.5], look: [sp.x, sp.y + 1.2, sp.z + 1], fov: 46 },
+        { t: go.end + 5, pos: [sp.x - 8, sp.y + 16, sp.z + 18], look: [L[0], L[1] - 6, L[2]], fov: 52 },
+      ]);
+    }),
   });
-  const last = shots.at(-1).start;
-  overlays.push(caption(last + 0.5, 3, 'In the morning, the boat lay on the beach… and out of it climbed you!'));
-  overlays.push(titleCard(last + 3.8, 6, 'The Star of Adventure Isle', 'Win back all twelve Star Shards — together!'));
-  return { shots, overlays, poster: last + 7.2 };
+  const title = morning.start + morning.marks(morning).title;
+  r.over(titleCard(title, morning.start + morning.dur - title - 0.2, 'The Star of Adventure Isle', 'Win back all twelve Star Shards — together!'));
+  return r.done({ poster: title + 1.8 });
 }
 
 // ------------------------------------------------------------ the ending
+
+// What the captains say, cheered up at last.
+const CAPTAIN_CHEERS = {
+  clawbeard: 'Arr! What a sparkle!',
+  puffcap: 'Ooh, how bright!',
+  gumbo: 'Gumbo… happy!',
+  baronboo: 'Boo! What a lovely day!',
+  sprocket: 'Happiness. Detected.',
+  nimbus: 'Sunshine! How lovely!',
+};
 
 function ending() {
   const castle = isle(12, { freed: true });
@@ -379,54 +507,66 @@ function ending() {
   const S = shoreSpots(happy);
   const L = S.light;
   const throne = castle.camps.at(-1);
-  const shots = [];
-  const overlays = [];
-  let at = 0;
-  const add = (shot) => {
-    shot.start = at;
-    shots.push(shot);
-    at += shot.dur;
-    return shot;
-  };
+  const r = reel();
 
-  // 1. Pop! King Grumble, puffed up and beaten, goes pop; the last shard rises.
-  add({
+  // 1. King Grumble, beaten, puffing up bigger and bigger — pop! The last
+  // shard rises.
+  const last = r.add({
+    name: 'pop',
     dur: 6.5,
     world: castle,
     time: 0.7,
     cut: 'fade',
-    setup() {
-      monster('king', (t) => ({ x: throne.x, y: throne.y + 1, z: throne.z, yaw: 0.3, state: 'dazed', scale: 1.45 * (t < 1.4 ? 1 + t * 0.12 : 1), visible: t < 1.5 }));
-      prop(star(0.45), (t) => ({ x: throne.x, y: throne.y + 1.5 + Math.max(0, t - 1.5) * 1.6, z: throne.z, ry: t * 2, visible: t >= 1.5 }));
-      for (const [i, look] of KIDS.entries()) {
+    speak: 0.4,
+    lines: [
+      ['grumble', 'Oh no… oh no, no, no!'],
+      ['girl', 'We did it!', { gap: 0.9, pan: -0.2 }],
+      ['teller', 'King Grumble was beaten once and for all — and up rose the last Star Shard.', { gap: 0.4 }],
+    ],
+    marks: (s) => ({ pop: s.said[0].end + 0.25 }),
+    setup(shot) {
+      const { pop } = shot.marks(shot);
+      voiced(
+        monster('king', (t) => ({ x: throne.x, y: throne.y + 1, z: throne.z, yaw: 0.3, state: 'dazed', scale: 1.45 * (1 + Math.min(t, pop) * 0.1), visible: t < pop })),
+        'grumble',
+        0.6,
+      );
+      prop(star(0.45), (t) => ({ x: throne.x, y: throne.y + 1.5 + Math.max(0, t - pop) * 1.2, z: throne.z, ry: t * 2, visible: t >= pop }));
+      for (const i of [0, 1, 2]) {
         const a = 0.3 + (i - 1) * 0.55;
         const x = throne.x + Math.sin(a) * 6;
         const z = throne.z + Math.cos(a) * 6;
-        kid(look, (t) => ({ x, y: throne.y, z, yaw: a + Math.PI, emote: t > 1.6 ? 'cheer' : null, anim: ANIM.idle }));
+        hero(i, (t) => ({ x, y: throne.y, z, yaw: a + Math.PI, emote: t > pop + 0.1 ? 'cheer' : null, anim: ANIM.idle }));
       }
     },
     fx(t) {
-      const shot = shots[0];
-      once(shot, 'pop', t, 1.5, () => {
+      const { pop } = last.marks(last);
+      once(last, 'pop', t, pop, () => {
         renderer.effects.jellyPop(throne.x, throne.y + 1.4, throne.z, '#b18cff', 2.4);
         renderer.effects.confetti(throne.x, throne.y + 2, throne.z, 160, 1.6);
         renderer.effects.bang(throne.x, throne.y + 2, throne.z);
       });
-      if (t > 1.5) renderer.effects.add('sparkle', throne.x, throne.y + 1.5 + (t - 1.5) * 1.6, throne.z, { size: 0.18, life: 0.7, vy: -0.6, color: '#ffe680' });
+      if (t > pop) renderer.effects.add('sparkle', throne.x, throne.y + 1.5 + (t - pop) * 1.2, throne.z, { size: 0.18, life: 0.7, vy: -0.6, color: '#ffe680' });
     },
-    camera: keys([
-      { t: 0, pos: [throne.x + 2.5, throne.y + 3.5, throne.z + 8.5], look: [throne.x, throne.y + 1.8, throne.z], fov: 52 },
-      { t: 6.5, pos: [throne.x + 1.5, throne.y + 3, throne.z + 8.5], look: [throne.x, throne.y + 10, throne.z], fov: 56 },
-    ]),
+    keepCamera: true,
+    camera: later((shot) => {
+      const { pop } = shot.marks(shot);
+      return keys([
+        { t: 0, pos: [throne.x + 2, throne.y + 3.2, throne.z + 7.5], look: [throne.x, throne.y + 2.4, throne.z], fov: 50 },
+        { t: pop, pos: [throne.x + 2.5, throne.y + 3.5, throne.z + 8.5], look: [throne.x, throne.y + 1.8, throne.z], fov: 52 },
+        { t: shot.dur, pos: [throne.x + 1.5, throne.y + 3, throne.z + 8.5], look: [throne.x, throne.y + 9, throne.z], fov: 56 },
+      ]);
+    }),
   });
-  overlays.push(caption(0.6, 5.6, 'Pop! King Grumble was beaten once and for all — and up rose the last Star Shard.'));
 
   // 2. From all over the isle the shards fly home, across the dusk sky.
-  add({
+  r.add({
+    name: 'home',
     dur: 7,
     world: castle,
     time: 0.76,
     cut: 'cut',
+    lines: [['teller', 'From every corner of the isle, the twelve Star Shards flew home…']],
     setup() {
       for (let i = 0; i < 12; i++) {
         const a = (i / 12) * Math.PI * 2;
@@ -452,14 +592,16 @@ function ending() {
       { t: 7, pos: [throne.x - 6, throne.y + 9, throne.z + 20], look: [throne.x - 20, throne.y + 18, throne.z + 18], fov: 58 },
     ]),
   });
-  overlays.push(caption(shots[1].start + 0.4, 6.2, 'From every corner of the isle, the twelve Star Shards flew home…'));
 
   // 3. Round the lighthouse they gather: the Star whole again, and dawn.
-  add({
+  r.add({
+    name: 'whole',
     dur: 8.5,
     world: happy,
     time: (t) => lerp(0.08, 0.3, ease((t - 3) / 5)),
     cut: 'fade',
+    lines: [['teller', '…and the Star of Adventure Isle shone again!', { at: 3.6 }]],
+    keepCamera: true,
     setup() {
       for (let i = 0; i < 12; i++) {
         const a = (i / 12) * Math.PI * 2;
@@ -471,7 +613,7 @@ function ending() {
       prop(star(1.1), (t) => ({ x: L[0], y: L[1] + 2.4, z: L[2], ry: t * 0.8, scale: t < 3.1 ? 0.001 : ease((t - 3.1) / 0.6) * 1.05, visible: t >= 3.1 }));
     },
     fx(t) {
-      const shot = shots[2];
+      const shot = r.shots.find((x) => x.name === 'whole');
       once(shot, 'whole', t, 3.1, () => {
         renderer.effects.sparkles(L[0], L[1] + 2.4, L[2], 120, ['#ffd84d', '#ffffff', '#ffe680', '#9fe8ff']);
         renderer.effects.bang(L[0], L[1] + 2.4, L[2]);
@@ -480,9 +622,9 @@ function ending() {
     },
     camera: orbit([L[0], L[1] + 1.4, L[2]], 13, 2.5, 2.2, 3.4, 8.5, 50),
   });
-  overlays.push(caption(shots[2].start + 3.6, 4.6, '…and the Star of Adventure Isle shone again!'));
 
-  // 4. All over the isle, the gloom gone and the captains cheered up.
+  // 4. All over the isle, the gloom gone, and the captains cheered up —
+  // and saying so.
   const party = [
     [1, 'clawbeard', 0.4],
     [2, 'puffcap', 0.4],
@@ -495,13 +637,20 @@ function ending() {
     const m = isle(stage, { freed: true });
     const lair = m.camps.at(-1);
     const a0 = 0.8 + i;
-    add({
+    r.add({
+      name: `cheer${i}`,
       dur: 2.6,
       world: m,
       time,
       cut: i ? 'cut' : 'fade',
+      speak: i ? 0.3 : 0.5,
+      lines: [...(i ? [] : [['teller', 'All over the isle the gloom went away — and even the grumpy captains cheered up.']]), [boss, CAPTAIN_CHEERS[boss], { max: 2, gap: 0.4 }]],
+      hold: 0.5,
       setup() {
-        monster(boss, (t) => ({ x: lair.x, y: lair.y + 1 + Math.abs(Math.sin(t * 5)) * 0.4, z: lair.z, yaw: a0 + 0.2, state: 'giggle', air: Math.abs(Math.sin(t * 5)) * 0.4 }));
+        voiced(
+          monster(boss, (t) => ({ x: lair.x, y: lair.y + 1 + Math.abs(Math.sin(t * 5)) * 0.4, z: lair.z, yaw: a0 + 0.2, state: 'giggle', air: Math.abs(Math.sin(t * 5)) * 0.4 })),
+          boss,
+        );
         const look = KIDS[i % 3];
         kid(look, (t) => ({ x: lair.x + Math.sin(a0 - 0.6) * 4, y: lair.y, z: lair.z + Math.cos(a0 - 0.6) * 4, yaw: a0 - 0.6 + Math.PI, emote: 'dance' }));
       },
@@ -512,21 +661,28 @@ function ending() {
       camera: orbit([lair.x, lair.y + 2.2, lair.z], 9.5, 2.4, a0, a0 + 0.4, 2.6, 48),
     });
   }
-  overlays.push(caption(shots[3].start + 0.4, 15, 'All over the isle the gloom went away — and even the grumpy captains cheered up.'));
 
   // 5. A party on the beach, fireworks over the shining lighthouse.
   const sp = S.spawn;
-  add({
+  r.add({
+    name: 'beach',
     dur: 9,
     world: happy,
     time: 0.86,
     cut: 'fade',
+    speak: 0.8,
+    lines: [
+      ['bunny', 'Fireworks!', { pan: 0.25 }],
+      ['boy', 'Best day ever!', { gap: 0.5, pan: -0.25 }],
+      ['teller', 'Thank you, heroes of Adventure Isle!', { gap: 0.8 }],
+    ],
+    hold: 1.6,
     setup() {
       prop(star(1.1), (t) => ({ x: L[0], y: L[1] + 2.4, z: L[2], ry: t * 0.8 }));
-      for (const [i, look] of KIDS.entries()) {
+      for (const i of [0, 1, 2]) {
         const x = sp.x - 1.6 + i * 1.6;
         const z = sp.z + 0.5;
-        kid(look, () => ({ x, y: groundY(happy.world, x, z), z, yaw: Math.PI * 0.8, emote: ['cheer', 'dance', 'clap'][i] }));
+        hero(i, () => ({ x, y: groundY(happy.world, x, z), z, yaw: Math.PI * 0.8, emote: ['cheer', 'dance', 'clap'][i] }));
       }
       for (let i = 0; i < 5; i++) {
         const type = ['bunny', 'chick', 'sheep', 'bunny', 'dog'][i];
@@ -546,10 +702,10 @@ function ending() {
       { t: 9, pos: [sp.x - 1, sp.y + 9, sp.z + 15], look: [L[0] - 20, L[1] + 6, L[2] + 30], fov: 56 },
     ]),
   });
-  overlays.push(caption(shots.at(-1).start + 0.5, 7.8, 'Thank you, heroes of Adventure Isle!'));
 
   // 6. The credits, round the Star shining over the sea at night.
-  add({
+  const credits = r.add({
+    name: 'credits',
     dur: 15,
     world: happy,
     time: 0.94,
@@ -563,20 +719,30 @@ function ending() {
     camera: orbit([L[0], L[1] - 2, L[2]], 30, 6, 2.6, 3.6, 15, 50),
   });
   const cast = STAR_CHAPTERS.map((ch) => `${BOSSES[ch.boss].icon} ${BOSSES[ch.boss].name}`);
-  overlays.push(
-    roll(shots.at(-1).start + 0.3, 14.5, ['#The Star of Adventure Isle', '', '#Starring', 'You and your friends', '', '#and', ...cast, '', '#The twelve chapters', ...STAR_CHAPTERS.map((ch) => `${ch.icon} ${ch.name}`), '', '#Made in Kids World', 'Thank you for playing!']),
-  );
+  r.over(roll(credits.start + 0.3, 14.5, ['#The Star of Adventure Isle', '', '#Starring', 'You and your friends', '', '#and', ...cast, '', '#The twelve chapters', ...STAR_CHAPTERS.map((ch) => `${ch.icon} ${ch.name}`), '', '#Voices', 'Kokoro', '', '#Made in Kids World', 'Thank you for playing!']));
 
-  // 7. But far out at sea, a crown bobs up: King Grumble, puffing himself up again.
+  // 7. But far out at sea, a crown bobs up: King Grumble, puffing himself up
+  // again, and promising more.
   const sea = [L[0] - 4, SEA + 0.4, L[2] - 26];
-  add({
+  const teaser = r.add({
+    name: 'teaser',
     dur: 8.5,
     world: happy,
     time: 0.97,
     cut: 'fade',
     out: 'fade',
-    setup() {
-      monster('king', (t) => ({ x: sea[0], y: sea[1] - 1.2 + ease(t / 3) * 0.9 + Math.sin(t * 2) * 0.08, z: sea[2], yaw: 0.2, state: t > 3.5 ? 'giggle' : 'idle', scale: 1 + Math.max(0, t - 4) * 0.05 }));
+    lines: [
+      ['teller', 'But far out at sea…'],
+      ['grumble', 'Next time, heroes. Next time! Hee hee!', { gap: 1.6 }],
+    ],
+    hold: 3.6,
+    marks: (s) => ({ title: s.said[1].end + 0.3 }),
+    setup(shot) {
+      const up = shot.said[1].at;
+      voiced(
+        monster('king', (t) => ({ x: sea[0], y: sea[1] - 1.2 + ease(t / 3) * 0.9 + Math.sin(t * 2) * 0.08, z: sea[2], yaw: 0.2, state: t > up ? 'giggle' : 'idle', scale: 1 + Math.max(0, t - up) * 0.05 })),
+        'grumble',
+      );
     },
     fx(t) {
       if (Math.random() < 0.2) renderer.effects.add('puff', sea[0] + (Math.random() - 0.5) * 2, SEA + 1.1, sea[2] + (Math.random() - 0.5) * 2, { size: 0.15, life: 0.8, vy: 0.6, color: '#d8ecff' });
@@ -586,10 +752,10 @@ function ending() {
       { t: 8.5, pos: [sea[0] + 0.5, SEA + 1.8, sea[2] + 5], look: [sea[0], SEA + 1.4, sea[2]], fov: 40 },
     ]),
   });
-  const teaser = shots.at(-1).start;
-  overlays.push(caption(teaser + 0.5, 4, 'But far out at sea, King Grumble is already puffing himself up again…'));
-  overlays.push(titleCard(teaser + 4.6, 3.9, 'A new journey begins!', 'Come back to Adventure Isle!', { size: 70 }));
-  return { shots, overlays, poster: shots[2].start + 5.5 };
+  const title = teaser.start + teaser.marks(teaser).title;
+  r.over(titleCard(title, teaser.start + teaser.dur - title - 0.2, 'A new journey begins!', 'Come back to Adventure Isle!', { size: 70 }));
+  const whole = r.shots.find((x) => x.name === 'whole');
+  return r.done({ poster: whole.start + 5.5 });
 }
 
 // ------------------------------------------------------------ episode 2
@@ -628,26 +794,31 @@ const BOW = [64, SEA - 2, 6];
 
 // ------------------------------------------------------------ the intro, episode 2
 
+// What each of Queen Grizzle's helpers says, shown with its jar.
+const HELPER_SAYS = {
+  dotty: 'Spotted it first! Mine!',
+  bushytail: 'Hidden with my nuts!',
+  bumble: 'Bzzz! Buzz off!',
+  blendalot: 'You can’t see me!',
+  inkwell: 'Ink-credible! Mine!',
+  mochi: 'Too slow, heroes!',
+};
+
 function intro2() {
   const shore = isle(1, { freed: true });
   const S = shoreSpots(shore);
   const L = S.light;
-  const shots = [];
-  const overlays = [];
-  let at = 0;
-  const add = (shot) => {
-    shot.start = at;
-    shots.push(shot);
-    at += shot.dur;
-    return shot;
-  };
+  const r = reel();
 
   // 1. Morning over a happy isle: the Star on its lighthouse, a rainbow across the sky.
-  add({
+  r.add({
+    name: 'morning',
     dur: 6.5,
     world: shore,
     time: 0.31,
     cut: 'fade',
+    speak: 0.8,
+    lines: [['teller', 'The Star shone again over Adventure Isle — and every morning, its light painted a rainbow right across the sky.']],
     setup() {
       prop(star(1.1), (t) => ({ x: L[0], y: L[1] + 2.4, z: L[2], ry: t * 0.8 }));
       prop(rainbow(), () => ({ x: BOW[0], y: BOW[1], z: BOW[2] }));
@@ -657,115 +828,154 @@ function intro2() {
       { t: 6.5, pos: [58, SEA + 20, 142], look: [70, SEA + 22, 20], fov: 48 },
     ]),
   });
-  overlays.push(caption(0.8, 5.4, 'The Star shone again over Adventure Isle — and every morning, its light painted a rainbow right across the sky.'));
 
   // 2. Queen Grizzle comes down under her great grey umbrella, onto the end
-  // of the Old Pier, out over the sea under the rainbow.
+  // of the Old Pier, out over the sea under the rainbow — and does not like
+  // what she sees.
   const cliff = [39.5, SEA + 2, 13.5];
-  add({
+  const down = r.add({
+    name: 'grizzle',
     dur: 7,
     world: shore,
     time: 0.34,
     weather: 'cloudy',
     cut: 'fade',
+    lines: [
+      ['teller', 'But King Grumble’s big sister, Queen Grizzle, cannot bear bright colours.'],
+      ['grizzle', 'Ugh! Colours! Far too cheerful!', { gap: 0.4 }],
+    ],
     setup() {
-      prop(rainbow(), () => ({ x: BOW[0], y: BOW[1], z: BOW[2] }));
-      monster('grizzle', (t) => {
-        if (t < 3.4) {
-          const u = ease(t / 3.4);
-          return { x: cliff[0] + (1 - u) * 5, y: cliff[1] + (1 - u) * 15, z: cliff[2] - (1 - u) * 3, yaw: 0.15, state: 'leap', air: 1 };
-        }
-        return { x: cliff[0], y: cliff[1], z: cliff[2], yaw: 0.15, state: t < 4.8 ? 'idle' : 'giggle' };
-      });
+      voiced(
+        monster('grizzle', (t) => {
+          if (t < 3.4) {
+            const u = ease(t / 3.4);
+            return { x: cliff[0] + (1 - u) * 5, y: cliff[1] + (1 - u) * 15, z: cliff[2] - (1 - u) * 3, yaw: 0.15, state: 'leap', air: 1 };
+          }
+          return { x: cliff[0], y: cliff[1], z: cliff[2], yaw: 0.15, state: t < 4.8 ? 'idle' : 'giggle' };
+        }),
+        'grizzle',
+      );
     },
     fx(t) {
-      once(shots[1], 'land', t, 3.4, () => renderer.effects.dust(cliff[0], cliff[1], cliff[2]));
+      once(down, 'land', t, 3.4, () => renderer.effects.dust(cliff[0], cliff[1], cliff[2]));
     },
-    camera: keys([
-      { t: 0, pos: [cliff[0] + 1.2, cliff[1] + 2.5, cliff[2] + 13], look: [cliff[0] + 3, cliff[1] + 11, cliff[2] - 2], fov: 52 },
-      { t: 3.6, pos: [cliff[0] + 0.8, cliff[1] + 1.6, cliff[2] + 8.5], look: [cliff[0], cliff[1] + 1.8, cliff[2]], fov: 48 },
-      { t: 7, pos: [cliff[0] + 0.5, cliff[1] + 1.3, cliff[2] + 5.6], look: [cliff[0], cliff[1] + 1.5, cliff[2]], fov: 46 },
-    ]),
+    keepCamera: true,
+    camera: later((shot) =>
+      keys([
+        { t: 0, pos: [cliff[0] + 1.2, cliff[1] + 2.5, cliff[2] + 13], look: [cliff[0] + 3, cliff[1] + 11, cliff[2] - 2], fov: 52 },
+        { t: 3.6, pos: [cliff[0] + 0.8, cliff[1] + 1.6, cliff[2] + 8.5], look: [cliff[0], cliff[1] + 1.8, cliff[2]], fov: 48 },
+        { t: shot.dur, pos: [cliff[0] + 0.5, cliff[1] + 1.3, cliff[2] + 5.6], look: [cliff[0], cliff[1] + 1.5, cliff[2]], fov: 46 },
+      ]),
+    ),
   });
-  overlays.push(caption(shots[1].start + 0.6, 6, 'But King Grumble’s big sister, Queen Grizzle, cannot bear bright colours. Down she came, under her great grey umbrella…'));
 
   // 3. She catches the rainbow in it, and shakes its colours out into seven jars.
   const hold = [cliff[0], cliff[1] + 3.2, cliff[2]];
-  add({
+  const catchIt = r.add({
+    name: 'catch',
     dur: 7.5,
     world: shore,
     time: 0.36,
     weather: 'cloudy',
     cut: 'cut',
+    speak: 0.4,
+    lines: [
+      ['grizzle', 'Into my umbrella with you!'],
+      ['teller', 'She caught the rainbow, and shook its seven colours out into seven jars!', { at: 4.8 }],
+      ['grizzle', 'There. Lovely and grey.', { gap: 0.4 }],
+    ],
     setup() {
       prop(rainbow(), (t) => {
         // Sucked down out of the sky into her umbrella, from 1.2 s to 4.2.
         const u = ease((t - 1.2) / 3);
         return { x: lerp(BOW[0], hold[0], u), y: lerp(BOW[1], hold[1], u), z: lerp(BOW[2], hold[2], u), scale: lerp(1, 0.02, u), rz: u * 2.4, visible: t < 4.25 };
       });
-      monster('grizzle', (t) => ({ x: cliff[0], y: cliff[1], z: cliff[2], yaw: 0.3, state: t < 1 ? 'idle' : t < 4.5 ? 'puff' : 'giggle' }));
+      voiced(
+        monster('grizzle', (t) => ({ x: cliff[0], y: cliff[1], z: cliff[2], yaw: 0.3, state: t < 1 ? 'idle' : t < 4.5 ? 'puff' : 'giggle' })),
+        'grizzle',
+      );
       RAINBOW.forEach(({ color }, i) => {
         const a = (i / 7) * Math.PI * 2 + 0.3;
         const up = 0.6 + (i % 3) * 0.3;
         prop(jar(color, 1.1), (t) => {
           const u = Math.max(0, t - 4.5);
-          return { x: hold[0] + Math.cos(a) * u * 8, y: hold[1] + u * 5 * up + u * u * 0.5, z: hold[2] + Math.sin(a) * u * 8, ry: t * 4, visible: t >= 4.5 };
+          return { x: hold[0] + Math.cos(a) * u * 8, y: hold[1] + u * 5 * up + u * u * 0.5, z: hold[2] + Math.sin(a) * u * 8, ry: t * 4, visible: t >= 4.5 && u < 5 };
         });
       });
     },
     fx(t) {
-      const shot = shots[2];
       if (t > 1.2 && t < 4.2 && Math.random() < 0.7) {
         const u = ease((t - 1.2) / 3);
         const c = RAINBOW[Math.floor(Math.random() * 7)].color;
         renderer.effects.add('sparkle', lerp(BOW[0], hold[0], u) + (Math.random() - 0.5) * 30 * (1 - u), lerp(BOW[1] + 30, hold[1], u) + Math.random() * 6 * (1 - u), lerp(BOW[2], hold[2], u), { size: 0.3, life: 0.7, vy: -1, color: c });
       }
-      once(shot, 'shake', t, 4.5, () => {
+      once(catchIt, 'shake', t, 4.5, () => {
         renderer.effects.sparkles(hold[0], hold[1], hold[2], 90, RAINBOW.map((c) => c.color));
         renderer.effects.bang(hold[0], hold[1], hold[2]);
         renderer.sky.flash = 1;
       });
     },
-    camera: keys([
-      { t: 0, pos: [cliff[0] + 3, cliff[1] + 1.5, cliff[2] + 17], look: [cliff[0] + 9, cliff[1] + 20, cliff[2] - 8], fov: 62 },
-      { t: 4.2, pos: [cliff[0] + 2.4, cliff[1] + 1.6, cliff[2] + 10], look: [cliff[0], cliff[1] + 3.2, cliff[2]], fov: 50 },
-      { t: 7.5, pos: [cliff[0] + 3.5, cliff[1] + 1.6, cliff[2] + 12], look: [cliff[0], cliff[1] + 6.5, cliff[2]], fov: 56 },
-    ]),
+    keepCamera: true,
+    camera: later((shot) =>
+      keys([
+        { t: 0, pos: [cliff[0] + 3, cliff[1] + 1.5, cliff[2] + 17], look: [cliff[0] + 9, cliff[1] + 20, cliff[2] - 8], fov: 62 },
+        { t: 4.2, pos: [cliff[0] + 2.4, cliff[1] + 1.6, cliff[2] + 10], look: [cliff[0], cliff[1] + 3.2, cliff[2]], fov: 50 },
+        { t: 7.5, pos: [cliff[0] + 3.5, cliff[1] + 1.6, cliff[2] + 12], look: [cliff[0], cliff[1] + 6.5, cliff[2]], fov: 56 },
+        // (Back down to her, pleased with herself.)
+        { t: shot.dur, pos: [cliff[0] + 1.6, cliff[1] + 1.8, cliff[2] + 7.5], look: [cliff[0], cliff[1] + 1.8, cliff[2]], fov: 48 },
+      ]),
+    ),
   });
-  overlays.push(caption(shots[2].start + 0.5, 6.6, '…caught the rainbow in it, and shook its seven colours out into seven jars!'));
 
-  // 4. Her helpers, each in its lair in the Rainbow Lands with its jar.
+  // 4. Her helpers, each in its lair in the Rainbow Lands with its jar, a bar
+  // of the music each, and each with something to say.
   for (const [i, ch] of RAINBOW_CHAPTERS.slice(0, 6).entries()) {
     const m = isle(RAINBOW_FROM + i);
     const lair = m.camps.at(-1);
     const c = [lair.x, lair.y, lair.z];
     const a0 = 0.6 + i * 0.9;
     const tall = BOSSES[ch.boss].body.height;
-    const shot = add({
+    const shot = r.add({
+      name: `help${i}`,
       dur: 2.5,
+      fixed: true,
       world: m,
       time: dayOf(ch),
       cut: i === 0 ? 'flash' : 'cut',
+      speak: 0.3,
+      lines: [[ch.boss, HELPER_SAYS[ch.boss], { max: 1.95 }]],
       setup() {
-        monster(ch.boss, (t) => ({ x: c[0], y: c[1] + 1, z: c[2], yaw: a0 + 0.3, state: t % 2.5 < 1.2 ? 'idle' : 'giggle' }));
+        voiced(
+          monster(ch.boss, (t) => ({ x: c[0], y: c[1] + 1, z: c[2], yaw: a0 + 0.3, state: t < 2.1 ? 'idle' : 'giggle' })),
+          ch.boss,
+        );
         prop(jar(RAINBOW[i].color, 1.7), (t) => ({ x: c[0], y: c[1] + 1 + tall + 1.6 + Math.sin(t * 3) * 0.15, z: c[2], ry: t * 2 }));
       },
-      camera: (t) => orbit([c[0], c[1] + 1 + tall * 0.55, c[2]], 6.4 + tall, 1.6, a0, a0 + 0.35, 2.5, 46)(t),
+      camera: (t) => orbit([c[0], c[1] + 1 + tall * 0.55, c[2]], 5.6 + tall, 1.4, a0, a0 + 0.35, 2.5, 46)(t),
     });
-    overlays.push(nameCard(shot.start + 0.15, 2.2, BOSSES[ch.boss].icon + ' ' + BOSSES[ch.boss].name, ch.icon + ' ' + ch.name + ' · ' + ch.lair));
+    r.over(nameCard(shot.start + 0.15, 2.2, BOSSES[ch.boss].icon + ' ' + BOSSES[ch.boss].name, ch.icon + ' ' + ch.name + ' · ' + ch.lair, { top: true }));
   }
 
   // 5. The last colour, violet, with Queen Grizzle herself in Castle Drab.
   const vale = isle(RAINBOW_FROM + 6);
   const yard = vale.camps.at(-1);
-  add({
+  r.add({
+    name: 'drab',
     dur: 5.5,
     world: vale,
     time: 0.4,
     weather: 'cloudy',
     cut: 'flash',
-    setup() {
-      monster('grizzle', (t) => ({ x: yard.x, y: yard.y + 1, z: yard.z, yaw: 0.4, state: t < 2.4 ? 'idle' : 'giggle' }));
+    lines: [
+      ['teller', 'The last colour, violet, she kept for herself, in Castle Drab.'],
+      ['grizzle', 'And nobody is getting it back. Hmph!', { gap: 0.4 }],
+    ],
+    setup(shot) {
+      const sniff = shot.said[1].at;
+      voiced(
+        monster('grizzle', (t) => ({ x: yard.x, y: yard.y + 1, z: yard.z, yaw: 0.4, state: t < sniff ? 'idle' : 'giggle' })),
+        'grizzle',
+      );
       prop(jar(RAINBOW[6].color, 1.7), (t) => ({ x: yard.x, y: yard.y + 5 + Math.sin(t * 2) * 0.2, z: yard.z, ry: t * 1.5 }));
       for (let i = 0; i < 4; i++) {
         const a = (i / 4) * Math.PI * 2 + 0.4;
@@ -773,27 +983,37 @@ function intro2() {
       }
     },
     camera: keys([
-      { t: 0, pos: [yard.x + 2, yard.y + 2.2, yard.z + 7.5], look: [yard.x, yard.y + 2.4, yard.z], fov: 50 },
-      { t: 5.5, pos: [yard.x + 5, yard.y + 12, yard.z + 11], look: [yard.x - 4, yard.y + 3, yard.z - 2], fov: 54 },
+      { t: 0, pos: [yard.x + 5, yard.y + 12, yard.z + 11], look: [yard.x - 4, yard.y + 3, yard.z - 2], fov: 54 },
+      { t: 5.5, pos: [yard.x + 2, yard.y + 2.2, yard.z + 7.5], look: [yard.x, yard.y + 2.4, yard.z], fov: 50 },
     ]),
   });
-  overlays.push(caption(shots.at(-1).start + 0.5, 4.8, 'The last colour, violet, she kept for herself, in Castle Drab.'));
 
-  // 6. The heroes at the foot of the Tulip Fields, and the way ahead.
+  // 6. You at the foot of the Tulip Fields, the colours fading, and the way ahead.
   const fields = isle(RAINBOW_FROM);
   const sp = fields.world.spawn;
   const first = fields.camps[0];
-  add({
+  const start = r.add({
+    name: 'fields',
     dur: 9,
     world: fields,
     time: 0.3,
     cut: 'white',
     out: 'fade',
-    setup() {
-      for (const [i, look] of KIDS.entries()) {
+    speak: 0.6,
+    lines: [
+      ['teller', 'Without its colours, the whole isle is fading to grey.'],
+      ['girl', 'Oh no! Everything’s going grey!', { gap: 0.4 }],
+      ['boy', 'Then let’s bring the rainbow home!', { gap: 0.3 }],
+      ['teller', 'The Rainbow of Adventure Isle!', { gap: 0.7, quiet: true }],
+    ],
+    hold: 3.2,
+    marks: (s) => ({ title: s.said[3].at - 0.2 }),
+    setup(shot) {
+      const [, oh, go] = shot.said;
+      for (const i of [0, 1, 2]) {
         const x = sp.x - 1.6 + i * 1.6;
         const z = sp.z + 0.6 - Math.abs(i - 1) * 0.5;
-        kid(look, (t) => ({ x, y: groundY(fields.world, x, z), z, yaw: Math.atan2(first.x - x, first.z - z) + Math.PI, emote: t < 2.4 ? 'surprise' : t < 5.2 ? 'wave' : 'cheer', anim: ANIM.idle }));
+        hero(i, (t) => ({ x, y: groundY(fields.world, x, z), z, yaw: Math.atan2(first.x - x, first.z - z) + Math.PI, emote: t < oh.end ? 'surprise' : t < go.end ? 'wave' : 'cheer', anim: ANIM.idle }));
       }
     },
     camera: keys([
@@ -802,10 +1022,9 @@ function intro2() {
       { t: 9, pos: [sp.x + 9, sp.y + 22, sp.z + 12], look: [first.x - 22, first.y + 6, first.z - 26], fov: 54 },
     ]),
   });
-  const last = shots.at(-1).start;
-  overlays.push(caption(last + 0.5, 3.2, 'Without its colours, the whole isle is fading to grey. Heroes — bring the rainbow home!'));
-  overlays.push(titleCard(last + 4, 4.8, 'The Rainbow of Adventure Isle', 'Episode 2 · Win back all seven colours — together!', { size: 72 }));
-  return { shots, overlays, poster: last + 6.6 };
+  const title = start.start + start.marks(start).title;
+  r.over(titleCard(title, start.start + start.dur - title - 0.2, 'The Rainbow of Adventure Isle', 'Episode 2 · Win back all seven colours — together!', { size: 72 }));
+  return r.done({ poster: title + 1.6 });
 }
 
 // ------------------------------------------------------------ the ending, episode 2
@@ -818,35 +1037,39 @@ function ending2() {
   const L = S.light;
   const sp = S.spawn;
   const colors = RAINBOW.map((c) => c.color);
-  const shots = [];
-  const overlays = [];
-  let at = 0;
-  const add = (shot) => {
-    shot.start = at;
-    shots.push(shot);
-    at += shot.dur;
-    return shot;
-  };
+  const r = reel();
 
   // 1. Castle Drab: the last bop, and Queen Grizzle goes pop, umbrella and all.
-  add({
+  const last = r.add({
+    name: 'pop',
     dur: 6,
     world: vale,
     time: 0.38,
     weather: 'cloudy',
     cut: 'fade',
-    setup() {
-      monster('grizzle', (t) => ({ x: yard.x, y: yard.y + 1, z: yard.z, yaw: 0.3, state: 'dazed', visible: t < 1.6, scale: 1 + Math.max(0, t - 1.1) * 0.5 }));
-      prop(jar(RAINBOW[6].color, 1.4), (t) => ({ x: yard.x, y: yard.y + 2.2 + Math.max(0, t - 1.6) * 1.4, z: yard.z, ry: t * 2.4, visible: t >= 1.6 }));
-      for (const [i, look] of KIDS.entries()) {
+    speak: 0.4,
+    lines: [
+      ['grizzle', 'My umbrella! Oh, bother!'],
+      ['teller', 'Pop! Queen Grizzle was popped, umbrella and all!', { gap: 0.7 }],
+    ],
+    marks: (s) => ({ pop: s.said[0].end + 0.2 }),
+    setup(shot) {
+      const { pop } = shot.marks(shot);
+      voiced(
+        monster('grizzle', (t) => ({ x: yard.x, y: yard.y + 1, z: yard.z, yaw: 0.3, state: 'dazed', visible: t < pop, scale: 1 + Math.max(0, t - pop + 0.5) * 0.5 })),
+        'grizzle',
+        0.6,
+      );
+      prop(jar(RAINBOW[6].color, 1.4), (t) => ({ x: yard.x, y: yard.y + 2.2 + Math.max(0, t - pop) * 1.4, z: yard.z, ry: t * 2.4, visible: t >= pop }));
+      for (const i of [0, 1, 2]) {
         const a = -0.5 + i * 0.5;
         const x = yard.x + Math.sin(a) * 4.2;
         const z = yard.z + Math.cos(a) * 4.2;
-        kid(look, (t) => ({ x, y: yard.y + 1, z, yaw: a, emote: t < 1.6 ? 'surprise' : 'cheer', anim: ANIM.idle }));
+        hero(i, (t) => ({ x, y: yard.y + 1, z, yaw: a, emote: t < pop ? 'surprise' : 'cheer', anim: ANIM.idle }));
       }
     },
     fx(t) {
-      once(shots[0], 'pop', t, 1.6, () => {
+      once(last, 'pop', t, last.marks(last).pop, () => {
         renderer.effects.sparkles(yard.x, yard.y + 2, yard.z, 110, colors);
         renderer.effects.bang(yard.x, yard.y + 2, yard.z);
         renderer.effects.confetti(yard.x, yard.y + 4, yard.z, 120, 1.3);
@@ -858,14 +1081,18 @@ function ending2() {
       { t: 6, pos: [yard.x + 5, yard.y + 6, yard.z + 12], look: [yard.x, yard.y + 5, yard.z], fov: 52 },
     ]),
   });
-  overlays.push(caption(0.5, 5, 'Pop! Queen Grizzle was popped, umbrella and all!'));
 
   // 2. The seven colours fly up into the sky, and the rainbow stands again.
-  add({
+  const bow = r.add({
+    name: 'bow',
     dur: 7.5,
     world: happy,
     time: 0.33,
     cut: 'flash',
+    lines: [
+      ['teller', 'All seven colours flew up into the sky — and the rainbow stood over Adventure Isle again, brighter than ever!'],
+      ['bunny', 'Ooh! So pretty!', { gap: 0.4 }],
+    ],
     setup() {
       prop(star(1.1), (t) => ({ x: L[0], y: L[1] + 2.4, z: L[2], ry: t * 0.8 }));
       RAINBOW.forEach(({ color }, i) => {
@@ -878,38 +1105,50 @@ function ending2() {
       prop(rainbow(), (t) => ({ x: BOW[0], y: BOW[1], z: BOW[2], scale: ease((t - 3.2) / 2.6), visible: t >= 3.2 }));
     },
     fx(t) {
-      once(shots[1], 'whole', t, 3.6, () => {
+      once(bow, 'whole', t, 3.6, () => {
         renderer.effects.sparkles(BOW[0], BOW[1] + 44, BOW[2], 140, colors);
         renderer.sky.flash = 1;
       });
       if (t > 3.2 && Math.random() < 0.5) renderer.effects.add('sparkle', BOW[0] + (Math.random() - 0.5) * 90, BOW[1] + 20 + Math.random() * 28, BOW[2], { size: 0.4, life: 0.9, vy: -1.5, color: colors[Math.floor(Math.random() * 7)] });
     },
-    camera: keys([
-      { t: 0, pos: [70, SEA + 12, 150], look: [84, SEA + 16, 60], fov: 52 },
-      { t: 7.5, pos: [52, SEA + 22, 158], look: [66, SEA + 24, 20], fov: 50 },
-    ]),
+    keepCamera: true,
+    camera: later((shot) =>
+      keys([
+        { t: 0, pos: [70, SEA + 12, 150], look: [84, SEA + 16, 60], fov: 52 },
+        { t: shot.dur, pos: [52, SEA + 22, 158], look: [66, SEA + 24, 20], fov: 50 },
+      ]),
+    ),
   });
-  overlays.push(caption(shots[1].start + 0.5, 6.4, 'All seven colours flew up into the sky — and the rainbow stood over Adventure Isle again, brighter than ever!'));
 
   // 3. The party on the beach: everyone there, the Queen's helpers too.
-  add({
+  r.add({
+    name: 'party',
     dur: 8.5,
     world: happy,
     time: 0.36,
     cut: 'fade',
+    lines: [
+      ['teller', 'Even the Queen’s helpers came to see.'],
+      ['bumble', 'Bzzz! Wonderful!', { gap: 0.3, pan: 0.3 }],
+      ['mochi', 'Best party ever!', { gap: 0.2, pan: -0.3 }],
+      ['teller', 'Thank you, heroes of Adventure Isle!', { gap: 0.6 }],
+    ],
     setup() {
       prop(rainbow(), () => ({ x: BOW[0], y: BOW[1], z: BOW[2] }));
       prop(star(1.1), (t) => ({ x: L[0], y: L[1] + 2.4, z: L[2], ry: t * 0.8 }));
-      for (const [i, look] of KIDS.entries()) {
+      for (const i of [0, 1, 2]) {
         const x = sp.x - 1.6 + i * 1.6;
         const z = sp.z + 1.4;
-        kid(look, () => ({ x, y: groundY(happy.world, x, z), z, yaw: Math.PI, emote: i === 1 ? 'dance' : 'cheer', anim: ANIM.idle }));
+        hero(i, () => ({ x, y: groundY(happy.world, x, z), z, yaw: Math.PI, emote: i === 1 ? 'dance' : 'cheer', anim: ANIM.idle }));
       }
       for (const [i, ch] of RAINBOW_CHAPTERS.slice(0, 6).entries()) {
         const a = -1.25 + i * 0.5;
         const x = sp.x + Math.sin(a) * 8.5;
         const z = sp.z + 1 - Math.cos(a) * 7;
-        monster(ch.boss, (t) => ({ x, y: groundY(happy.world, x, z) + Math.abs(Math.sin(t * 5 + i)) * 0.5, z, yaw: -a * 0.5, state: 'giggle', scale: 0.7 }));
+        voiced(
+          monster(ch.boss, (t) => ({ x, y: groundY(happy.world, x, z) + Math.abs(Math.sin(t * 5 + i)) * 0.5, z, yaw: -a * 0.5, state: 'giggle', scale: 0.7 })),
+          ch.boss,
+        );
       }
     },
     fx(t) {
@@ -921,10 +1160,10 @@ function ending2() {
       { t: 8.5, pos: [sp.x - 2, sp.y + 8, sp.z + 17], look: [sp.x + 12, sp.y + 14, sp.z - 40], fov: 56 },
     ]),
   });
-  overlays.push(caption(shots.at(-1).start + 0.5, 7.4, 'Even the Queen’s helpers came to see. Thank you, heroes of Adventure Isle!'));
 
   // 4. The credits, round the lighthouse, the rainbow behind it.
-  add({
+  const credits = r.add({
+    name: 'credits',
     dur: 14,
     world: happy,
     time: 0.7,
@@ -939,31 +1178,41 @@ function ending2() {
     camera: orbit([L[0], L[1] - 2, L[2]], 34, 7, 0.5, -0.4, 14, 50),
   });
   const cast = RAINBOW_CHAPTERS.map((ch) => BOSSES[ch.boss].icon + ' ' + BOSSES[ch.boss].name);
-  overlays.push(
-    roll(shots.at(-1).start + 0.3, 13.5, ['#The Rainbow of Adventure Isle', 'Episode 2', '', '#Starring', 'You and your friends', '', '#and', ...cast, '', '#The seven colours', ...RAINBOW_CHAPTERS.map((ch, i) => ch.icon + ' ' + ch.name + ' · ' + RAINBOW[i].name), '', '#Made in Kids World', 'Thank you for playing!']),
-  );
+  r.over(roll(credits.start + 0.3, 13.5, ['#The Rainbow of Adventure Isle', 'Episode 2', '', '#Starring', 'You and your friends', '', '#and', ...cast, '', '#The seven colours', ...RAINBOW_CHAPTERS.map((ch, i) => ch.icon + ' ' + ch.name + ' · ' + RAINBOW[i].name), '', '#Voices', 'Kokoro', '', '#Made in Kids World', 'Thank you for playing!']));
 
-  // 5. Far out over the sea, Queen Grizzle floats home under her umbrella.
+  // 5. Far out over the sea, Queen Grizzle floats home under her umbrella —
+  // and has to say it.
   const sea = [56, SEA + 8, 136];
-  add({
+  const teaser = r.add({
+    name: 'teaser',
     dur: 7.5,
     world: happy,
     time: 0.74,
     cut: 'fade',
     out: 'fade',
-    setup() {
+    speak: 0.6,
+    lines: [
+      ['teller', 'Far out over the sea, Queen Grizzle floated home.'],
+      ['grizzle', 'Hmph. I suppose it does look rather nice.', { gap: 0.6 }],
+    ],
+    hold: 3.4,
+    marks: (s) => ({ title: s.said[1].end + 0.4 }),
+    setup(shot) {
       prop(rainbow(), () => ({ x: BOW[0], y: BOW[1], z: BOW[2] }));
-      monster('grizzle', (t) => ({ x: sea[0] - t * 0.5, y: sea[1] + Math.sin(t * 1.3) * 0.5, z: sea[2] + t * 0.7, yaw: -0.45, state: t > 4 ? 'giggle' : 'leap', air: 1 }));
+      const nice = shot.said[1].at;
+      voiced(
+        monster('grizzle', (t) => ({ x: sea[0] - t * 0.5, y: sea[1] + Math.sin(t * 1.3) * 0.5, z: sea[2] + t * 0.7, yaw: -0.45, state: t > nice ? 'giggle' : 'leap', air: 1 })),
+        'grizzle',
+      );
     },
     camera: keys([
       { t: 0, pos: [sea[0] - 4, sea[1] + 0.4, sea[2] + 11], look: [sea[0], sea[1] + 1.6, sea[2]], fov: 46 },
       { t: 7.5, pos: [sea[0] - 6.5, sea[1] + 0.8, sea[2] + 15.5], look: [sea[0] - 3.4, sea[1] + 1.9, sea[2] + 5], fov: 42 },
     ]),
   });
-  const teaser = shots.at(-1).start;
-  overlays.push(caption(teaser + 0.4, 4, 'Far out over the sea, Queen Grizzle floated home. “Hmph,” she said. “It does look rather nice.”'));
-  overlays.push(titleCard(teaser + 4.5, 3, 'The story goes on…', 'Where the rainbow ends: Episode 3, The Wild Isle', { size: 70 }));
-  return { shots, overlays, poster: shots[1].start + 7.2 };
+  const title = teaser.start + teaser.marks(teaser).title;
+  r.over(titleCard(title, teaser.start + teaser.dur - title - 0.2, 'The story goes on…', 'Where the rainbow ends: Episode 3, The Wild Isle', { size: 70 }));
+  return r.done({ poster: bow.start + 7.2 });
 }
 
 // ------------------------------------------------------------ the third episode
@@ -996,30 +1245,34 @@ const WILD_CHAPTERS = CHAPTERS.filter((ch) => ch.episode === 3);
 
 // Its intro: the rainbow over the happy isle, its end out to sea; flying in
 // out of the fog to the Wild Isle, an island not made of bricks at all; Old
-// Murk howling in Murk Fen as the Sunstones scatter; his four big helpers
-// each in its lair with one, the last with him in Murk Tower; and you and
-// your friends on the beach of Driftwood Bay.
+// Murk in Murk Fen, letting the fog in as the Sunstones scatter; his four big
+// helpers each in its lair with one, and grumbling; the last with him in Murk
+// Tower; and you and your friends on the beach of Driftwood Bay, shivering.
+
+// What each of the Wild Isle's biggest creatures says, grumpy in the fog.
+const CREATURE_SAYS = {
+  ironclaw: 'Snip! Snap! Go away!',
+  bramblepaw: 'Grrr… my Sunstone.',
+  gnasher: 'Chomp! Chomp! Mine!',
+  curlhorn: 'Butt out, or else!',
+};
+
 function intro3() {
   const shore = isle(1, { freed: true });
   const cove = isle(WILD_FROM);
   const fen = isle(WILD_FROM + 4);
   const tower = lairSpot(fen);
-  const shots = [];
-  const overlays = [];
-  let at = 0;
-  const add = (shot) => {
-    shot.start = at;
-    shots.push(shot);
-    at += shot.dur;
-    return shot;
-  };
+  const r = reel();
 
   // 1. The rainbow over the happy isle, its end far out to sea.
-  add({
+  r.add({
+    name: 'rainbow',
     dur: 6.5,
     world: shore,
     time: 0.32,
     cut: 'fade',
+    speak: 0.6,
+    lines: [['teller', 'The rainbow shone over Adventure Isle again — and one morning, its end pointed far out to sea…']],
     setup() {
       prop(rainbow(), () => ({ x: BOW[0], y: BOW[1], z: BOW[2] }));
     },
@@ -1028,99 +1281,146 @@ function intro3() {
       { t: 6.5, pos: [64, SEA + 14, 110], look: [64, SEA + 8, -60], fov: 50 },
     ]),
   });
-  overlays.push(caption(0.6, 5.6, 'The rainbow shone over Adventure Isle again — and one morning, its end pointed far out to sea…'));
 
   // 2. Out of the fog, the Wild Isle: an island no map shows.
   const sp = cove.world.spawn;
-  add({
+  r.add({
+    name: 'wild',
     dur: 8,
     world: cove,
     time: 0.3,
     weather: 'cloudy',
     cut: 'white',
+    lines: [
+      ['teller', '…to an island no map shows: the Wild Isle.'],
+      ['teller', 'Its rocks are real rocks, its trees are real trees, and its waves are real waves.', { gap: 0.5 }],
+    ],
     camera: keys([
       { t: 0, pos: [64, SEA + 10, 260], look: [64, SEA + 6, 64], fov: 46 },
       { t: 8, pos: [70, SEA + 22, 150], look: [64, SEA + 8, 60], fov: 50 },
     ]),
   });
-  overlays.push(caption(shots[1].start + 0.6, 7, '…to an island no map shows: the Wild Isle. It is not made of bricks at all — its rocks are real rocks, its trees real trees and its waves real waves.'));
 
-  // 3. Old Murk, the Fog Wolf, howling in his fen; the five Sunstones flying off.
-  add({
+  // 3. Old Murk, the Fog Wolf, in his fen: in rolls the fog, up goes his
+  // howl, and off fly the five Sunstones.
+  const howl = r.add({
+    name: 'howl',
     dur: 6.5,
     world: fen,
     time: 0.26,
     weather: 'cloudy',
     cut: 'fade',
-    setup() {
-      monster('murk', (t) => ({ x: tower.x, y: tower.y, z: tower.z, yaw: 0.6, state: t < 2 ? 'idle' : 'howl' }));
+    speak: 0.4,
+    lines: [
+      ['murk', 'Let the fog roll in… and the sun go out.'],
+      ['teller', 'Old Murk, the Fog Wolf, had stolen its five Sunstones — and his fog made every animal there grumpy.', { gap: 1.2 }],
+    ],
+    marks: (s) => ({ howl: s.said[0].end + 0.2 }),
+    setup(shot) {
+      const { howl: at } = shot.marks(shot);
+      voiced(
+        monster('murk', (t) => ({ x: tower.x, y: tower.y, z: tower.z, yaw: 0.6, state: t < at ? 'idle' : 'howl' })),
+        'murk',
+        0.6,
+      );
       for (let i = 0; i < 5; i++) {
         const a = (i / 5) * Math.PI * 2 + 0.4;
         prop(sunstone(0.9), (t) => {
-          const u = Math.max(0, t - 3.2);
-          return { x: tower.x + Math.cos(a) * u * 9, y: tower.y + 4 + u * 3 + Math.sin(t * 3 + i) * 0.2, z: tower.z + Math.sin(a) * u * 9, ry: t * 2, visible: t < 6.3 };
+          const u = Math.max(0, t - at - 1.2);
+          return { x: tower.x + Math.cos(a) * u * 9, y: tower.y + 4 + u * 3 + Math.sin(t * 3 + i) * 0.2, z: tower.z + Math.sin(a) * u * 9, ry: t * 2, visible: u < 3.1 };
         });
       }
     },
-    camera: keys([
-      { t: 0, pos: [tower.x + 7, tower.y + 2.5, tower.z + 9], look: [tower.x, tower.y + 2, tower.z], fov: 50 },
-      { t: 6.5, pos: [tower.x + 10, tower.y + 7, tower.z + 14], look: [tower.x, tower.y + 5, tower.z], fov: 56 },
-    ]),
+    keepCamera: true,
+    camera: later((shot) =>
+      keys([
+        { t: 0, pos: [tower.x + 5, tower.y + 2.2, tower.z + 6.5], look: [tower.x, tower.y + 2, tower.z], fov: 50 },
+        { t: shot.marks(shot).howl, pos: [tower.x + 7, tower.y + 2.5, tower.z + 9], look: [tower.x, tower.y + 2, tower.z], fov: 50 },
+        { t: shot.dur, pos: [tower.x + 10, tower.y + 7, tower.z + 14], look: [tower.x, tower.y + 5, tower.z], fov: 56 },
+      ]),
+    ),
   });
-  overlays.push(caption(shots[2].start + 0.5, 5.8, 'But a cold grey fog hung over it. Old Murk, the Fog Wolf, had stolen its five Sunstones, and his fog made every animal there grumpy.'));
 
-  // 4. His four big helpers, each in its lair with a Sunstone.
+  // 4. His four big helpers, each in its lair with a Sunstone, grumbling.
   for (const [i, ch] of WILD_CHAPTERS.slice(0, 4).entries()) {
     const m = isle(WILD_FROM + i);
     const spot = lairSpot(m);
     const c = [spot.x, spot.y, spot.z];
     const a0 = 0.6 + i * 0.9;
     const tall = BOSSES[ch.boss].body.height;
-    const shot = add({
+    const shot = r.add({
+      name: `beast${i}`,
       dur: 2.6,
+      fixed: true,
       world: m,
       time: dayOf(ch),
       cut: i === 0 ? 'flash' : 'cut',
+      speak: 0.3,
+      lines: [[ch.boss, CREATURE_SAYS[ch.boss], { max: 2.05 }]],
       setup() {
-        monster(ch.boss, (t) => ({ x: c[0], y: c[1], z: c[2], yaw: a0 + 0.3, state: t % 2.6 < 1.3 ? 'idle' : 'chase' }));
+        voiced(
+          monster(ch.boss, (t) => ({ x: c[0], y: c[1], z: c[2], yaw: a0 + 0.3, state: t < 2.2 ? 'idle' : 'chase' })),
+          ch.boss,
+          0.7,
+        );
         prop(sunstone(1.2), (t) => ({ x: c[0], y: c[1] + tall + 1.6 + Math.sin(t * 3) * 0.15, z: c[2], ry: t * 2 }));
       },
-      camera: (t) => orbit([c[0], c[1] + tall * 0.55, c[2]], 6.4 + tall, 1.6, a0, a0 + 0.35, 2.6, 46)(t),
+      camera: (t) => orbit([c[0], c[1] + tall * 0.55, c[2]], 6 + tall, 1.5, a0, a0 + 0.35, 2.6, 46)(t),
     });
-    overlays.push(nameCard(shot.start + 0.15, 2.3, BOSSES[ch.boss].icon + ' ' + BOSSES[ch.boss].name, ch.icon + ' ' + ch.name + ' · ' + ch.lair));
+    r.over(nameCard(shot.start + 0.15, 2.3, BOSSES[ch.boss].icon + ' ' + BOSSES[ch.boss].name, ch.icon + ' ' + ch.name + ' · ' + ch.lair, { top: true }));
   }
 
   // 5. The last Sunstone, with Old Murk himself in Murk Tower.
-  add({
+  r.add({
+    name: 'tower',
     dur: 5,
     world: fen,
     time: 0.3,
     weather: 'cloudy',
     cut: 'flash',
-    setup() {
-      monster('murk', (t) => ({ x: tower.x, y: tower.y, z: tower.z, yaw: 0.4, state: t < 2.4 ? 'idle' : 'howl' }));
+    lines: [
+      ['teller', 'The last one he kept for himself, in Murk Tower.'],
+      ['murk', 'Nobody brings back the sun. Nobody…', { gap: 0.4 }],
+    ],
+    setup(shot) {
+      const growl = shot.said[1].end;
+      voiced(
+        monster('murk', (t) => ({ x: tower.x, y: tower.y, z: tower.z, yaw: 0.4, state: t < growl ? 'idle' : 'howl' })),
+        'murk',
+        0.6,
+      );
       prop(sunstone(1.4), (t) => ({ x: tower.x, y: tower.y + 4.6 + Math.sin(t * 2) * 0.2, z: tower.z, ry: t * 1.5 }));
     },
     camera: keys([
-      { t: 0, pos: [tower.x + 2, tower.y + 2.4, tower.z + 8.5], look: [tower.x, tower.y + 2.6, tower.z], fov: 50 },
-      { t: 5, pos: [tower.x + 6, tower.y + 11, tower.z + 13], look: [tower.x - 3, tower.y + 3, tower.z - 2], fov: 56 },
+      { t: 0, pos: [tower.x + 6, tower.y + 11, tower.z + 13], look: [tower.x - 3, tower.y + 3, tower.z - 2], fov: 56 },
+      { t: 5, pos: [tower.x + 2, tower.y + 2.4, tower.z + 8.5], look: [tower.x, tower.y + 2.6, tower.z], fov: 50 },
     ]),
   });
-  overlays.push(caption(shots.at(-1).start + 0.5, 4.3, 'The last one he kept for himself, in Murk Tower.'));
 
-  // 6. The heroes on the beach of Driftwood Bay, and the way ahead.
+  // 6. You on the beach of Driftwood Bay, shivering in the fog; the way ahead.
   const first = cove.camps[0];
-  add({
+  const beach = r.add({
+    name: 'beach',
     dur: 9,
     world: cove,
     time: 0.32,
     cut: 'white',
     out: 'fade',
-    setup() {
-      for (const [i, look] of KIDS.entries()) {
+    speak: 0.6,
+    lines: [
+      ['teller', 'Without its Sunstones, the Wild Isle will never see the sun again.'],
+      ['boy', 'Brrr! It’s so foggy!', { gap: 0.4 }],
+      ['girl', 'Come on, let’s find those Sunstones!', { gap: 0.3 }],
+      ['teller', 'The Wild Isle!', { gap: 0.7, quiet: true }],
+    ],
+    hold: 3.2,
+    marks: (s) => ({ title: s.said[3].at - 0.2 }),
+    setup(shot) {
+      const [, brr, go] = shot.said;
+      for (const i of [0, 1, 2]) {
         const x = sp.x - 1.6 + i * 1.6;
         const z = sp.z + 0.6 - Math.abs(i - 1) * 0.5;
-        kid(look, (t) => ({ x, y: groundY(cove.world, x, z), z, yaw: Math.atan2(first.x - x, first.z - z) + Math.PI, emote: t < 2.4 ? 'surprise' : t < 5.2 ? 'wave' : 'cheer', anim: ANIM.idle }));
+        hero(i, (t) => ({ x, y: groundY(cove.world, x, z), z, yaw: Math.atan2(first.x - x, first.z - z) + Math.PI, emote: t < brr.end ? 'surprise' : t < go.end ? 'wave' : 'cheer', anim: ANIM.idle }));
       }
     },
     camera: keys([
@@ -1129,10 +1429,9 @@ function intro3() {
       { t: 9, pos: [sp.x + 4, sp.y + 22, sp.z + 22], look: [first.x - 18, first.y + 4, first.z - 30], fov: 54 },
     ]),
   });
-  const last = shots.at(-1).start;
-  overlays.push(caption(last + 0.5, 3.2, 'Without its Sunstones, the Wild Isle will never see the sun again. Heroes — win them back!'));
-  overlays.push(titleCard(last + 4, 4.8, 'The Wild Isle', 'Episode 3 · Win back all five Sunstones — together!', { size: 78 }));
-  return { shots, overlays, poster: last + 6.6 };
+  const title = beach.start + beach.marks(beach).title;
+  r.over(titleCard(title, beach.start + beach.dur - title - 0.2, 'The Wild Isle', 'Episode 3 · Win back all five Sunstones — together!', { size: 78 }));
+  return r.done({ poster: title + 1.6 });
 }
 
 // ------------------------------------------------------------ the ending, episode 3
@@ -1140,7 +1439,8 @@ function intro3() {
 // Its ending: Old Murk popped in Murk Tower; the five Sunstones flying up
 // together and the fog blowing away; the party on the beach of Driftwood Bay
 // with the animals, friendly now; the credits round the lighthouse; and Old
-// Murk asleep in a sunny spot, only ever cold.
+// Murk asleep in a sunny spot, only ever cold — while a magpie goes by over
+// him, with an eye for something shiny.
 function ending3() {
   const fen = isle(WILD_FROM + 4, { freed: true });
   const tower = lairSpot(fen);
@@ -1148,35 +1448,39 @@ function ending3() {
   const sp = cove.world.spawn;
   const light = cove.camps[2];
   const gold = ['#ffcf4a', '#ffe08a', '#fff3c4', '#ffb020'];
-  const shots = [];
-  const overlays = [];
-  let at = 0;
-  const add = (shot) => {
-    shot.start = at;
-    shots.push(shot);
-    at += shot.dur;
-    return shot;
-  };
+  const r = reel();
 
   // 1. Murk Tower: the last bop, and Old Murk goes pop, fog and all.
-  add({
+  const last = r.add({
+    name: 'pop',
     dur: 6,
     world: fen,
     time: 0.34,
     weather: 'cloudy',
     cut: 'fade',
-    setup() {
-      monster('murk', (t) => ({ x: tower.x, y: tower.y, z: tower.z, yaw: 0.3, state: 'dazed', visible: t < 1.6 }));
-      prop(sunstone(1.2), (t) => ({ x: tower.x, y: tower.y + 2 + Math.max(0, t - 1.6) * 1.2, z: tower.z, ry: t * 2.4, visible: t >= 1.6 }));
-      for (const [i, look] of KIDS.entries()) {
+    speak: 0.4,
+    lines: [
+      ['murk', 'No… not my lovely fog…'],
+      ['teller', 'Old Murk was popped at last — and his fog went with him!', { gap: 0.7 }],
+    ],
+    marks: (s) => ({ pop: s.said[0].end + 0.2 }),
+    setup(shot) {
+      const { pop } = shot.marks(shot);
+      voiced(
+        monster('murk', (t) => ({ x: tower.x, y: tower.y, z: tower.z, yaw: 0.3, state: 'dazed', visible: t < pop })),
+        'murk',
+        0.6,
+      );
+      prop(sunstone(1.2), (t) => ({ x: tower.x, y: tower.y + 2 + Math.max(0, t - pop) * 1.2, z: tower.z, ry: t * 2.4, visible: t >= pop }));
+      for (const i of [0, 1, 2]) {
         const a = -0.5 + i * 0.5;
         const x = tower.x + Math.sin(a) * 5;
         const z = tower.z + Math.cos(a) * 5;
-        kid(look, (t) => ({ x, y: tower.y, z, yaw: a + Math.PI, emote: t < 1.6 ? 'surprise' : 'cheer', anim: ANIM.idle }));
+        hero(i, (t) => ({ x, y: tower.y, z, yaw: a + Math.PI, emote: t < pop ? 'surprise' : 'cheer', anim: ANIM.idle }));
       }
     },
     fx(t) {
-      once(shots[0], 'pop', t, 1.6, () => {
+      once(last, 'pop', t, last.marks(last).pop, () => {
         renderer.effects.sparkles(tower.x, tower.y + 2, tower.z, 110, gold);
         renderer.effects.bang(tower.x, tower.y + 2, tower.z);
         renderer.effects.spores(tower.x, tower.y, tower.z, 6, 'mist');
@@ -1188,14 +1492,15 @@ function ending3() {
       { t: 6, pos: [tower.x + 5, tower.y + 6, tower.z + 13], look: [tower.x, tower.y + 4.5, tower.z], fov: 54 },
     ]),
   });
-  overlays.push(caption(0.5, 5, 'Pop! Old Murk was popped, fog and all!'));
 
   // 2. The five Sunstones fly up together, the fog blows away, the sun comes out.
-  add({
+  const sun = r.add({
+    name: 'sun',
     dur: 7.5,
     world: fen,
     time: (t) => 0.27 + t * 0.012,
     cut: 'flash',
+    lines: [['teller', 'All five Sunstones flew up together, the fog blew away over the sea — and the sun shone on the Wild Isle again!']],
     setup() {
       for (let i = 0; i < 5; i++) {
         const a = (i / 5) * Math.PI * 2;
@@ -1206,7 +1511,7 @@ function ending3() {
       }
     },
     fx(t) {
-      once(shots[1], 'sun', t, 4, () => {
+      once(sun, 'sun', t, 4, () => {
         renderer.effects.sparkles(tower.x, tower.y + 30, tower.z, 160, gold);
         renderer.sky.flash = 1;
       });
@@ -1216,26 +1521,37 @@ function ending3() {
       { t: 7.5, pos: [tower.x + 40, tower.y + 30, tower.z + 55], look: [tower.x, tower.y + 22, tower.z], fov: 56 },
     ]),
   });
-  overlays.push(caption(shots[1].start + 0.5, 6.4, 'All five Sunstones flew up together, the fog blew away over the sea — and the sun shone on the Wild Isle again!'));
 
-  // 3. The party on the beach, the animals there too, friendly now.
-  add({
+  // 3. The party on the beach, the animals there too, friendly now — and
+  // warm at last.
+  r.add({
+    name: 'party',
     dur: 8.5,
     world: cove,
     time: 0.36,
     cut: 'fade',
+    lines: [
+      ['teller', 'Every animal on the island came to see — friendly again, every one of them.'],
+      ['bramblepaw', 'Ahh… sunshine!', { gap: 0.4, pan: -0.3 }],
+      ['curlhorn', 'Lovely and warm!', { gap: 0.2, pan: 0.3 }],
+      ['teller', 'Thank you, heroes of the Wild Isle!', { gap: 0.6 }],
+    ],
     setup() {
-      for (const [i, look] of KIDS.entries()) {
+      for (const i of [0, 1, 2]) {
         const x = sp.x - 1.6 + i * 1.6;
         const z = sp.z + 0.5;
-        kid(look, () => ({ x, y: groundY(cove.world, x, z), z, yaw: Math.PI, emote: i === 1 ? 'dance' : 'cheer', anim: ANIM.idle }));
+        hero(i, () => ({ x, y: groundY(cove.world, x, z), z, yaw: Math.PI, emote: i === 1 ? 'dance' : 'cheer', anim: ANIM.idle }));
       }
       // (Up the beach behind them, inland: the sea is the other way.)
       for (const [i, ch] of WILD_CHAPTERS.slice(0, 4).entries()) {
         const a = -1.1 + i * 0.75;
         const x = sp.x + Math.sin(a) * 7;
         const z = sp.z - 3 - Math.cos(a) * 4;
-        monster(ch.boss, (t) => ({ x, y: groundY(cove.world, x, z), z, yaw: Math.atan2(sp.x - x, sp.z - z), state: t % 3 < 1.5 ? 'idle' : 'giggle', scale: 0.6 }));
+        voiced(
+          monster(ch.boss, (t) => ({ x, y: groundY(cove.world, x, z), z, yaw: Math.atan2(sp.x - x, sp.z - z), state: t % 3 < 1.5 ? 'idle' : 'giggle', scale: 0.6 })),
+          ch.boss,
+          0.7,
+        );
       }
     },
     fx(t) {
@@ -1247,11 +1563,11 @@ function ending3() {
       { t: 8.5, pos: [sp.x + 3, sp.y + 7, sp.z + 15], look: [sp.x - 4, sp.y + 5, sp.z - 30], fov: 58 },
     ]),
   });
-  overlays.push(caption(shots.at(-1).start + 0.5, 7.4, 'Every animal on the island came to see — friendly again, every one of them. Thank you, heroes of the Wild Isle!'));
 
   // 4. The credits, round the lighthouse at sunset.
   const L = [light.x - 6, light.y, light.z - 12];
-  add({
+  const credits = r.add({
+    name: 'credits',
     dur: 14,
     world: cove,
     time: 0.71,
@@ -1262,33 +1578,47 @@ function ending3() {
     camera: orbit([L[0], L[1] + 6, L[2]], 36, 8, 0.5, -0.4, 14, 50),
   });
   const cast = WILD_CHAPTERS.map((ch) => BOSSES[ch.boss].icon + ' ' + BOSSES[ch.boss].name);
-  overlays.push(roll(shots.at(-1).start + 0.3, 13.5, ['#The Wild Isle', 'Episode 3', '', '#Starring', 'You and your friends', '', '#and', ...cast, '', '#The five Sunstones', ...WILD_CHAPTERS.map((ch) => ch.icon + ' ' + ch.name), '', '#Made in Kids World', 'Thank you for playing!']));
+  r.over(roll(credits.start + 0.3, 13.5, ['#The Wild Isle', 'Episode 3', '', '#Starring', 'You and your friends', '', '#and', ...cast, '', '#The five Sunstones', ...WILD_CHAPTERS.map((ch) => ch.icon + ' ' + ch.name), '', '#Voices', 'Kokoro', '', '#Made in Kids World', 'Thank you for playing!']));
 
-  // 5. Old Murk, curled up asleep in a sunny spot.
-  add({
+  // 5. Old Murk, curled up asleep in a sunny spot; and high over the fen, a
+  // magpie flapping by with an eye for something shiny: the story goes on, in
+  // the fourth episode.
+  const teaser = r.add({
+    name: 'teaser',
     dur: 7,
     world: fen,
     time: 0.5,
     cut: 'fade',
     out: 'fade',
-    setup() {
-      monster('murk', () => ({ x: tower.x, y: tower.y, z: tower.z, yaw: 1.1, state: 'dazed', scale: 0.8 }));
+    speak: 0.5,
+    lines: [
+      ['teller', 'And Old Murk? He curled up in a sunny spot and went to sleep.'],
+      ['murk', 'So… warm…', { gap: 0.4 }],
+      ['teller', 'He was only ever cold.', { gap: 0.4 }],
+      ['jinx', 'Ooh! Shiny!', { gap: 0.5 }],
+    ],
+    hold: 3,
+    marks: (s) => ({ title: s.said[3].end + 0.3, shiny: s.said[3].at }),
+    setup(shot) {
+      const { shiny } = shot.marks(shot);
+      voiced(
+        monster('murk', () => ({ x: tower.x, y: tower.y, z: tower.z, yaw: 1.1, state: 'dazed', scale: 0.8 })),
+        'murk',
+        0.3,
+      );
+      voiced(
+        critter('magpie', (t) => ({ x: tower.x - 14 + (t - shiny + 2) * 3.4, y: tower.y + 9 + Math.sin(t * 2) * 0.4, z: tower.z - 10 + (t - shiny + 2) * 1.2, yaw: 1.2, state: 'fly', moving: true })),
+        'jinx',
+      );
     },
     camera: keys([
       { t: 0, pos: [tower.x + 4, tower.y + 1.6, tower.z + 5], look: [tower.x, tower.y + 0.8, tower.z], fov: 46 },
       { t: 7, pos: [tower.x + 6, tower.y + 3.5, tower.z + 8], look: [tower.x, tower.y + 1, tower.z], fov: 46 },
     ]),
   });
-  const teaser = shots.at(-1).start;
-  overlays.push(caption(teaser + 0.4, 4, 'And Old Murk? He curled up in a sunny spot and went to sleep. It turns out he was only ever cold.'));
-  // (And high over the fen, a magpie flapping off with something shiny: the
-  // story goes on, in the fourth episode.)
-  overlays.push(titleCard(teaser + 4.4, 2.6, 'The story goes on…', 'A magpie feather floats down: Episode 4, The Golden Bells', { size: 70 }));
-  shots.at(-1).setup = () => {
-    monster('murk', () => ({ x: tower.x, y: tower.y, z: tower.z, yaw: 1.1, state: 'dazed', scale: 0.8 }));
-    critter('magpie', (t) => ({ x: tower.x - 14 + t * 3.4, y: tower.y + 9 + Math.sin(t * 2) * 0.4, z: tower.z - 10 + t * 1.2, yaw: 1.2, state: 'fly', moving: true }));
-  };
-  return { shots, overlays, poster: shots[1].start + 7 };
+  const title = teaser.start + teaser.marks(teaser).title;
+  r.over(titleCard(title, teaser.start + teaser.dur - title - 0.2, 'The story goes on…', 'A magpie feather floats down: Episode 4, The Golden Bells', { size: 70 }));
+  return r.done({ poster: sun.start + 7 });
 }
 
 // ------------------------------------------------------------ the fourth episode
@@ -1324,10 +1654,15 @@ const cageOf = (m) => ({ bell: m.hub.bell, perch: m.hub.perch ?? [m.hub.bell[0],
 // ------------------------------------------------------------ the intro, episode 4
 
 // Its intro: dawn over Adventure Isle, its five Golden Bells ringing round
-// the lighthouse's lantern; Jinx the Magpie swooping down in the night and
-// flying off with them all; each of his Puzzle Isles with a bell locked in a
-// cage, and what he has made a game of there; the last bell with him in his
-// own nest; and you and your friends by the first cage, in Bellbuoy Bay.
+// the lighthouse's lantern; Jinx the Magpie swooping down in the night, all
+// delight, and flying off with them all; each of his Puzzle Isles with a bell
+// locked in a cage, and Jinx on its roof daring you; the last bell with him
+// in his own nest; and you and your friends by the first cage, in Bellbuoy
+// Bay, Jinx laughing at you from its roof.
+
+// What Jinx says on the roof of each of his cages.
+const JINX_DARES = ['Find my shinies, if you can!', 'Chicks everywhere! Ha!', 'Sing my song, if you can!', 'Mind the wind! Ha ha!'];
+
 function intro4() {
   const shore = isle(1, { freed: true });
   const { light: L } = shoreSpots(shore);
@@ -1335,26 +1670,21 @@ function intro4() {
   const nestM = isle(BELL_FROM + 4);
   const nestQ = nestM.quests.find((q) => q.kind === 'jinx');
   const perch = nestQ.perch;
-  const shots = [];
-  const overlays = [];
-  let at = 0;
-  const add = (shot) => {
-    shot.start = at;
-    shots.push(shot);
-    at += shot.dur;
-    return shot;
-  };
+  const r = reel();
   const ringAt = (i, t) => {
     const a = (i / 5) * Math.PI * 2 + 0.3;
     return { x: L[0] + Math.cos(a) * 3.4, y: L[1] - 2.5, z: L[2] + Math.sin(a) * 3.4, rz: Math.sin(t * 3.2 + i) * 0.35 };
   };
 
   // 1. Dawn: five Golden Bells ringing round the lighthouse's lantern.
-  add({
+  r.add({
+    name: 'dawn',
     dur: 7,
     world: shore,
     time: (t) => 0.24 + t * 0.004,
     cut: 'fade',
+    speak: 0.8,
+    lines: [['teller', 'Every morning, five Golden Bells rang Adventure Isle awake. Ding, dong!']],
     setup() {
       for (let i = 0; i < 5; i++) prop(goldenBell(1), (t) => ringAt(i, t));
     },
@@ -1366,93 +1696,138 @@ function intro4() {
       { t: 7, pos: [L[0] + 8, L[1] + 1, L[2] - 10], look: [L[0], L[1] - 2.5, L[2]], fov: 46 },
     ]),
   });
-  overlays.push(caption(0.8, 5.8, 'Every morning, five Golden Bells rang Adventure Isle awake — ding, dong!'));
 
-  // 2. Night: Jinx swoops down, and off he flies with every one of them.
-  add({
+  // 2. Night: Jinx swoops down on to the lantern, can hardly believe his eyes,
+  // and off he flies with every one of them.
+  const swoop = r.add({
+    name: 'swoop',
     dur: 8,
     world: shore,
     time: 0.03,
     cut: 'fade',
-    setup() {
+    lines: [
+      ['jinx', 'Ooh! So shiny! I want them all!', { at: 2.5 }],
+      ['teller', 'One night, Jinx the Magpie, the cheekiest bird on the seven seas, carried them all off!', { gap: 0.6 }],
+      ['jinx', 'Finders keepers!', { gap: 0.3, pan: 0.4 }],
+    ],
+    keepCamera: true,
+    marks: (s) => ({ off: s.said[0].end + 0.2 }),
+    setup(shot) {
+      const { off } = shot.marks(shot);
       const jinx = (t) => {
         if (t < 2.4) return { x: L[0] - 30 + t * 12.5, y: L[1] + 8 - t * 3.2, z: L[2] + 18 - t * 7.2 };
-        if (t < 3.6) return { x: L[0] + 0.5, y: L[1] + 0.4, z: L[2] + 1 };
-        const u = t - 3.6;
+        if (t < off) return { x: L[0] + 0.5, y: L[1] + 0.4, z: L[2] + 1 };
+        const u = t - off;
         return { x: L[0] + u * 9, y: L[1] + 1 + u * 3, z: L[2] - u * 7 };
       };
-      critter('magpie', (t) => ({ ...jinx(t), yaw: t < 2.4 ? 0.9 : t < 3.6 ? 0.2 : 2.2, state: t >= 2.4 && t < 3.6 ? 'idle' : 'fly', moving: true }));
+      voiced(
+        critter('magpie', (t) => ({ ...jinx(t), yaw: t < 2.4 ? 0.9 : t < off ? -0.6 : 2.2, state: t >= 2.4 && t < off ? 'idle' : 'fly', moving: true })),
+        'jinx',
+      );
       for (let i = 0; i < 5; i++) {
         prop(goldenBell(1), (t) => {
           const home = ringAt(i, 0);
-          if (t < 3.6 + i * 0.12) return { ...home, rz: t > 2.4 ? Math.sin(t * 20) * 0.2 : 0 };
+          if (t < off + i * 0.12) return { ...home, rz: t > 2.4 ? Math.sin(t * 20) * 0.2 : 0 };
           const j = jinx(t);
-          const u = ease((t - 3.6 - i * 0.12) / 0.8);
+          const u = ease((t - off - i * 0.12) / 0.8);
           return { x: lerp(home.x, j.x - 1 - i * 0.9, u), y: lerp(home.y, j.y - 1.5 - i * 0.35, u), z: lerp(home.z, j.z + i * 0.7, u), rz: Math.sin(t * 8 + i) * 0.4 };
         });
       }
     },
     fx(t) {
-      once(shots[1], 'grab', t, 3.4, () => renderer.effects.sparkles(L[0], L[1] - 1, L[2], 60, ['#ffd84d', '#fff3a0', '#ffffff']));
+      once(swoop, 'grab', t, swoop.marks(swoop).off - 0.2, () => renderer.effects.sparkles(L[0], L[1] - 1, L[2], 60, ['#ffd84d', '#fff3a0', '#ffffff']));
     },
-    camera: keys([
-      { t: 0, pos: [L[0] - 14, L[1] + 2, L[2] + 16], look: [L[0] - 6, L[1] + 2, L[2] + 6], fov: 52 },
-      { t: 3.4, pos: [L[0] - 8, L[1] + 1, L[2] + 10], look: [L[0], L[1] - 1, L[2]], fov: 50 },
-      { t: 8, pos: [L[0] - 10, L[1] + 4, L[2] + 14], look: [L[0] + 22, L[1] + 12, L[2] - 22], fov: 54 },
-    ]),
+    camera: later((shot) => {
+      const { off } = shot.marks(shot);
+      return keys([
+        { t: 0, pos: [L[0] - 14, L[1] + 2, L[2] + 16], look: [L[0] - 6, L[1] + 2, L[2] + 6], fov: 52 },
+        { t: 2.6, pos: [L[0] - 8, L[1] + 1, L[2] + 10], look: [L[0], L[1] - 1, L[2]], fov: 50 },
+        // (In on him while he gloats over them.)
+        { t: off - 0.2, pos: [L[0] - 4.5, L[1] + 1.2, L[2] + 6], look: [L[0] + 0.5, L[1] + 0.6, L[2] + 1], fov: 46 },
+        { t: off + 4.6, pos: [L[0] - 10, L[1] + 4, L[2] + 14], look: [L[0] + 22, L[1] + 12, L[2] - 22], fov: 54 },
+      ]);
+    }),
   });
-  overlays.push(caption(shots[1].start + 0.6, 7, 'Until one night Jinx the Magpie — the cheekiest bird on the seven seas — swooped down and carried them all off. No magpie can leave anything shiny alone!'));
 
-  // 3. His Puzzle Isles: each bell in a cage, Jinx's challenges all round it.
+  // 3. His Puzzle Isles: each bell in a cage, Jinx on its roof, daring you.
   for (const [i, ch] of BELL_CHAPTERS.slice(0, 4).entries()) {
     const m = isle(BELL_FROM + i);
     const { bell, perch: roof } = cageOf(m);
     const a0 = 0.5 + i * 1.1;
-    const shot = add({
+    const shot = r.add({
+      name: `cage${i}`,
       dur: 2.9,
+      fixed: true,
       world: m,
       time: 0.36,
       cut: i === 0 ? 'flash' : 'cut',
+      speak: 0.35,
+      lines: [['jinx', JINX_DARES[i], { max: 2.3 }]],
       setup() {
-        critter('magpie', (t) => ({ x: roof[0] + 0.5, y: roof[1], z: roof[2] + 0.5, yaw: a0 + Math.sin(t * 2) * 0.4, state: 'idle' }));
+        voiced(
+          critter('magpie', (t) => ({ x: roof[0] + 0.5, y: roof[1], z: roof[2] + 0.5, yaw: a0 + Math.sin(t * 2) * 0.4, state: 'idle' })),
+          'jinx',
+        );
       },
       camera: (t) => orbit([bell[0] + 0.5, bell[1] + 1, bell[2] + 0.5], 13, 3, a0, a0 + 0.4, 2.9, 48)(t),
     });
-    overlays.push(nameCard(shot.start + 0.15, 2.6, `${ch.icon} ${ch.name}`, ch.quests.map((q) => `${questIcon(q)} ${q.name}`).join(' · ')));
+    r.over(nameCard(shot.start + 0.15, 2.6, `${ch.icon} ${ch.name}`, ch.quests.map((q) => `${questIcon(q)} ${q.name}`).join(' · '), { top: true }));
   }
 
   // 4. The last bell, in his own nest, and Jinx chattering on top of it.
-  add({
+  r.add({
+    name: 'nest',
     dur: 5.5,
     world: nestM,
     time: 0.3,
     cut: 'flash',
+    lines: [
+      ['teller', 'The last bell he keeps in his own nest.'],
+      ['jinx', 'Catch me if you can! Ha ha!', { gap: 0.4 }],
+    ],
     setup() {
-      critter('magpie', (t) => ({ x: perch[0] + 0.5, y: perch[1], z: perch[2] + 0.5, yaw: 0.2 + Math.sin(t * 3) * 0.3, state: t % 1.6 < 0.3 ? 'hop' : 'idle' }));
+      voiced(
+        critter('magpie', (t) => ({ x: perch[0] + 0.5, y: perch[1], z: perch[2] + 0.5, yaw: 0.2 + Math.sin(t * 3) * 0.3, state: t % 1.6 < 0.3 ? 'hop' : 'idle' })),
+        'jinx',
+      );
       prop(goldenBell(1.1), (t) => ({ x: perch[0] + 3, y: perch[1] + 2.6, z: perch[2] + 1, rz: Math.sin(t * 2.4) * 0.25 }));
     },
     camera: keys([
-      { t: 0, pos: [perch[0] + 4, perch[1] + 5, perch[2] + 14], look: [perch[0], perch[1] + 1.4, perch[2]], fov: 48 },
-      { t: 5.5, pos: [perch[0] + 12, perch[1] + 11, perch[2] + 22], look: [perch[0], perch[1] + 1, perch[2]], fov: 54 },
+      { t: 0, pos: [perch[0] + 12, perch[1] + 11, perch[2] + 22], look: [perch[0], perch[1] + 1, perch[2]], fov: 54 },
+      { t: 5.5, pos: [perch[0] + 4, perch[1] + 4, perch[2] + 12], look: [perch[0], perch[1] + 1.4, perch[2]], fov: 46 },
     ]),
   });
-  overlays.push(caption(shots.at(-1).start + 0.5, 4.8, 'The last bell he keeps in his own nest — and he left a feather, with a note: “Catch me if you can!”'));
 
-  // 5. The heroes by the first cage, in Bellbuoy Bay; and the title.
+  // 5. You by the first cage, in Bellbuoy Bay, Jinx on its roof; and the title.
   const sp = bay.world.spawn;
   const { bell, perch: roof } = cageOf(bay);
-  add({
+  const start = r.add({
+    name: 'bay',
     dur: 9,
     world: bay,
     time: 0.32,
     cut: 'white',
     out: 'fade',
-    setup() {
-      critter('magpie', (t) => ({ x: roof[0] + 0.5, y: roof[1], z: roof[2] + 0.5, yaw: 1.4 + Math.sin(t * 1.5) * 0.5, state: 'idle' }));
-      for (const [i, look] of KIDS.entries()) {
+    speak: 0.6,
+    lines: [
+      ['teller', 'No monsters this time — only tricks!'],
+      ['girl', 'A cage? With locks on it?', { gap: 0.4 }],
+      ['boy', 'Then let’s beat his challenges!', { gap: 0.3 }],
+      ['jinx', 'Bet you can’t!', { gap: 0.3, pan: -0.3 }],
+      ['teller', 'The Golden Bells!', { gap: 0.6, quiet: true }],
+    ],
+    hold: 3.2,
+    marks: (s) => ({ title: s.said[4].at - 0.2 }),
+    setup(shot) {
+      const [, cage, go] = shot.said;
+      voiced(
+        critter('magpie', (t) => ({ x: roof[0] + 0.5, y: roof[1], z: roof[2] + 0.5, yaw: 1.4 + Math.sin(t * 1.5) * 0.5, state: 'idle' })),
+        'jinx',
+      );
+      for (const i of [0, 1, 2]) {
         const x = bell[0] + 6 + i * 1.5;
         const z = bell[2] - 2 + i * 1.6;
-        kid(look, (t) => ({ x, y: groundY(bay.world, x, z), z, yaw: Math.atan2(bell[0] - x, bell[2] - z), emote: t < 2.4 ? 'surprise' : t < 5.2 ? 'wave' : 'cheer', anim: ANIM.idle }));
+        hero(i, (t) => ({ x, y: groundY(bay.world, x, z), z, yaw: Math.atan2(bell[0] - x, bell[2] - z), emote: t < cage.end ? 'surprise' : t < go.end ? 'wave' : 'cheer', anim: ANIM.idle }));
       }
     },
     camera: keys([
@@ -1461,19 +1836,19 @@ function intro4() {
       { t: 9, pos: [sp.x + 6, sp.y + 24, sp.z + 24], look: [64, sp.y + 2, 50], fov: 56 },
     ]),
   });
-  const last = shots.at(-1).start;
-  overlays.push(caption(last + 0.5, 3.4, 'No monsters this time — only tricks. Beat his challenges, open every lock, and ring the bells again!'));
-  overlays.push(titleCard(last + 4.2, 4.6, 'The Golden Bells', 'Episode 4 · Win back all five bells — together!', { size: 78 }));
-  return { shots, overlays, poster: last + 6.4 };
+  const title = start.start + start.marks(start).title;
+  r.over(titleCard(title, start.start + start.dur - title - 0.2, 'The Golden Bells', 'Episode 4 · Win back all five bells — together!', { size: 78 }));
+  return r.done({ poster: title + 1.6 });
 }
 
 // ------------------------------------------------------------ the ending, episode 4
 
-// Its ending: Jinx caught at last, dazzled on the clearing below his nest;
-// the five Golden Bells flying home out of it; the party round the open cage
-// in Bellbuoy Bay, the monkeys, chicks and sheep there too, the bells ringing
-// over it; the credits round the bay's lighthouse; and Jinx at dawn,
-// listening to the bells as good as gold — well, almost.
+// Its ending: Jinx caught at last, dazzled on the clearing below his nest,
+// and owning up; the five Golden Bells flying home out of it; the party round
+// the open cage in Bellbuoy Bay, the monkeys, chicks and sheep there too, the
+// bells ringing over it; the credits round the bay's lighthouse; and Jinx at
+// dawn, listening to the bells as good as gold — well, almost — with a
+// present for you.
 function ending4() {
   const nestM = isle(BELL_FROM + 4);
   const q = nestM.quests.find((o) => o.kind === 'jinx');
@@ -1490,34 +1865,38 @@ function ending4() {
   const { bell, perch: roof } = cageOf(bay);
   const lighthouseAt = [58.5, groundY(bay.world, 58, 24), 24.5];
   const gold = ['#ffcf4a', '#ffe08a', '#fff3c4', '#ffb020'];
-  const shots = [];
-  const overlays = [];
-  let at = 0;
-  const add = (shot) => {
-    shot.start = at;
-    shots.push(shot);
-    at += shot.dur;
-    return shot;
-  };
+  const r = reel();
 
-  // 1. Jinx, dazzled on the clearing, and caught.
-  add({
+  // 1. Jinx, dazzled on the clearing, giving up — caught.
+  const caught = r.add({
+    name: 'caught',
     dur: 6,
     world: nestM,
     time: 0.34,
     cut: 'fade',
-    setup() {
-      critter('magpie', (t) => ({ x: land[0], y: land[1], z: land[2], yaw: 0.3, state: 'idle', roll: t < 1.6 ? Math.sin(t * 6) * 0.15 : 0 }));
-      for (const [i, look] of KIDS.entries()) {
+    speak: 0.4,
+    lines: [
+      ['jinx', 'Ooh, I’m all dizzy… All right, all right, you caught me!'],
+      ['teller', 'Caught! Jinx the Magpie was caught, fair and square.', { gap: 0.5 }],
+    ],
+    marks: (s) => ({ caught: s.said[0].end }),
+    setup(shot) {
+      const { caught: at } = shot.marks(shot);
+      voiced(
+        critter('magpie', (t) => ({ x: land[0], y: land[1], z: land[2], yaw: 0.3, state: 'idle', roll: t < at ? Math.sin(t * 6) * 0.15 : 0 })),
+        'jinx',
+      );
+      for (const i of [0, 1, 2]) {
         const a = -0.6 + i * 0.6;
         const x = land[0] + Math.sin(a) * 3.6;
         const z = land[2] + Math.cos(a) * 3.6;
-        kid(look, (t) => ({ x, y: land[1], z, yaw: a + Math.PI, emote: t < 1.6 ? 'surprise' : 'cheer', anim: ANIM.idle }));
+        hero(i, (t) => ({ x, y: land[1], z, yaw: a + Math.PI, emote: t < at ? 'surprise' : 'cheer', anim: ANIM.idle }));
       }
     },
     fx(t) {
-      if (t < 1.6) renderer.effects.dizzy(land[0], land[1] + 2.3, land[2], t, 0.6);
-      once(shots[0], 'caught', t, 1.6, () => {
+      const { caught: at } = caught.marks(caught);
+      if (t < at) renderer.effects.dizzy(land[0], land[1] + 2.3, land[2], t, 0.6);
+      once(caught, 'caught', t, at, () => {
         renderer.effects.sparkles(land[0], land[1] + 1.4, land[2], 110, gold);
         renderer.effects.stars(land[0], land[1] + 1.6, land[2], 12);
         renderer.sky.flash = 1;
@@ -1528,14 +1907,18 @@ function ending4() {
       { t: 6, pos: [land[0] + 4, land[1] + 4.5, land[2] + 11], look: [land[0], land[1] + 1.6, land[2]], fov: 54 },
     ]),
   });
-  overlays.push(caption(0.5, 5, 'Caught! Jinx the Magpie was caught, fair and square.'));
 
-  // 2. The five Golden Bells, flying home out of his nest.
-  add({
+  // 2. The five Golden Bells, flying home out of his nest, and Jinx owning up.
+  r.add({
+    name: 'home',
     dur: 7.5,
     world: nestM,
     time: 0.36,
     cut: 'flash',
+    lines: [
+      ['jinx', 'Here, have them back. Playing with you was more fun anyway!'],
+      ['teller', 'All he ever wanted was someone to play with.', { gap: 0.5 }],
+    ],
     setup() {
       for (let i = 0; i < 5; i++) {
         const a = (i / 5) * Math.PI * 2;
@@ -1544,7 +1927,10 @@ function ending4() {
           return { x: perch[0] + Math.cos(a) * (2 + u * 6) + u * 10, y: perch[1] + 1 + u * 16, z: perch[2] + Math.sin(a) * (2 + u * 6) + u * 40, rz: Math.sin(t * 5 + i) * 0.35 };
         });
       }
-      critter('magpie', (t) => ({ x: perch[0] + 0.5, y: perch[1], z: perch[2] + 0.5, yaw: 0.2 + Math.sin(t * 1.3) * 0.3, state: 'idle' }));
+      voiced(
+        critter('magpie', (t) => ({ x: perch[0] + 0.5, y: perch[1], z: perch[2] + 0.5, yaw: 0.2 + Math.sin(t * 1.3) * 0.3, state: 'idle' })),
+        'jinx',
+      );
     },
     fx(t) {
       if (Math.random() < 0.12) renderer.effects.notes(perch[0] + Math.random() * 10, perch[1] + 4 + t * 2, perch[2] + 6 + t * 5);
@@ -1554,21 +1940,26 @@ function ending4() {
       { t: 7.5, pos: [perch[0] - 14, perch[1] + 10, perch[2] - 10], look: [perch[0] + 8, perch[1] + 14, perch[2] + 30], fov: 56 },
     ]),
   });
-  overlays.push(caption(shots[1].start + 0.5, 6.4, 'He fluffed up his feathers and gave back every Golden Bell. All he ever wanted was someone to play with!'));
 
   // 3. The party round the open cage, the bells ringing over it.
-  add({
+  const party = r.add({
+    name: 'party',
     dur: 8.5,
     world: bay,
     time: 0.36,
     cut: 'fade',
+    lines: [
+      ['teller', 'Ding, dong! All five Golden Bells ring out over Adventure Isle again!'],
+      ['bunny', 'Listen to them ring!', { gap: 0.4, pan: 0.3 }],
+      ['teller', 'Thank you, heroes!', { gap: 0.6 }],
+    ],
     setup() {
       for (let i = 0; i < 5; i++) prop(goldenBell(0.9), (t) => ({ x: bell[0] + 0.5 + (i - 2) * 2.2, y: bell[1] + 8.5, z: bell[2] + 0.5, rz: Math.sin(t * 3 + i * 0.9) * 0.4 }));
       critter('magpie', (t) => ({ x: roof[0] + 0.5, y: roof[1], z: roof[2] + 0.5, yaw: 1.6, state: t % 2 < 0.4 ? 'hop' : 'idle' }));
-      for (const [i, look] of KIDS.entries()) {
+      for (const i of [0, 1, 2]) {
         const x = bell[0] + 7 + i * 1.6;
         const z = bell[2] - 1.5 + i * 1.4;
-        kid(look, () => ({ x, y: groundY(bay.world, x, z), z, yaw: -Math.PI / 2, emote: i === 1 ? 'dance' : 'cheer', anim: ANIM.idle }));
+        hero(i, () => ({ x, y: groundY(bay.world, x, z), z, yaw: -Math.PI / 2, emote: i === 1 ? 'dance' : 'cheer', anim: ANIM.idle }));
       }
       // Coco, Kiki and Bobo, friends now.
       for (let i = 0; i < 3; i++) {
@@ -1597,10 +1988,10 @@ function ending4() {
       { t: 8.5, pos: [bell[0] + 21, bell[1] + 4, bell[2] + 10], look: [bell[0], bell[1] + 5, bell[2]], fov: 58 },
     ]),
   });
-  overlays.push(caption(shots.at(-1).start + 0.5, 7.4, 'Ding, dong! All five Golden Bells ring out over Adventure Isle again. Thank you, heroes!'));
 
   // 4. The credits, round the bay's lighthouse at sunset.
-  add({
+  const credits = r.add({
+    name: 'credits',
     dur: 14,
     world: bay,
     time: 0.71,
@@ -1610,31 +2001,41 @@ function ending4() {
     },
     camera: orbit([lighthouseAt[0], lighthouseAt[1] + 6, lighthouseAt[2]], 34, 8, 0.6, -0.3, 14, 50),
   });
-  overlays.push(roll(shots.at(-1).start + 0.3, 13.5, ['#The Golden Bells', 'Episode 4', '', '#Starring', 'You and your friends', '', '#and', '🐦 Jinx the Magpie', '🐒 Coco, Kiki and Bobo', '🐥 the chicks of Henhouse Hills', '🐑 the sheep of Kite Cliffs', '', '#The five Puzzle Isles', ...BELL_CHAPTERS.map((ch) => ch.icon + ' ' + ch.name), '', '#Made in Kids World', 'Thank you for playing!']));
+  r.over(roll(credits.start + 0.3, 13.5, ['#The Golden Bells', 'Episode 4', '', '#Starring', 'You and your friends', '', '#and', '🐦 Jinx the Magpie', '🐒 Coco, Kiki and Bobo', '🐥 the chicks of Henhouse Hills', '🐑 the sheep of Kite Cliffs', '', '#The five Puzzle Isles', ...BELL_CHAPTERS.map((ch) => ch.icon + ' ' + ch.name), '', '#Voices', 'Kokoro', '', '#Made in Kids World', 'Thank you for playing!']));
 
-  // 5. Dawn: the bells ring, and Jinx listens — as good as gold. Almost.
-  add({
+  // 5. Dawn: the bells ring, and Jinx listens — as good as gold. Almost. And
+  // he has a present for you: an old sea chart. The story goes on, in the
+  // fifth episode.
+  const teaser = r.add({
+    name: 'teaser',
     dur: 7,
     world: bay,
     time: 0.26,
     cut: 'fade',
     out: 'fade',
-    setup() {
+    lines: [
+      ['teller', 'Now Jinx perches by the bells every morning to listen, as good as gold. Well… almost.'],
+      ['jinx', 'Psst! For you. My best shiny of all: an old sea chart!', { gap: 0.5 }],
+    ],
+    hold: 3,
+    marks: (s) => ({ title: s.said[1].end + 0.3 }),
+    setup(shot) {
+      const psst = shot.said[1].at;
       // (The bells in a row behind him, as the camera sees it.)
       for (let i = 0; i < 5; i++) prop(goldenBell(0.8), (t) => ({ x: roof[0] - 3, y: roof[1] + 4.2, z: roof[2] + 0.5 + (i - 2) * 2.2, rz: Math.sin(t * 2.6 + i * 0.9) * 0.3 }));
-      critter('magpie', (t) => ({ x: roof[0] + 0.5, y: roof[1], z: roof[2] + 0.5, yaw: t < 4 ? 1.6 : 1.6 + Math.min(1, (t - 4) * 2) * 1.5, state: 'idle' }));
+      voiced(
+        critter('magpie', (t) => ({ x: roof[0] + 0.5, y: roof[1], z: roof[2] + 0.5, yaw: t < psst - 0.5 ? 1.6 : 1.6 + Math.min(1, (t - psst + 0.5) * 2) * 1.5, state: 'idle' })),
+        'jinx',
+      );
     },
     camera: keys([
       { t: 0, pos: [roof[0] + 10, roof[1] + 1.5, roof[2] + 2], look: [roof[0], roof[1] + 1.6, roof[2]], fov: 46 },
       { t: 7, pos: [roof[0] + 7.5, roof[1] + 2, roof[2] + 1.5], look: [roof[0], roof[1] + 1.6, roof[2]], fov: 42 },
     ]),
   });
-  const teaser = shots.at(-1).start;
-  overlays.push(caption(teaser + 0.4, 4, 'Now Jinx perches by the bells every morning to listen, as good as gold. Well — almost…'));
-  // (And he has a present for you: an old sea chart. The story goes on, in
-  // the fifth episode.)
-  overlays.push(titleCard(teaser + 4.4, 2.6, 'The story goes on…', 'An old sea chart from Jinx: Episode 5, Toon Isle', { size: 70 }));
-  return { shots, overlays, poster: shots[2].start + 6 };
+  const title = teaser.start + teaser.marks(teaser).title;
+  r.over(titleCard(title, teaser.start + teaser.dur - title - 0.2, 'The story goes on…', 'An old sea chart from Jinx: Episode 5, Toon Isle', { size: 70 }));
+  return r.done({ poster: party.start + 6 });
 }
 
 // ------------------------------------------------------------ the fifth episode
@@ -1747,55 +2148,77 @@ const TOON_CHAPTERS = CHAPTERS.filter((ch) => ch.episode === 5);
 
 // ------------------------------------------------------------ the intro, episode 5
 
-// Its intro: a little boat out at sea, sailing up to a mountain of cloud —
-// Toon Isle under Baron Bluster's Cloud Blanket; the Baron himself, laughing
-// over it, blowing out its five Sky Lanterns; under the clouds, the Big Bads
-// of its corners; the Baron waiting on Thunder Top; and you and your friends
-// on the beach of Lollipop Bay, the clouds rolling back as you go.
+// Its intro: you and your friends in a little boat out at sea, sailing up to a
+// mountain of cloud — Toon Isle under Baron Bluster's Cloud Blanket; the Baron
+// himself, laughing over it, blowing out its five Sky Lanterns one by one;
+// under the clouds, the Big Bads of its corners, each with something to say;
+// the Baron daring you up to Thunder Top; and you on the beach of Lollipop
+// Bay, the clouds rolling back as you go.
+
+// Who each corner's Big Bad is in the cast, and what it says.
+const BIG_BADS = [
+  ['snapjaw', 'Snap! Snap! Snap!'],
+  ['thumpwood', 'Who goes there? Thump!'],
+  ['rumbletooth', 'Roar! I am the biggest!'],
+  ['blink', 'I see you! Blink, blink!'],
+];
+
 function intro5() {
   const bay = isle(TOON_FROM);
   const top = isle(TOON_FROM + 4);
   const sp = bay.world.spawn;
   const lantern = bay.hub.lantern;
-  const shots = [];
-  const overlays = [];
-  let at = 0;
-  const add = (shot) => {
-    shot.start = at;
-    shots.push(shot);
-    at += shot.dur;
-    return shot;
-  };
+  const r = reel();
 
-  // 1. Out at sea, sailing up to a mountain of cloud.
-  add({
+  // 1. Out at sea, the three of you sailing up to a mountain of cloud.
+  r.add({
+    name: 'sea',
     dur: 8,
     world: bay,
     time: 0.3,
     cut: 'fade',
+    speak: 0.7,
+    lines: [
+      ['teller', 'Jinx’s old sea chart led you to Toon Isle: the biggest island on the seven seas — where everything looks like a cartoon!'],
+      ['girl', 'Look! A mountain made of clouds!', { gap: 0.5 }],
+    ],
     setup() {
       renderer.setFog(blanket(bay.world));
-      critter('boat', (t) => ({ x: sp.x + 4, y: SEA + 0.9, z: sp.z + 40 - t * 2.6, yaw: Math.PI, moving: true }));
+      const at = (t) => ({ x: sp.x + 4, y: SEA + 0.9, z: sp.z + 44 - t * 1.6 });
+      critter('boat', (t) => ({ ...at(t), yaw: Math.PI, moving: true }));
+      for (const i of [0, 1, 2]) hero(i, (t) => ({ ...at(t), x: sp.x + 4 + (i - 1) * 0.55, y: SEA + 1.25, yaw: Math.PI, anim: ANIM.sit }));
     },
-    camera: keys([
-      { t: 0, pos: [sp.x + 26, SEA + 5, sp.z + 92], look: [sp.x, SEA + 14, sp.z - 40], fov: 50 },
-      { t: 8, pos: [sp.x + 12, SEA + 4, sp.z + 66], look: [sp.x, SEA + 12, sp.z - 30], fov: 50 },
-    ]),
+    // (Behind the boat, the mountain of cloud ahead of it.)
+    keepCamera: true,
+    camera: (t) => {
+      const z = sp.z + 44 - t * 1.6;
+      const k = ease(t / 11);
+      return { pos: [sp.x + 4 + lerp(4, 2, k), SEA + lerp(3.4, 2.8, k), z + lerp(10, 7.5, k)], look: [sp.x + 3, SEA + lerp(1.6, 3.2, k), z - 20], fov: 50 };
+    },
   });
-  overlays.push(caption(0.7, 7, 'Jinx was so sorry for his tricks that he gave you his best shiny of all: an old sea chart of Toon Isle, the biggest island on the seven seas — where everything looks like a cartoon!'));
 
-  // 2. Baron Bluster over the clouds, blowing out the Sky Lanterns.
+  // 2. Baron Bluster over the clouds, blowing out the Sky Lanterns one by one.
   const cx = 128;
   const cz = 120;
   const cy = SEA + 30;
-  add({
+  const blow = r.add({
+    name: 'blow',
     dur: 8,
     world: bay,
     time: 0.34,
     cut: 'cut',
+    lines: [
+      ['bluster', 'Out you go!', { at: 0.9 }],
+      ['bluster', 'And you!', { at: 2.4 }],
+      ['bluster', 'And you, and you, and you! Ho ho!', { at: 3.7 }],
+      ['teller', 'Baron Bluster blew out all five Sky Lanterns — and pulled his Cloud Blanket over the whole island!', { gap: 0.5 }],
+    ],
     setup() {
       renderer.setFog(blanket(bay.world));
-      monster('bluster', (t) => ({ x: cx, y: cy + Math.sin(t * 1.3) * 0.4, z: cz, yaw: 0.4 + Math.sin(t * 0.8) * 0.3, state: Math.floor(t / 1.6) % 2 ? 'puff' : 'giggle', scale: 1.4 }));
+      voiced(
+        monster('bluster', (t) => ({ x: cx, y: cy + Math.sin(t * 1.3) * 0.4, z: cz, yaw: 0.4 + Math.sin(t * 0.8) * 0.3, state: Math.floor(t / 1.6) % 2 ? 'puff' : 'giggle', scale: 1.4 })),
+        'bluster',
+      );
       for (let i = 0; i < 5; i++) {
         const a = (i / 5) * Math.PI * 2;
         const out = 1.4 + i * 1.3;
@@ -1808,15 +2231,15 @@ function intro5() {
     },
     fx(t) {
       for (let i = 0; i < 5; i++) {
-        once(shots[1], `out${i}`, t, 1.4 + i * 1.3, () => {
+        once(blow, `out${i}`, t, 1.4 + i * 1.3, () => {
           const a = (i / 5) * Math.PI * 2 + (1.4 + i * 1.3) * 0.2;
           for (let k = 0; k < 6; k++) renderer.effects.add('puff', cx + Math.cos(a) * 7, cy - 0.5, cz + Math.sin(a) * 7, { vy: 1, size: 0.6, life: 0.8, grow: 1.4, color: '#e6defa', delay: k * 0.03 });
         });
       }
     },
-    camera: orbit([cx, cy - 1, cz], 17, 2, 0.3, 1.1, 8, 50),
+    keepCamera: true,
+    camera: later((shot) => orbit([cx, cy - 1, cz], 17, 2, 0.3, 0.3 + shot.dur * 0.1, shot.dur, 50)),
   });
-  overlays.push(caption(shots[1].start + 0.6, 7, 'But Baron Bluster, a puffed-up storm cloud in a top hat, blew out its five Sky Lanterns — and pulled his Cloud Blanket over the whole island!'));
 
   // 3. Under the clouds: the Big Bad of each corner, and its battles.
   for (const [i, ch] of TOON_CHAPTERS.slice(0, 4).entries()) {
@@ -1826,50 +2249,68 @@ function intro5() {
     const beast = ch.battles.find((b) => b.kind === 'hunt').beast;
     const a0 = 0.6 + i * 1.3;
     const camera = orbit([hx, groundY(m.world, hx, hz) + 2, hz], 11, 2.5, a0, a0 + 0.45, 3, 48);
-    const shot = add({
+    const [who, says] = BIG_BADS[i];
+    const shot = r.add({
+      name: `bad${i}`,
       dur: 3,
+      fixed: true,
       world: m,
       time: 0.38,
       cut: i === 0 ? 'flash' : 'cut',
+      speak: 0.35,
+      lines: [[who, says, { max: 2.4 }]],
       setup() {
         renderer.setFog(null);
         // Face on to the camera, swaying its head a little.
-        monster(beast, (t) => ({ x: hx, y: groundY(m.world, hx, hz), z: hz, yaw: towards(camera(t).pos, hx, hz) + Math.sin(t) * 0.3, state: t % 2.4 < 1.2 ? 'chase' : 'idle' }));
+        voiced(
+          monster(beast, (t) => ({ x: hx, y: groundY(m.world, hx, hz), z: hz, yaw: towards(camera(t).pos, hx, hz) + Math.sin(t) * 0.3, state: t < 2.5 ? 'idle' : 'chase' })),
+          who,
+          0.7,
+        );
       },
       camera,
     });
-    overlays.push(nameCard(shot.start + 0.15, 2.7, `${ch.icon} ${ch.name}`, ch.battles.map((b) => `${BATTLE_ICONS[b.kind]} ${b.name}`).join(' · ')));
+    r.over(nameCard(shot.start + 0.15, 2.7, `${ch.icon} ${ch.name}`, ch.battles.map((b) => `${BATTLE_ICONS[b.kind]} ${b.name}`).join(' · '), { top: true }));
   }
 
-  // 4. Thunder Top: the Baron over his arena, lightning all round.
+  // 4. Thunder Top: the Baron over his arena, lightning all round, daring you.
   const arena = top.battles.find((b) => b.kind === 'showdown');
-  const topCamera = keys([
-    { t: 0, pos: [arena.x + 16, arena.y + 4, arena.z + 22], look: [arena.x, arena.y + 6, arena.z], fov: 50 },
-    { t: 6, pos: [arena.x + 10, arena.y + 3, arena.z + 15], look: [arena.x, arena.y + 7, arena.z], fov: 48 },
-  ]);
-  add({
+  const thunder = r.add({
+    name: 'top',
     dur: 6,
     world: top,
     time: 0.4,
     weather: 'cloudy',
     cut: 'flash',
+    lines: [
+      ['bluster', 'Come up to Thunder Top, if you dare! Ho ho ho!'],
+      ['teller', 'And his Storm Gang is everywhere under the clouds!', { gap: 0.5 }],
+    ],
     setup() {
       renderer.setFog(null);
-      monster('bluster', (t) => {
-        const x = arena.x + Math.sin(t * 0.5) * 3;
-        const z = arena.z + Math.cos(t * 0.5) * 3;
-        return { x, y: arena.y + 8 + Math.sin(t * 1.3) * 0.4, z, yaw: towards(topCamera(t).pos, x, z) + Math.sin(t * 0.9) * 0.25, state: t % 2 < 1 ? 'hurl' : 'giggle' };
-      });
+      voiced(
+        monster('bluster', (t) => {
+          const x = arena.x + Math.sin(t * 0.5) * 3;
+          const z = arena.z + Math.cos(t * 0.5) * 3;
+          return { x, y: arena.y + 8 + Math.sin(t * 1.3) * 0.4, z, yaw: towards(thunder.camera(t).pos, x, z) + Math.sin(t * 0.9) * 0.25, state: t % 2 < 1 ? 'hurl' : 'giggle' };
+        }),
+        'bluster',
+      );
     },
     fx(t) {
-      for (const k of [1.2, 3, 4.6]) once(shots.at(-1), `bolt${k}`, t, k, () => strike(top.world, arena.x + Math.sin(k * 3) * 9, arena.z + Math.cos(k * 3) * 9, [arena.x + 18, 0, arena.z + 22]));
+      for (const k of [1.2, 3, 4.6, 6.6]) once(thunder, `bolt${k}`, t, k, () => strike(top.world, arena.x + Math.sin(k * 3) * 9, arena.z + Math.cos(k * 3) * 9, [arena.x + 18, 0, arena.z + 22]));
     },
-    camera: topCamera,
+    keepCamera: true,
+    camera: later((shot) =>
+      keys([
+        { t: 0, pos: [arena.x + 10, arena.y + 5, arena.z + 13], look: [arena.x, arena.y + 7.5, arena.z], fov: 50 },
+        { t: shot.dur, pos: [arena.x + 7, arena.y + 6, arena.z + 9], look: [arena.x, arena.y + 8.2, arena.z], fov: 48 },
+      ]),
+    ),
   });
-  overlays.push(caption(shots.at(-1).start + 0.5, 5.2, 'He waits on Thunder Top — and his Storm Gang is everywhere under the clouds: roaming in gangs, springing traps, storming beacons, hatching out of nests!'));
 
-  // 5. The heroes on the beach of Lollipop Bay, the clouds rolling back as
-  // they go; and the title.
+  // 5. You on the beach of Lollipop Bay, the clouds rolling back as you go;
+  // and the title.
   const fog = blanket(bay.world, [[sp.x, sp.z, 22]]);
   const way = bay.roads[0];
   const walkAt = (t, lag) => {
@@ -1886,25 +2327,38 @@ function intro5() {
     const k = Math.min(1, left / d);
     return { x: ax + (bx - ax) * k, z: az + (bz - az) * k, yaw: Math.atan2(bx - ax, bz - az) };
   };
-  add({
+  const walk = r.add({
+    name: 'walk',
     dur: 10,
     world: bay,
     time: 0.3,
     cut: 'white',
     out: 'fade',
-    setup() {
+    speak: 0.6,
+    lines: [
+      ['teller', 'But wherever you go, the clouds roll back — for everyone!'],
+      ['bunny', 'Look! The clouds are moving!', { gap: 0.4 }],
+      ['boy', 'Come on! Let’s light those lanterns!', { gap: 0.3 }],
+      ['teller', 'Toon Isle!', { gap: 0.6, quiet: true }],
+    ],
+    hold: 3.4,
+    marks: (s) => ({ title: s.said[3].at - 0.2 }),
+    setup(shot) {
       renderer.setFog(fog);
-      for (const [i, look] of KIDS.entries()) {
-        kid(look, (t) => {
-          const p = walkAt(t, i * 1.6);
+      const { title } = shot.marks(shot);
+      // (Walking slower, to stay in the picture as long as the shot is.)
+      const pace = 10 / shot.dur;
+      for (const i of [0, 1, 2]) {
+        hero(i, (t) => {
+          const p = walkAt(t * pace, i * 1.6);
           const x = p.x + (i - 1) * 1.2;
-          return { x, y: groundY(bay.world, x, p.z), z: p.z, yaw: p.yaw, anim: t > 0.3 ? ANIM.walk : ANIM.idle, speed: 2.6, emote: t > 7.5 ? 'cheer' : undefined };
+          return { x, y: groundY(bay.world, x, p.z), z: p.z, yaw: p.yaw, anim: t > 0.3 ? ANIM.walk : ANIM.idle, speed: 2.6 * pace, emote: t > title ? 'cheer' : undefined };
         });
       }
       prop(skyLantern(1, () => false), () => ({ x: lantern[0] + 0.5, y: lantern[1] + 2.6, z: lantern[2] + 0.5 }));
     },
     fx(t) {
-      const lead = walkAt(t, 0);
+      const lead = walkAt((t * 10) / walk.dur, 0);
       const fresh = unveil(fog, lead.x, lead.z, 22);
       if (fresh.length) renderer.fogChanged(fog, fresh);
     },
@@ -1913,10 +2367,9 @@ function intro5() {
       { t: 10, pos: [sp.x + 16, sp.y + 22, sp.z + 26], look: [sp.x - 4, sp.y + 2, sp.z - 40], fov: 56 },
     ]),
   });
-  const last = shots.at(-1).start;
-  overlays.push(caption(last + 0.5, 4.2, 'Wherever you go, the clouds roll back — for everyone. Find every battle, win them all, and light the Sky Lanterns again!'));
-  overlays.push(titleCard(last + 5, 4.6, 'Toon Isle', 'Episode 5 · Light all five Sky Lanterns — together!', { size: 84 }));
-  return { shots, overlays, poster: last + 7 };
+  const title = walk.start + walk.marks(walk).title;
+  r.over(titleCard(title, walk.start + walk.dur - title - 0.2, 'Toon Isle', 'Episode 5 · Light all five Sky Lanterns — together!', { size: 84 }));
+  return r.done({ poster: title + 1.8 });
 }
 
 // ------------------------------------------------------------ the ending, episode 5
@@ -1925,7 +2378,7 @@ function intro5() {
 // and shrinking to a little white cloud; the five Sky Lanterns floating up
 // together; the Cloud Blanket blowing away off Lollipop Bay; everyone on the
 // beach under the lanterns, with fireworks; the credits; and the little cloud
-// watering the toadstools, politely.
+// watering the toadstools, politely — with a present for you.
 function ending5() {
   const top = isle(TOON_FROM + 4);
   const bay = isle(TOON_FROM);
@@ -1933,55 +2386,61 @@ function ending5() {
   const arena = top.battles.find((b) => b.kind === 'showdown');
   const lantern = bay.hub.lantern;
   const sp = bay.world.spawn;
-  const shots = [];
-  const overlays = [];
-  let at = 0;
-  const add = (shot) => {
-    shot.start = at;
-    shots.push(shot);
-    at += shot.dur;
-    return shot;
-  };
+  const r = reel();
 
   // 1. Pop! The Baron whizzes round and round over his arena, shrinking.
-  add({
+  const pop = r.add({
+    name: 'pop',
     dur: 7,
     world: top,
     time: 0.42,
     cut: 'fade',
-    setup() {
-      renderer.setFog(null);
-      monster('bluster', (t) => {
-        const k = ease(Math.min(1, t / 5));
-        const a = t * (3 + t * 1.2);
-        const r = t < 1.2 ? 0 : 6 * Math.sin(Math.min(1, (t - 1.2) / 4.5) * Math.PI);
-        return { x: arena.x + Math.cos(a) * r, y: arena.y + 3 + k * 5, z: arena.z + Math.sin(a) * r, yaw: a + Math.PI / 2, state: t < 1.2 ? 'dazed' : 'giggle', scale: 1 - 0.72 * k };
-      });
-      for (const [i, look] of KIDS.entries()) {
+    speak: 0.3,
+    lines: [
+      ['bluster', 'No! Not my top hat!'],
+      ['teller', 'Baron Bluster is popped, top hat and all! Off he whizzes like a burst balloon, round and round, shrinking as he goes…', { gap: 0.6 }],
+    ],
+    marks: (s) => ({ pop: s.said[0].end + 0.1 }),
+    setup(shot) {
+      const { pop: at } = shot.marks(shot);
+      const whizz = Math.max(5, shot.dur - at - 0.5);
+      voiced(
+        monster('bluster', (t) => {
+          const u = Math.max(0, t - at);
+          const k = ease(Math.min(1, u / whizz));
+          const a = u * (3 + u * 1.2 * (5 / whizz));
+          const r0 = u <= 0 ? 0 : 6 * Math.sin(Math.min(1, u / whizz) * Math.PI);
+          return { x: arena.x + Math.cos(a) * r0, y: arena.y + 3 + k * 5, z: arena.z + Math.sin(a) * r0, yaw: a + Math.PI / 2, state: u <= 0 ? 'dazed' : 'giggle', scale: 1 - 0.72 * k };
+        }),
+        'bluster',
+        0.6,
+      );
+      for (const i of [0, 1, 2]) {
         const x = arena.x + 7 + i * 1.6;
         const z = arena.z + 6 - i;
-        kid(look, (t) => ({ x, y: groundY(top.world, x, z), z, yaw: Math.atan2(arena.x - x, arena.z - z), emote: t > 1.4 ? 'cheer' : 'surprise', anim: ANIM.idle }));
+        hero(i, (t) => ({ x, y: groundY(top.world, x, z), z, yaw: Math.atan2(arena.x - x, arena.z - z), emote: t > at + 0.2 ? 'cheer' : 'surprise', anim: ANIM.idle }));
       }
     },
     fx(t) {
-      once(shots[0], 'pop', t, 1, () => {
+      once(pop, 'pop', t, pop.marks(pop).pop, () => {
         renderer.effects.confetti(arena.x, arena.y + 4, arena.z, 160, 1.6);
         renderer.effects.sparkles(arena.x, arena.y + 4, arena.z, 60, ['#ffffff', '#e6defa', '#fff3a0']);
       });
     },
     camera: keys([
-      { t: 0, pos: [arena.x + 14, arena.y + 4, arena.z + 14], look: [arena.x, arena.y + 3, arena.z], fov: 50 },
+      { t: 0, pos: [arena.x + 11, arena.y + 4, arena.z + 11], look: [arena.x, arena.y + 3, arena.z], fov: 50 },
       { t: 7, pos: [arena.x + 18, arena.y + 6, arena.z + 18], look: [arena.x, arena.y + 7, arena.z], fov: 54 },
     ]),
   });
-  overlays.push(caption(0.8, 6, 'Baron Bluster is popped, top hat and all! He goes off like a burst balloon, whizzing round and round, shrinking as he goes…'));
 
   // 2. The five Sky Lanterns float up together.
-  add({
+  r.add({
+    name: 'lanterns',
     dur: 7,
     world: top,
     time: 0.74,
     cut: 'cut',
+    lines: [['teller', 'All five Sky Lanterns float up together, brighter than ever…']],
     setup() {
       for (let i = 0; i < 5; i++) {
         const a = (i / 5) * Math.PI * 2;
@@ -1997,20 +2456,21 @@ function ending5() {
       { t: 7, pos: [arena.x + 20, arena.y + 4, arena.z + 22], look: [arena.x, arena.y + 16, arena.z], fov: 56 },
     ]),
   });
-  overlays.push(caption(shots[1].start + 0.5, 6, 'All five Sky Lanterns float up together, brighter than ever…'));
 
   // 3. …and the Cloud Blanket blows away, from the middle out.
   const fog = blanket(bay.world, [[sp.x, sp.z, 30]]);
-  add({
+  r.add({
+    name: 'clear',
     dur: 8,
     world: bay,
     time: 0.36,
     cut: 'flash',
+    lines: [['teller', '…and the Cloud Blanket blows away for good! Toon Isle shines in the sun from end to end, brighter than any cartoon!']],
     setup() {
       renderer.setFog(fog);
     },
     fx(t) {
-      const fresh = unveil(fog, 128, 124, Math.max(0, (t - 0.6) * 26));
+      const fresh = unveil(fog, 128, 124, Math.max(0, (t - 0.6) * 22));
       if (fresh.length) renderer.fogChanged(fog, fresh);
     },
     camera: keys([
@@ -2018,21 +2478,26 @@ function ending5() {
       { t: 8, pos: [128 + 80, SEA + 90, 124 + 140], look: [128, SEA + 4, 112], fov: 56 },
     ]),
   });
-  overlays.push(caption(shots[2].start + 0.6, 7, 'And the Cloud Blanket blows away for good: Toon Isle shines in the sun from end to end, brighter than any cartoon!'));
 
   // 4. Everyone on the beach of Lollipop Bay, the Sky Lantern lit, fireworks.
-  add({
+  const party = r.add({
+    name: 'party',
     dur: 8,
     world: bay,
     time: 0.3,
     cut: 'fade',
+    lines: [
+      ['girl', 'We did it!', { pan: 0.2 }],
+      ['boy', 'Toon Isle is free!', { gap: 0.3, pan: 0.3 }],
+      ['teller', 'The Sky Lanterns shine over Toon Isle again. Thank you, heroes!', { gap: 0.6 }],
+    ],
     setup() {
       renderer.setFog(null);
       prop(skyLantern(1, () => true), (t) => ({ x: lantern[0] + 0.5, y: lantern[1] + 2.6 + Math.sin(t * 2) * 0.1, z: lantern[2] + 0.5 }));
-      for (const [i, look] of KIDS.entries()) {
+      for (const i of [0, 1, 2]) {
         const x = lantern[0] + 4 + i * 1.6;
         const z = lantern[2] + 5 - i * 0.6;
-        kid(look, (t) => ({ x, y: groundY(bay.world, x, z), z, yaw: Math.PI + 0.5, emote: (t + i) % 3 < 1.5 ? 'cheer' : 'wave', anim: ANIM.idle }));
+        hero(i, (t) => ({ x, y: groundY(bay.world, x, z), z, yaw: Math.PI + 0.5, emote: (t + i) % 3 < 1.5 ? 'cheer' : 'wave', anim: ANIM.idle }));
       }
       for (let i = 0; i < 3; i++) {
         const x = lantern[0] - 4 - i * 1.4;
@@ -2049,10 +2514,10 @@ function ending5() {
       { t: 8, pos: [lantern[0] + 14, lantern[1] + 6, lantern[2] + 22], look: [lantern[0], lantern[1] + 6, lantern[2]], fov: 58 },
     ]),
   });
-  overlays.push(caption(shots[3].start + 0.5, 7.2, 'The Sky Lanterns shine over Toon Isle again. Thank you, heroes!'));
 
   // 5. The credits, over the island at sunset.
-  add({
+  const credits = r.add({
+    name: 'credits',
     dur: 14,
     world: bay,
     time: 0.71,
@@ -2063,28 +2528,41 @@ function ending5() {
     camera: orbit([128, SEA + 6, 124], 120, 60, 0.6, -0.2, 14, 50),
   });
   const cast = TOON_CHAPTERS.flatMap((ch) => ch.battles.filter((b) => b.kind === 'hunt').map((b) => `🐾 ${b.who}`));
-  overlays.push(roll(shots.at(-1).start + 0.3, 13.5, ['#Toon Isle', 'Episode 5', '', '#Starring', 'You and your friends', '', '#and', '🎩 Baron Bluster', ...cast, '🥚 the Storm Nests', '', '#The five Sky Lanterns', ...TOON_CHAPTERS.map((ch) => ch.icon + ' ' + ch.name), '', '#Made in Kids World', 'Thank you for playing!']));
+  r.over(roll(credits.start + 0.3, 13.5, ['#Toon Isle', 'Episode 5', '', '#Starring', 'You and your friends', '', '#and', '🎩 Baron Bluster', ...cast, '🥚 the Storm Nests', '', '#The five Sky Lanterns', ...TOON_CHAPTERS.map((ch) => ch.icon + ' ' + ch.name), '', '#Voices', 'Kokoro', '', '#Made in Kids World', 'Thank you for playing!']));
 
-  // 6. The little cloud, watering the toadstools. Politely. (A toadstool
-  // seen from where no other tree is in the way: the woods are thick.)
+  // 6. The little cloud, watering the toadstools. Politely. And so sorry, he
+  // gives away the softest bit of himself: the story goes on, in the sixth
+  // episode. (A toadstool seen from where no other tree is in the way: the
+  // woods are thick.)
   const { at: shroomAt, angle, cap } = clearestTree(woods.world, B.TOON_SHROOM, 10, 0.93);
   const [sx, sy, sz] = shroomAt;
   const shroomCamera = keys([
     { t: 0, pos: [sx + Math.sin(angle) * 10, sy + cap + 0.4, sz + Math.cos(angle) * 10], look: [sx, sy + cap + 0.9, sz], fov: 46 },
     { t: 7, pos: [sx + Math.sin(angle - 0.1) * 7.8, sy + cap + 0.8, sz + Math.cos(angle - 0.1) * 7.8], look: [sx, sy + cap + 1.2, sz], fov: 44 },
   ]);
-  add({
+  const teaser = r.add({
+    name: 'teaser',
     dur: 7,
     world: woods,
     time: 0.3,
     cut: 'fade',
     out: 'fade',
+    speak: 0.5,
+    lines: [
+      ['teller', 'And the Baron? He is a little white cloud now, and every morning he waters the toadstools. Politely.'],
+      ['puff', 'Oh! And this is for you: the softest bit of me. A Cloud Pillow!', { gap: 0.6 }],
+    ],
+    hold: 3,
+    marks: (s) => ({ title: s.said[1].end + 0.3 }),
     setup() {
       renderer.setFog(null);
-      const baron = monster('bluster', (t) => {
-        const x = sx + Math.sin(t * 0.6) * 0.6;
-        return { x, y: sy + cap + 2.45 + Math.sin(t * 1.4) * 0.2, z: sz, yaw: towards(shroomCamera(t).pos, x, sz) + Math.sin(t * 0.7) * 0.2, state: 'idle', scale: 0.32 };
-      });
+      const baron = voiced(
+        monster('bluster', (t) => {
+          const x = sx + Math.sin(t * 0.6) * 0.6;
+          return { x, y: sy + cap + 2.45 + Math.sin(t * 1.4) * 0.2, z: sz, yaw: towards(shroomCamera(t).pos, x, sz) + Math.sin(t * 0.7) * 0.2, state: 'idle', scale: 0.32 };
+        }),
+        'puff',
+      );
       baron.model.calm();
     },
     fx() {
@@ -2092,12 +2570,9 @@ function ending5() {
     },
     camera: shroomCamera,
   });
-  const teaser = shots.at(-1).start;
-  overlays.push(caption(teaser + 0.4, 4, 'And the Baron? He is a little white cloud now, and every morning he waters the toadstools. Politely.'));
-  // (He was so sorry, he gave away the softest bit of himself. The story goes
-  // on, in the sixth episode.)
-  overlays.push(titleCard(teaser + 4.4, 2.6, 'The story goes on…', 'The Baron’s Cloud Pillow: Episode 6, The Land of Nod', { size: 70 }));
-  return { shots, overlays, poster: shots[3].start + 5 };
+  const title = teaser.start + teaser.marks(teaser).title;
+  r.over(titleCard(title, teaser.start + teaser.dur - title - 0.2, 'The story goes on…', 'The Baron’s Cloud Pillow: Episode 6, The Land of Nod', { size: 70 }));
+  return r.done({ poster: party.start + 5 });
 }
 
 // ------------------------------------------------------------ the sixth episode
@@ -2164,43 +2639,50 @@ function along(path, s) {
 
 // ------------------------------------------------------------ the intro, episode 6
 
-// Its intro: Baron Bluster's Cloud Pillow on the beach of Lollipop Bay, and
-// you and your friends sinking right through it; down through the sky of the
-// first dream; the Night Mare, galloping round her black moon with the Sweet
-// Dreams; a dream after another, and who has each; her frights; and you and
+// Its intro: Baron Bluster's Cloud Pillow on the beach of Lollipop Bay, the
+// little cloud wishing you sweet dreams, and you and your friends sinking
+// right through it; down through the sky of the first dream; the Night Mare,
+// galloping round her black moon with the Sweet Dreams; a dream after
+// another, and who has each, and what they say; her frights; and you and
 // your friends on the great pillow, and the title.
+
+// What the frights of each dream say, shown with it.
+const NOD_SAYS = { pillow: ['rambunctious', 'Baa! Out of my way!'], garden: ['munch', 'Munch, munch! Yummy dreams!'], music: ['maestro', 'Louder! Louder!'], clock: ['tock', 'Tick, tock… bong!'] };
+
 function intro6() {
   const bay = isle(TOON_FROM);
   const sp = bay.world.spawn;
   const pillow = dreamOf('pillow');
   const dark = dreamOf('mare');
-  const shots = [];
-  const overlays = [];
-  let at = 0;
-  const add = (shot) => {
-    shot.start = at;
-    shots.push(shot);
-    at += shot.dur;
-    return shot;
-  };
+  const r = reel();
 
-  // 1. The beach of Lollipop Bay at dusk: the Cloud Pillow, and down they sink.
+  // 1. The beach of Lollipop Bay at dusk: the Cloud Pillow, the little cloud
+  // wishing you sweet dreams, and down you sink.
   const px = sp.x;
   const pz = sp.z - 3;
   const py = groundY(bay.world, px, pz);
-  add({
+  r.add({
+    name: 'pillow',
     dur: 9,
     world: bay,
     time: 0.74,
     cut: 'fade',
+    speak: 0.6,
+    lines: [
+      ['puff', 'My softest bit, just for you. Sweet dreams!'],
+      ['teller', 'Lie down on the Cloud Pillow… and down you sink…', { at: 4 }],
+    ],
     setup() {
       renderer.setFog(null);
       prop(cloudPillow(1.5), (t) => ({ x: px, y: py + Math.sin(t * 1.6) * 0.05, z: pz, scale: 1 + Math.sin(t * 1.6) * 0.02 }));
-      const baron = monster('bluster', (t) => ({ x: px - 3.6, y: py + 3.2 + Math.sin(t * 1.4) * 0.2, z: pz - 1.5, yaw: 0.75 + Math.sin(t * 0.7) * 0.15, state: 'idle', scale: 0.42 }));
+      const baron = voiced(
+        monster('bluster', (t) => ({ x: px - 3.6, y: py + 3.2 + Math.sin(t * 1.4) * 0.2, z: pz - 1.5, yaw: 0.75 + Math.sin(t * 0.7) * 0.15, state: 'idle', scale: 0.42 })),
+        'puff',
+      );
       baron.model.calm();
-      for (const [i, look] of KIDS.entries()) {
+      for (const i of [0, 1, 2]) {
         const lx = px + (i - 1) * 1.3;
-        kid(look, (t) => {
+        hero(i, (t) => {
           const k = ease(Math.min(1, Math.max(0, (t - 0.3) / 2)));
           const on = t > 2.4;
           const sink = ease(Math.min(1, Math.max(0, (t - 5.4 - i * 0.4) / 2)));
@@ -2217,7 +2699,6 @@ function intro6() {
       { t: 9, pos: [px + 2.4, py + 3.6, pz + 7], look: [px - 0.2, py + 1.5, pz], fov: 46 },
     ]),
   });
-  overlays.push(caption(0.7, 8, 'Baron Bluster, a polite little cloud these days, gave you the softest bit of himself: the Cloud Pillow. Lie down on it — and down you sink…'));
 
   // 2. Down through the sky of the first dream.
   const cradle = pillow.dream.space.byKey.get('cradle');
@@ -2226,13 +2707,20 @@ function intro6() {
     const k = ease(Math.min(1, t / 7.4));
     return V(lerp(40, land.x + (i - 1) * 1.7, k) + Math.sin(t * 1.2 + i * 2) * (1 - k) * 1.2, lerp(36, land.y + 1.4, k), lerp(64, land.z + 1.5, k) + (i === 1 ? 1.4 : 0) * (1 - k));
   };
-  add({
+  r.add({
+    name: 'fall',
     dur: 8,
     world: pillow,
     cut: 'white',
     lit: 0.2,
+    stretch: true,
+    lines: [
+      ['boy', 'Whoa! We’re falling!'],
+      ['bunny', 'Into a dream!', { gap: 0.2 }],
+      ['teller', '…right through, into the Land of Nod: no island, no sea, and not a brick to be seen — only skies of little worlds!', { gap: 0.4 }],
+    ],
     setup() {
-      for (const [i, look] of KIDS.entries()) kid(look, (t) => ({ ...drop(t, i), up: unit(V(0.25 * Math.sin(t * 0.9 + i), 1, 0.2)), h: flatUnit(V(-0.5, 0, -0.85), V(0, 1, 0)), anim: ANIM.air, speed: 0 }));
+      for (const i of [0, 1, 2]) hero(i, (t) => ({ ...drop(t, i), up: unit(V(0.25 * Math.sin(t * 0.9 + i), 1, 0.2)), h: flatUnit(V(-0.5, 0, -0.85), V(0, 1, 0)), anim: ANIM.air, speed: 0 }));
     },
     camera: (t) => {
       const p = drop(t, 1);
@@ -2240,23 +2728,25 @@ function intro6() {
       return { pos: [p.x + 0.55 * back, p.y + 4.2, p.z + 0.83 * back], look: mix(arr(p), [4, 8, -8], 0.22), fov: 56 };
     },
   });
-  overlays.push(caption(shots[1].start + 0.5, 7, '…right through, into the Land of Nod: no island, no sea and not a brick to be seen — only skies of little worlds!'));
 
   // 3. The Night Mare, galloping round and round her black moon.
   const moon = dark.dream.space.byKey.get('moon');
   const ms = moon.spot(V(-4, 10, 12));
   const gallop = moon.walk(ms, flatUnit(V(1, 0.1, -0.2), ms.up), 96, 1);
-  add({
+  r.add({
+    name: 'mare',
     dur: 8,
     world: dark,
     cut: 'flash',
+    lines: [['teller', 'But the Night Mare has trampled five dreams into nightmares — and carried off their Sweet Dreams!']],
+    keepCamera: true,
     setup() {
       fright('mare', (t) => ({ ...along(gallop, t * 8.5), state: 'walk', speed: 9, more: [0, 0] }));
       for (let i = 0; i < 5; i++) {
         prop(sweetDream(i, 0.8), (t) => {
           const q = along(gallop, t * 8.5 - 2.6 - i * 0.35);
-          const r = plus(plus(q, q.up, 3.4 + Math.sin(t * 2.4 + i * 1.3) * 0.5), cross(q.up, q.h), Math.sin(t * 1.9 + i * 1.26) * 1.5);
-          return { ...r, ry: t };
+          const r0 = plus(plus(q, q.up, 3.4 + Math.sin(t * 2.4 + i * 1.3) * 0.5), cross(q.up, q.h), Math.sin(t * 1.9 + i * 1.26) * 1.5);
+          return { ...r0, ry: t };
         });
       }
     },
@@ -2273,9 +2763,8 @@ function intro6() {
       return { pos: arr(p), look: arr(plus(at2, at2.up, 1.7)), up: arr(q.up), fov: 54 };
     },
   });
-  overlays.push(caption(shots[2].start + 0.5, 7, 'But the Night Mare has trampled five dreams into nightmares — and carried off their Sweet Dreams!'));
 
-  // 4. A dream after another, and who has each.
+  // 4. A dream after another, who has each, and what it says.
   const bossIn = (key, frame) => {
     const d = dreamOf(key);
     const b = d.dream.boss;
@@ -2283,24 +2772,41 @@ function intro6() {
     return { d, b, body, s: { ...b.at, dir: b.at.dir ?? flatUnit(V(0, 0, 1), b.at.up) }, frame };
   };
   const castOf = {
-    pillow(x) {
-      fright('rambunctious', (t) => ({ ...x.s, h: x.s.dir, state: t % 1.5 < 1 ? 'wind' : 'idle', k: t % 1.5, kind: 'charge', speed: 0, more: [0, 0] }));
+    pillow(x, who) {
+      voiced(
+        fright('rambunctious', (t) => ({ ...x.s, h: x.s.dir, state: t % 1.5 < 1 ? 'wind' : 'idle', k: t % 1.5, kind: 'charge', speed: 0, more: [0, 0] })),
+        who,
+        0.6,
+      );
     },
-    garden(x) {
+    garden(x, who) {
       const path = x.body.walk(x.s, flatUnit(turn(x.s.dir, x.s.up, 0), x.s.up), 60, 1);
-      fright('munch', (t) => ({ ...along(path, 16 + t * 2.2), state: 'walk', speed: 2.4, more: [0, 0] }));
+      voiced(
+        fright('munch', (t) => ({ ...along(path, 16 + t * 2.2), state: 'walk', speed: 2.4, more: [0, 0] })),
+        who,
+        0.6,
+      );
       for (let i = 0; i < 7; i++) fright('munchseg', (t) => ({ ...along(path, 16 + t * 2.2 - 1.9 - i * 1.55), state: 'walk', speed: 2.4, more: [i === 6 ? 1 : 0, 0] }));
     },
-    music(x) {
-      fright('maestro', (t) => ({ ...x.s, h: x.s.dir, state: 'idle', speed: 0, more: [t % 2 < 1.4 ? 1 : 0] }));
+    music(x, who) {
+      voiced(
+        fright('maestro', (t) => ({ ...x.s, h: x.s.dir, state: 'idle', speed: 0, more: [t % 2 < 1.4 ? 1 : 0] })),
+        who,
+        0.6,
+      );
     },
-    clock(x) {
-      fright('tock', (t) => ({ ...x.s, h: x.s.dir, state: t % 2 < 1 ? 'act' : 'idle', run: t % 1, kind: 'beam', speed: 0, more: [0, 0] }));
+    clock(x, who) {
+      voiced(
+        fright('tock', (t) => ({ ...x.s, h: x.s.dir, state: t % 2 < 1 ? 'act' : 'idle', run: t % 1, kind: 'beam', speed: 0, more: [0, 0] })),
+        who,
+        0.6,
+      );
     },
   };
   for (const [i, ch] of NOD_CHAPTERS.slice(0, 4).entries()) {
     const x = bossIn(ch.key);
     const boss = NOD_BOSSES[x.b.kind];
+    const [who, says] = NOD_SAYS[ch.key];
     let camera;
     if (ch.key === 'garden') {
       const path = x.body.walk(x.s, x.s.dir, 60, 1);
@@ -2314,17 +2820,21 @@ function intro6() {
       const high = ch.key === 'clock' ? 2.9 : ch.key === 'music' ? 1.9 : 1.6;
       camera = facing(x.s, x.s.dir, high, ch.key === 'clock' ? [[11, 4.6, 5, 50], [9, 3.6, 2, 48]] : [[8.4, 3.2, 4, 50], [7, 2.6, 1.4, 46]], 3);
     }
-    const shot = add({
+    const shot = r.add({
+      name: `dream${i}`,
       dur: 3,
+      fixed: true,
       world: x.d,
       cut: i === 0 ? 'flash' : 'cut',
       lit: 0.75,
+      speak: 0.35,
+      lines: [[who, says, { max: 2.4 }]],
       setup() {
-        castOf[ch.key](x);
+        castOf[ch.key](x, who);
       },
       camera,
     });
-    overlays.push(nameCard(shot.start + 0.15, 2.7, `${ch.icon} ${ch.name}`, `${boss.icon} ${boss.name} · ${ch.nightmares.slice(0, 3).map((n) => n.name).join(' · ')}`));
+    r.over(nameCard(shot.start + 0.15, 2.7, `${ch.icon} ${ch.name}`, `${boss.icon} ${boss.name} · ${ch.nightmares.slice(0, 3).map((n) => n.name).join(' · ')}`, { top: true }));
   }
 
   // 5. Her frights, coming over the edge of a moon.
@@ -2334,11 +2844,14 @@ function intro6() {
   const back = big.walk(fs, flatUnit(V(0.2, 0.7, -0.8), fs.up), 9, 1).at(-1);
   const side = cross(fs.up, fd);
   const rows = [['thimble', -3, 1], ['ram', 0, 0], ['bunny', -1.5, 2.6], ['bunny', 1.4, 2.8], ['bunny', 3.4, 2], ['moth', 2.6, -0.6], ['alarm', -5, -1.4], ['inkling', 5, 0.6], ['twin', 4.4, -2.4]];
-  add({
+  r.add({
+    name: 'frights',
     dur: 6,
     world: pillow,
     cut: 'flash',
     lit: 0.5,
+    stretch: true,
+    lines: [['teller', 'Her frights guard themselves, and bops only clang. Here, you have to be brave at just the right moment!']],
     setup() {
       for (const [kind, right, ahead] of rows) {
         const from = big.spotNear(plus(plus(back, cross(back.up, flatUnit(sub(fs, back), back.up)), -right), flatUnit(sub(fs, back), back.up), ahead));
@@ -2352,46 +2865,56 @@ function intro6() {
       return { pos: arr(p), look: arr(plus(plus(fs, fs.up, -0.9), fd, -2.4)), up: arr(fs.up), fov: 60 };
     },
   });
-  overlays.push(caption(shots.at(-1).start + 0.4, 5.3, 'Her frights guard themselves, and bops only clang. Here you have to be brave at the right moment!'));
 
-  // 6. The heroes on the great pillow, and the title.
-  const hero = pillow.dream.start;
-  add({
+  // 6. You on the great pillow, wondering where you are; and the title.
+  const hero0 = pillow.dream.start;
+  const start = r.add({
+    name: 'start',
     dur: 10,
     world: pillow,
     cut: 'white',
     out: 'fade',
     lit: 0.3,
-    setup() {
-      for (const [i, look] of KIDS.entries()) {
-        const s = cradle.spotNear(plus(plus(hero, hero.dir, -1), cross(hero.up, hero.dir), (i - 1) * 1.7));
-        const path = cradle.walk(s, flatUnit(hero.dir, s.up), 4, 0.7);
-        kid(look, (t) => {
+    speak: 0.5,
+    lines: [
+      ['girl', 'Where are we?'],
+      ['boy', 'It’s a dream! Look at all the little worlds!', { gap: 0.3 }],
+      ['teller', 'Walk right round every little world, calm every nightmare, and bring the Sweet Dreams home!', { gap: 0.5 }],
+      ['teller', 'The Land of Nod!', { gap: 0.6, quiet: true }],
+    ],
+    hold: 3.4,
+    marks: (s) => ({ title: s.said[3].at - 0.2 }),
+    setup(shot) {
+      const [where, look] = shot.said;
+      for (const i of [0, 1, 2]) {
+        const s0 = cradle.spotNear(plus(plus(hero0, hero0.dir, -1), cross(hero0.up, hero0.dir), (i - 1) * 1.7));
+        const path = cradle.walk(s0, flatUnit(hero0.dir, s0.up), 4, 0.7);
+        hero(i, (t) => {
           const q = along(path, Math.min(3.4, Math.max(0, t - 0.4) * 1.7) * (1 / 0.7));
-          return { ...q, anim: t > 0.4 && t < 2.5 ? ANIM.walk : ANIM.idle, speed: t < 2.5 ? 1.7 : 0, emote: t > 6 + i * 0.3 ? 'cheer' : t > 3.2 ? 'wave' : undefined };
+          return { ...q, anim: t > 0.4 && t < 2.5 ? ANIM.walk : ANIM.idle, speed: t < 2.5 ? 1.7 : 0, emote: t < where.end ? 'surprise' : t < look.end ? 'wave' : t > look.end + 0.3 * i ? 'cheer' : undefined };
         });
       }
     },
     fx() {
-      if (Math.random() < 0.15) renderer.effects.sparkles(hero.x + (Math.random() - 0.5) * 10, hero.y + 2 + Math.random() * 4, hero.z + (Math.random() - 0.5) * 8, 2, ['#fff3a0', '#ffffff', '#ffd6ec']);
+      if (Math.random() < 0.15) renderer.effects.sparkles(hero0.x + (Math.random() - 0.5) * 10, hero0.y + 2 + Math.random() * 4, hero0.z + (Math.random() - 0.5) * 8, 2, ['#fff3a0', '#ffffff', '#ffd6ec']);
     },
     camera: keys([
-      { t: 0, pos: [hero.x + 6, hero.y + 2.4, hero.z + 7.5], look: [hero.x, hero.y + 1.5, hero.z - 2], fov: 50 },
-      { t: 10, pos: [hero.x + 20, hero.y + 15, hero.z + 30], look: [hero.x - 1, hero.y + 8, hero.z - 14], fov: 58 },
+      { t: 0, pos: [hero0.x + 6, hero0.y + 2.4, hero0.z + 7.5], look: [hero0.x, hero0.y + 1.5, hero0.z - 2], fov: 50 },
+      { t: 10, pos: [hero0.x + 20, hero0.y + 15, hero0.z + 30], look: [hero0.x - 1, hero0.y + 8, hero0.z - 14], fov: 58 },
     ]),
   });
-  const last = shots.at(-1).start;
-  overlays.push(caption(last + 0.5, 4.2, 'Walk right round every little world, calm every nightmare, and bring the Sweet Dreams home!'));
-  overlays.push(titleCard(last + 5, 4.6, 'The Land of Nod', 'Episode 6 · Bring back all five Sweet Dreams — together!', { size: 84 }));
-  return { shots, overlays, poster: last + 7.4 };
+  const title = start.start + start.marks(start).title;
+  r.over(titleCard(title, start.start + start.dur - title - 0.2, 'The Land of Nod', 'Episode 6 · Bring back all five Sweet Dreams — together!', { size: 84 }));
+  return r.done({ poster: title + 2 });
 }
 
 // ------------------------------------------------------------ the ending, episode 6
 
 // Its ending: the Night Mare standing trembling in the light of the three
-// lanterns — only a young horse, and afraid of the dark; the night-light, given
-// her to keep, and how she sleeps; the five Sweet Dreams floating home; a party
-// on the great pillow; the credits; and morning on the beach of Lollipop Bay.
+// lanterns — only a young horse, and afraid of the dark, and saying so; the
+// night-light, given her to keep, and how she sleeps; the five Sweet Dreams
+// floating home; a party on the great pillow; the credits; and morning on the
+// beach of Lollipop Bay.
 function ending6() {
   const bay = isle(TOON_FROM);
   const sp = bay.world.spawn;
@@ -2401,76 +2924,94 @@ function ending6() {
   const moon = dark.dream.space.byKey.get('moon');
   const top = { ...moon.spot(V(0.4, 12, 6)) };
   top.dir = flatUnit(V(0.1, 0, 1), top.up);
-  const shots = [];
-  const overlays = [];
-  let at = 0;
-  const add = (shot) => {
-    shot.start = at;
-    shots.push(shot);
-    at += shot.dur;
-    return shot;
-  };
+  const r = reel();
   const kidsRound = (far, emote) => {
-    for (const [i, look] of KIDS.entries()) {
+    for (const i of [0, 1, 2]) {
       // (Beside her, out of the camera's way.)
       const way = turn(top.dir, top.up, [-1.25, -0.85, 1.15][i]);
-      const s = moon.walk(top, way, far, 0.7).at(-1);
-      kid(look, (t) => ({ x: s.x, y: s.y, z: s.z, up: s.up, h: flatUnit(sub(top, s), s.up), anim: ANIM.idle, emote: emote(t, i) }));
+      const s0 = moon.walk(top, way, far, 0.7).at(-1);
+      hero(i, (t) => ({ x: s0.x, y: s0.y, z: s0.z, up: s0.up, h: flatUnit(sub(top, s0), s0.up), anim: ANIM.idle, emote: emote(t, i) }));
     }
   };
 
-  // 1. In the light of the three lanterns, trembling.
-  add({
+  // 1. In the light of the three lanterns, trembling — and afraid of the dark.
+  r.add({
+    name: 'calm',
     dur: 8,
     world: dark,
     cut: 'fade',
     lit: 1,
-    setup() {
+    speak: 0.6,
+    lines: [
+      ['teller', 'The Night Mare does not pop. She stands in the light of every lamp you lit, and trembles…'],
+      ['mare', 'Please… don’t turn the lights off.', { gap: 0.5 }],
+      ['teller', 'She is only a young horse — and she is afraid of the dark.', { gap: 0.5 }],
+    ],
+    setup(shot) {
+      const [, please] = shot.said;
       for (const l of renderer.nod.lanterns) l.set(true);
-      fright('mare', (t) => ({ ...top, x: top.x + Math.sin(t * 34) * 0.025, h: top.dir, state: 'idle', speed: 0.4, more: [0, 0] }));
-      kidsRound(4.2, (t) => (t > 1 && t < 3 ? 'surprise' : undefined));
+      voiced(
+        fright('mare', (t) => ({ ...top, x: top.x + Math.sin(t * 34) * 0.025, h: top.dir, state: 'idle', speed: 0.4, more: [0, 0] })),
+        'mare',
+        0.5,
+      );
+      kidsRound(4.2, (t) => (t > please.at && t < please.end + 1.6 ? 'surprise' : undefined));
     },
     camera: facing(top, top.dir, 1.5, [[10, 4.6, 4, 50], [8, 3.6, 2, 48]], 8),
   });
-  overlays.push(caption(0.7, 3.6, 'The Night Mare does not pop. She stands there in the light of every lamp you lit, and trembles…'));
-  overlays.push(caption(4.5, 3.3, '…and you see what nobody ever saw before: she is only a young horse, and she is afraid of the dark.'));
 
   // 2. The night-light, hers to keep; and she sleeps.
   const lightAt = moon.walk(top, turn(top.dir, top.up, 0.26), 3.7, 0.5).at(-1);
   let night = null;
-  add({
+  r.add({
+    name: 'light',
     dur: 8,
     world: dark,
     cut: 'cut',
     lit: 1,
-    setup() {
+    speak: 0.4,
+    lines: [
+      ['girl', 'Here. You can keep our night-light.'],
+      ['mare', 'For me? Oh… thank you.', { gap: 0.6 }],
+      ['teller', 'And she lies down, puts her nose by it, and sleeps.', { gap: 0.6 }],
+    ],
+    setup(shot) {
+      const [here, thanks] = shot.said;
+      const sleep = thanks.end + 0.4;
       for (const l of renderer.nod.lanterns) l.set(true);
-      fright('mare', (t) => ({ ...top, h: top.dir, state: t > 1.6 ? 'sleep' : 'idle', speed: 0, more: [0, 0] }));
-      kidsRound(4.2, (t) => (t < 1.4 ? 'wave' : t > 4 ? 'cheer' : undefined));
+      voiced(
+        fright('mare', (t) => ({ ...top, h: top.dir, state: t > sleep ? 'sleep' : 'idle', speed: 0, more: [0, 0] })),
+        'mare',
+        0.5,
+      );
+      kidsRound(4.2, (t) => (t < here.end ? 'wave' : t > sleep + 2.4 ? 'cheer' : undefined));
       night = new NightLight({ x: 0, y: 0, z: 0, up: V(0, 1, 0), dir: V(0, 0, 1), k: 0.3 });
       const holder = new THREE.Group();
       holder.add(night.group);
       prop(holder, (t, dt) => {
         night.update(dt, 1);
-        const k = ease(Math.min(1, t / 1.2));
+        // (Put down by her as it is given.)
+        const k = ease(Math.min(1, Math.max(0, t - here.at) / 1.2));
         return { x: lightAt.x + lightAt.up.x * (1 - k) * 2, y: lightAt.y + lightAt.up.y * (1 - k) * 2, z: lightAt.z + lightAt.up.z * (1 - k) * 2, up: lightAt.up, h: flatUnit(top.dir, lightAt.up) };
       });
+      shot.sleep = sleep;
     },
     fx(t) {
-      if (t > 2.6 && Math.random() < 0.06) renderer.effects.hearts?.(top.x, top.y + 2.4, top.z, 1);
+      const shot = r.shots.find((x) => x.name === 'light');
+      if (t > (shot.sleep ?? 99) + 1 && Math.random() < 0.06) renderer.effects.hearts?.(top.x, top.y + 2.4, top.z, 1);
     },
     camera: facing(top, top.dir, 0.9, [[8.6, 4, -4.4, 48], [7, 2.8, -3.4, 46]], 8),
   });
-  overlays.push(caption(shots[1].start + 0.4, 3.6, 'That is why she runs. So you give her the night-light to keep…'));
-  overlays.push(caption(shots[1].start + 4.3, 3.4, '…and she lies down, puts her nose by it, and sleeps.'));
 
   // 3. The five Sweet Dreams, floating home.
   const c = moon.c;
-  add({
+  const dreams = r.add({
+    name: 'dreams',
     dur: 8,
     world: dark,
     cut: 'flash',
     lit: 1,
+    lines: [['teller', 'All five Sweet Dreams float home, and everyone asleep, anywhere, turns over… and smiles.']],
     setup() {
       for (const l of renderer.nod.lanterns) l.set(true);
       for (let i = 0; i < 5; i++) {
@@ -2489,41 +3030,46 @@ function ending6() {
       { t: 8, pos: [c.x + 26, c.y + 22, c.z + 40], look: [c.x, c.y + 24, c.z], fov: 58 },
     ]),
   });
-  overlays.push(caption(shots[2].start + 0.5, 7, 'All five Sweet Dreams float home, and everyone asleep anywhere turns over, and smiles…'));
 
   // 4. A party on the great pillow: everyone's friends now.
   const cradle = pillow.dream.space.byKey.get('cradle');
-  const hero = pillow.dream.start;
-  add({
+  const hero0 = pillow.dream.start;
+  r.add({
+    name: 'party',
     dur: 8,
     world: pillow,
     cut: 'fade',
     lit: 1,
+    lines: [
+      ['teller', 'There is not a nightmare left in the Land of Nod.'],
+      ['bunny', 'Best dream ever!', { gap: 0.4, pan: 0.2 }],
+      ['teller', 'Thank you, heroes!', { gap: 0.5 }],
+    ],
     setup() {
       for (const l of renderer.nod.lamps.values()) l.set(true);
-      for (const [i, look] of KIDS.entries()) {
-        const s = cradle.spotNear(plus(hero, V(1, 0, 0), (i - 1) * 1.8));
-        kid(look, (t) => ({ x: s.x, y: s.y, z: s.z, up: s.up, h: flatUnit(V(0.35, 0, 1), s.up), emote: (t + i) % 3 < 1.5 ? 'cheer' : 'dance', anim: ANIM.idle }));
+      for (const i of [0, 1, 2]) {
+        const s0 = cradle.spotNear(plus(hero0, V(1, 0, 0), (i - 1) * 1.8));
+        hero(i, (t) => ({ x: s0.x, y: s0.y, z: s0.z, up: s0.up, h: flatUnit(V(0.35, 0, 1), s0.up), emote: (t + i) % 3 < 1.5 ? 'cheer' : 'dance', anim: ANIM.idle }));
       }
       for (const [i, kind] of ['bunny', 'bunny', 'ram', 'thimble', 'bunny', 'alarm'].entries()) {
-        const s = cradle.spotNear(plus(plus(hero, V(1, 0, 0), (i - 2.5) * 2), V(0, 0, 1), -3.4 - (i % 2) * 1.2));
-        const h = flatUnit(V(0.2, 0, 1), s.up);
-        fright(kind, (t) => ({ ...s, h: flatUnit(turn(h, s.up, Math.sin(t * 2 + i) * 0.4), s.up), state: 'walk', speed: 1.4, alt: Math.abs(Math.sin(t * 4 + i * 0.8)) * 0.35 }));
+        const s0 = cradle.spotNear(plus(plus(hero0, V(1, 0, 0), (i - 2.5) * 2), V(0, 0, 1), -3.4 - (i % 2) * 1.2));
+        const h = flatUnit(V(0.2, 0, 1), s0.up);
+        fright(kind, (t) => ({ ...s0, h: flatUnit(turn(h, s0.up, Math.sin(t * 2 + i) * 0.4), s0.up), state: 'walk', speed: 1.4, alt: Math.abs(Math.sin(t * 4 + i * 0.8)) * 0.35 }));
       }
     },
     fx(t) {
-      if (Math.random() < 0.09) renderer.effects.firework(hero.x - 16 + Math.random() * 32, hero.y + 14 + Math.random() * 8, hero.z - 26 + Math.random() * 12);
-      if (t < 0.1) renderer.effects.confetti(hero.x, hero.y + 4, hero.z, 160, 1.5);
+      if (Math.random() < 0.09) renderer.effects.firework(hero0.x - 16 + Math.random() * 32, hero0.y + 14 + Math.random() * 8, hero0.z - 26 + Math.random() * 12);
+      if (t < 0.1) renderer.effects.confetti(hero0.x, hero0.y + 4, hero0.z, 160, 1.5);
     },
     camera: keys([
-      { t: 0, pos: [hero.x + 4, hero.y + 2.2, hero.z + 8], look: [hero.x, hero.y + 1.8, hero.z - 2], fov: 54 },
-      { t: 8, pos: [hero.x + 7, hero.y + 5, hero.z + 14], look: [hero.x, hero.y + 4.4, hero.z - 4], fov: 58 },
+      { t: 0, pos: [hero0.x + 4, hero0.y + 2.2, hero0.z + 8], look: [hero0.x, hero0.y + 1.8, hero0.z - 2], fov: 54 },
+      { t: 8, pos: [hero0.x + 7, hero0.y + 5, hero0.z + 14], look: [hero0.x, hero0.y + 4.4, hero0.z - 4], fov: 58 },
     ]),
   });
-  overlays.push(caption(shots[3].start + 0.5, 7.2, 'There is not a nightmare left in the Land of Nod. Thank you, heroes!'));
 
   // 5. The credits, going round Pumpkin Skies in the sun.
-  add({
+  const credits = r.add({
+    name: 'credits',
     dur: 14,
     world: garden,
     cut: 'fade',
@@ -2533,26 +3079,40 @@ function ending6() {
       return { pos: [Math.sin(a) * 96, 46, Math.cos(a) * 96], look: [0, 26, 0], fov: 52 };
     },
   });
-  overlays.push(roll(shots.at(-1).start + 0.3, 13.5, ['#The Land of Nod', 'Episode 6', '', '#Starring', 'You and your friends', '', '#and', '🐴 The Night Mare', ...Object.values(NOD_BOSSES).slice(0, 4).map((q) => `${q.icon} ${q.name}`), '🌑 and all her frights', '', '#The five Sweet Dreams', ...NOD_CHAPTERS.map((ch) => ch.icon + ' ' + ch.name), '', '#Made in Kids World', 'Thank you for playing!']));
+  r.over(roll(credits.start + 0.3, 13.5, ['#The Land of Nod', 'Episode 6', '', '#Starring', 'You and your friends', '', '#and', '🐴 The Night Mare', ...Object.values(NOD_BOSSES).slice(0, 4).map((q) => `${q.icon} ${q.name}`), '🌑 and all her frights', '', '#The five Sweet Dreams', ...NOD_CHAPTERS.map((ch) => ch.icon + ' ' + ch.name), '', '#Voices', 'Kokoro', '', '#Made in Kids World', 'Thank you for playing!']));
 
   // 6. Morning on the beach of Lollipop Bay: what a dream that was.
   const px = sp.x;
   const pz = sp.z - 3;
   const py = groundY(bay.world, px, pz);
-  add({
+  const morning = r.add({
+    name: 'morning',
     dur: 7,
     world: bay,
     time: 0.27,
     cut: 'white',
     out: 'fade',
-    setup() {
+    speak: 1.6,
+    lines: [
+      ['boy', 'Whoa… what a dream!'],
+      ['puff', 'Good morning! Did you sleep well?', { gap: 0.4 }],
+      ['teller', 'And the Night Mare? She sleeps right through every night now, with her night-light on.', { gap: 0.5 }],
+    ],
+    hold: 3,
+    marks: (s) => ({ title: s.said[2].end + 0.3 }),
+    setup(shot) {
+      const [whoa] = shot.said;
       renderer.setFog(null);
       prop(cloudPillow(1.5), (t) => ({ x: px, y: py + Math.sin(t * 1.6) * 0.05, z: pz }));
-      const baron = monster('bluster', (t) => ({ x: px - 3.6, y: py + 3 + Math.sin(t * 1.4) * 0.2, z: pz - 1, yaw: 0.75, state: 'idle', scale: 0.42 }));
+      const baron = voiced(
+        monster('bluster', (t) => ({ x: px - 3.6, y: py + 3 + Math.sin(t * 1.4) * 0.2, z: pz - 1, yaw: 0.75, state: 'idle', scale: 0.42 })),
+        'puff',
+      );
       baron.model.calm();
-      for (const [i, look] of KIDS.entries()) {
+      for (const i of [0, 1, 2]) {
         const lx = px + (i - 1) * 1.3;
-        kid(look, (t) => (t < 2 + i * 0.4 ? { x: lx, y: py + 1.42, z: pz + 1.1, yaw: 0, anim: ANIM.lie } : { x: lx, y: py + 1.2, z: pz + 0.9, yaw: 0.2, anim: ANIM.idle, emote: t > 2.8 + i * 0.3 ? 'cheer' : undefined }));
+        const up = whoa.at - 0.6 + i * 0.3;
+        hero(i, (t) => (t < up ? { x: lx, y: py + 1.42, z: pz + 1.1, yaw: 0, anim: ANIM.lie } : { x: lx, y: py + 1.2, z: pz + 0.9, yaw: 0.2, anim: ANIM.idle, emote: t > whoa.end + 0.3 * i ? 'cheer' : undefined }));
       }
     },
     camera: keys([
@@ -2560,10 +3120,9 @@ function ending6() {
       { t: 7, pos: [px + 4, py + 4.4, pz + 10], look: [px - 0.6, py + 2.1, pz], fov: 48 },
     ]),
   });
-  const teaser = shots.at(-1).start;
-  overlays.push(caption(teaser + 0.4, 4, 'And the Night Mare? She sleeps right through every night now, with her night-light on.'));
-  overlays.push(titleCard(teaser + 4.4, 2.6, 'A new journey begins!', 'Come back to Adventure Isle!', { size: 70 }));
-  return { shots, overlays, poster: shots[1].start + 5 };
+  const title = morning.start + morning.marks(morning).title;
+  r.over(titleCard(title, morning.start + morning.dur - title - 0.2, 'A new journey begins!', 'Come back to Adventure Isle!', { size: 70 }));
+  return r.done({ poster: dreams.start + 5 });
 }
 
 export const films = { intro, ending, intro2, ending2, intro3, ending3, intro4, ending4, intro5, ending5, intro6, ending6 };

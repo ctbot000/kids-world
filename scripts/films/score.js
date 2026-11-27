@@ -42,7 +42,18 @@ class Band {
     this.out.ratio.value = 3;
     const master = ac.createGain();
     master.gain.value = 0.8;
-    this.out.connect(master).connect(ac.destination);
+    // (Quieter while anyone speaks: voices().)
+    this.duck = ac.createGain();
+    this.out.connect(master).connect(this.duck).connect(ac.destination);
+    // The voices, over it all, a little evened out.
+    this.voice = ac.createDynamicsCompressor();
+    this.voice.threshold.value = -20;
+    this.voice.ratio.value = 2.5;
+    this.voice.attack.value = 0.004;
+    this.voice.release.value = 0.2;
+    const lift = ac.createGain();
+    lift.gain.value = 1.5;
+    this.voice.connect(lift).connect(ac.destination);
     // A hall: a long tail of noise, dying away.
     const verb = ac.createConvolver();
     const len = Math.floor(RATE * 2.6);
@@ -311,6 +322,29 @@ class Band {
     });
   }
 
+  // Chords from t0 to t1, round and round the list, a bar each (the last one
+  // as long as there is room for).
+  bed(t0, t1, bpm, list, gain = 0.035, opts = {}) {
+    const bar = (60 / bpm) * 4;
+    for (let i = 0, t = t0; t < t1 - 0.4; i++, t += bar) {
+      const c = list[i % list.length];
+      const len = Math.min(bar * 1.02, t1 - t + 0.5);
+      this.strings(t, len, CHORDS[c], gain, { ...opts, release: Math.min(opts.release ?? 0.8, len * 0.45) });
+      this.bass(t, Math.min(bar * 0.48, len), CHORDS[c][0], 0.1);
+      if (t + bar / 2 < t1 - 0.3) this.bass(t + bar / 2, Math.min(bar * 0.45, t1 - t - bar / 2), CHORDS[c][0], 0.08);
+    }
+  }
+
+  // A music box's arpeggios from t0 to t1, round and round the chords.
+  twinkle(t0, t1, bpm, list, gain = 0.05) {
+    const e = 60 / bpm / 2;
+    for (let k = 0, t = t0; t < t1 - 0.1; k++, t += e) {
+      const n = CHORDS[list[Math.floor(k / 8) % list.length]];
+      const seq = [n[1], n[2], n[3], n[2]].map((x) => x.replace(/\d/, (d) => String(Number(d) + 2)));
+      this.pluck(t, hz(seq[k % 4]), { bell: true, gain, decay: 1.4 });
+    }
+  }
+
   // A drum kit's beat for bars: kick, a snare of noise, and toms.
   beat(t, bpm, bars, gain = 0.35) {
     const b = 60 / bpm;
@@ -322,10 +356,69 @@ class Band {
     }
   }
 
+  // Every line said in the film (cues.lines: { at, dur, key, pan, gain } each,
+  // its sound at /voices/<key>.wav), the music and sound going quieter under
+  // them: down as each starts, up again a little after it ends (lines close
+  // together as one).
+  async voices(lines) {
+    const ac = this.ac;
+    const said = lines.filter((l) => l.key).sort((a, b) => a.at - b.at);
+    const sounds = await Promise.all(said.map((l) => fetch(`/voices/${l.key}.wav`).then((r) => r.arrayBuffer()).then((b) => ac.decodeAudioData(b))));
+    said.forEach((l, i) => {
+      const src = ac.createBufferSource();
+      src.buffer = sounds[i];
+      const g = ac.createGain();
+      g.gain.value = l.gain ?? 1;
+      const p = ac.createStereoPanner();
+      p.pan.value = l.pan ?? 0;
+      src.connect(g).connect(p).connect(this.voice);
+      // (A touch of the hall, so they are in the same place as the music.)
+      const w = ac.createGain();
+      w.gain.value = 0.05;
+      p.connect(w).connect(this.wet);
+      src.start(l.at);
+    });
+    const spans = [];
+    for (const l of said) {
+      const last = spans.at(-1);
+      if (last && l.at - last[1] < 1) last[1] = Math.max(last[1], l.at + l.dur);
+      else spans.push([l.at, l.at + l.dur]);
+    }
+    const g = this.duck.gain;
+    g.setValueAtTime(1, 0);
+    for (const [a, b] of spans) {
+      g.setValueAtTime(1, Math.max(0, a - 0.25));
+      g.linearRampToValueAtTime(DUCK, Math.max(0.01, a));
+      g.setValueAtTime(DUCK, b);
+      g.linearRampToValueAtTime(1, b + 0.6);
+    }
+  }
+
   async render() {
     const buf = await this.ac.startRendering();
     return wav(buf);
   }
+}
+
+// How loud the music and sound are under the words.
+const DUCK = 0.42;
+
+// Where things are in a film (stage.js cuesOf), for its music to go by: c(name)
+// → { at, end, dur, m } of the shot of that name (c(i): the i-th; m: the
+// moments it marks, by name, in the film's time); c.total: how long the film
+// is; c.lines: what is said, and when.
+function cueBook(cues) {
+  const c = (which) => {
+    const s = typeof which === 'number' ? cues.shots.at(which) : cues.shots.find((x) => x.name === which);
+    if (!s) throw new Error(`no shot ${which} in the film`);
+    return { at: s.at, end: s.at + s.dur, dur: s.dur, m: s.marks ?? {} };
+  };
+  c.total = cues.length;
+  c.lines = cues.lines;
+  c.shots = cues.shots;
+  // Every shot whose name starts so, in order (a montage: 'cap0', 'cap1', …).
+  c.all = (prefix) => cues.shots.filter((x) => x.name?.startsWith(prefix)).map((x) => ({ at: x.at, end: x.at + x.dur, dur: x.dur, m: x.marks ?? {} }));
+  return c;
 }
 
 function wav(buf) {
@@ -376,102 +469,126 @@ const GRUMBLE = [
 const BPM = 96;
 const BAR = (60 / BPM) * 4;
 
-function intro(b) {
-  // 0–14.5: the isle at peace, a music box and strings, the theme on a flute.
-  b.chords(0, BPM, ['D', 'Bm', 'G', 'A', 'D', 'G'], 0.022, { attack: 1.2, release: 1.4 });
-  b.arps(0, BPM, ['D', 'Bm', 'G', 'A', 'D', 'G'], 0.045);
-  b.tune(2.5, BPM, THEME.slice(0, 14), 'flute', 0.07);
-  b.sea(0, 15, 0.03);
-  // 14.5–28.5: the storm and the theft, low and dark, thunder at each bolt.
-  b.strings(14.5, 8, ['D2', 'A2', 'D3', 'F3'], 0.04, { attack: 1, release: 1, tremolo: true });
-  b.strings(22.5, 6.5, ['Bb1', 'F2', 'Bb2', 'D3'], 0.04, { attack: 0.3, release: 1, tremolo: true });
-  b.rain(14.5, 14, 0.05);
-  for (const at of [14.9, 18, 20.9]) b.thunder(at, 0.45);
-  b.timpaniRoll(16.5, 1.6, 'D2', 0.18);
-  b.whoosh(19.9, 0.12, 0.6);
-  b.sparkle(17.9, 6, 0.05);
+function intro(b, c) {
+  const night = c('night');
+  const village = c('village');
+  const storm = c('storm');
+  const smash = c('break');
+  const caps = c.all('cap');
+  const throne = c('throne');
+  const boat = c('boat');
+  const morning = c('morning');
+  // The isle at peace: a music box and strings, the theme on a flute.
+  b.bed(0, village.end, BPM, ['D', 'Bm', 'G', 'A'], 0.022, { attack: 1.2, release: 1.4 });
+  b.twinkle(0, village.end - 0.5, BPM, ['D', 'Bm', 'G', 'A'], 0.04);
+  b.tune(night.at + 2.5, BPM, THEME.slice(0, 14), 'flute', 0.07);
+  b.sea(0, village.end, 0.03);
+  // The storm and the theft, low and dark, thunder at each bolt.
+  b.strings(storm.at, storm.m.grab - storm.at, ['D2', 'A2', 'D3', 'F3'], 0.04, { attack: 1, release: 1, tremolo: true });
+  b.strings(storm.m.grab, smash.end - storm.m.grab, ['Bb1', 'F2', 'Bb2', 'D3'], 0.04, { attack: 0.3, release: 1, tremolo: true });
+  b.rain(storm.at, smash.end - storm.at, 0.05);
+  for (const at of [storm.at + 0.5, storm.m.grab + 0.2, storm.m.leap + 0.9]) b.thunder(at, 0.45);
+  b.timpaniRoll(storm.m.grab - 1.6, 1.6, 'D2', 0.18);
+  b.sparkle(storm.m.grab, 6, 0.05);
+  b.whoosh(storm.m.leap, 0.12, 0.6);
+  b.tune(storm.m.grab + 0.4, BPM, GRUMBLE.slice(0, 8), 'bassoon', 0.05);
   // The Star broken: a crash, glass, and the shards whooshing away.
-  b.crash(24.7, 0.16, 4);
-  b.drum(24.7, { f: 90, to: 40, decay: 1.2, gain: 0.6 });
-  b.sparkle(24.7, 16, 0.06);
-  for (let k = 0; k < 6; k++) b.whoosh(24.9 + k * 0.18, 0.06, 0.8, (k % 2) - 0.5);
-  b.tune(25.5, BPM, GRUMBLE.slice(0, 8), 'bassoon', 0.06);
-  // 29–56.5: the captains, a bar each, driving: drums, a low ostinato, a horn hit at each cut.
-  const m0 = 29;
-  b.beat(m0, BPM, 11, 0.3);
+  b.crash(smash.m.smash, 0.16, 4);
+  b.drum(smash.m.smash, { f: 90, to: 40, decay: 1.2, gain: 0.6 });
+  b.sparkle(smash.m.smash, 16, 0.06);
+  for (let k = 0; k < 6; k++) b.whoosh(smash.m.smash + 0.2 + k * 0.18, 0.06, 0.8, (k % 2) - 0.5);
+  // The captains, a bar each, driving: drums, a low ostinato, a horn hit at each cut.
+  const m0 = caps[0].at;
+  b.beat(m0, BPM, caps.length, 0.3);
   const capChords = ['Dm', 'Bb', 'Gm', 'A', 'Dm', 'F', 'C', 'A', 'Dm', 'Bb', 'A'];
   b.chords(m0, BPM, capChords, 0.03, { attack: 0.08, release: 0.3 });
-  capChords.forEach((c, i) => {
+  capChords.forEach((ch, i) => {
     const t = m0 + i * BAR;
-    b.horn(t, 0.35, CHORDS[c][2], 0.08);
-    b.horn(t, 0.35, CHORDS[c][3], 0.06);
-    for (let k = 0; k < 8; k++) b.pluck(t + k * (BAR / 8), hz(CHORDS[c][k % 2 ? 1 : 0]), { gain: 0.08, decay: 0.3, type: 'sawtooth', verb: 0.15 });
+    b.horn(t, 0.35, CHORDS[ch][2], 0.08);
+    b.horn(t, 0.35, CHORDS[ch][3], 0.06);
+    for (let k = 0; k < 8; k++) b.pluck(t + k * (BAR / 8), hz(CHORDS[ch][k % 2 ? 1 : 0]), { gain: 0.08, decay: 0.3, type: 'sawtooth', verb: 0.15 });
   });
-  // 56.5–62.5: King Grumble on Gloom Rock: his tune.
-  b.tune(56.6, BPM, GRUMBLE, 'bassoon', 0.09);
-  b.chords(56.5, BPM, ['Dm', 'A'], 0.025, { attack: 0.1, release: 0.5 });
-  for (let k = 0; k < 8; k++) b.pluck(56.5 + k * 0.625, hz(k % 2 ? 'A2' : 'D2'), { gain: 0.1, decay: 0.4, type: 'triangle', verb: 0.2 });
-  // 62.5–69.5: the boat in the storm: rain, the sea, thunder, a choir.
-  b.rain(62.5, 7.3, 0.06);
-  b.sea(62.5, 7.3, 0.07);
-  b.thunder(63.7, 0.5);
-  b.thunder(67.1, 0.45);
-  b.choir(62.5, 7, ['D3', 'A3', 'D4'], 0.03);
-  b.strings(62.5, 7, ['D2', 'A2', 'F3'], 0.03, { attack: 1.5, release: 1.5 });
-  // 69.5–79.5: morning, the heroes, the title: the theme in full.
-  b.swell(69.5, 2.5, 0.08);
-  b.chords(72, BPM, THEME_CHORDS.slice(0, 3), 0.04, { attack: 0.2, release: 0.6 });
-  b.tune(72, BPM, THEME.slice(0, 14), 'horn', 0.1);
-  b.crash(73.3, 0.12, 3);
-  b.timpaniRoll(71.2, 0.8, 'D2', 0.2);
-  b.strings(79.5 - 2.3, 2.3, CHORDS.D, 0.04, { attack: 0.1, release: 1.6 });
-  b.sparkle(73.3, 10, 0.04);
+  // King Grumble on Gloom Rock: his tune, round again while he gloats.
+  b.tune(throne.at + 0.1, BPM, GRUMBLE, 'bassoon', 0.09);
+  b.bed(throne.at, throne.end, BPM, ['Dm', 'A'], 0.025, { attack: 0.1, release: 0.5 });
+  for (let t = throne.at; t < throne.end - 0.3; t += 0.625) b.pluck(t, hz(Math.round((t - throne.at) / 0.625) % 2 ? 'A2' : 'D2'), { gain: 0.1, decay: 0.4, type: 'triangle', verb: 0.2 });
+  // The boat in the storm: rain, the sea, thunder, a choir.
+  b.rain(boat.at, boat.dur + 0.3, 0.06);
+  b.sea(boat.at, boat.dur + 0.3, 0.07);
+  b.thunder(boat.at + 1.2, 0.5);
+  b.thunder(boat.at + 4.6, 0.45);
+  b.choir(boat.at, boat.dur, ['D3', 'A3', 'D4'], 0.03);
+  b.strings(boat.at, boat.dur, ['D2', 'A2', 'F3'], 0.03, { attack: 1.5, release: 1.5 });
+  // Morning, the heroes: the sea and a harp; then the title: the theme in full.
+  b.swell(morning.at, 2.5, 0.08);
+  b.sea(morning.at, morning.dur, 0.03);
+  b.bed(morning.at, morning.m.title, BPM, ['D', 'G', 'A', 'D'], 0.02, { attack: 0.8, release: 1 });
+  b.twinkle(morning.at + 0.5, morning.m.title - 0.6, BPM, ['D', 'G', 'A', 'D'], 0.035);
+  const title = morning.m.title;
+  b.timpaniRoll(title - 0.8, 0.8, 'D2', 0.2);
+  b.crash(title, 0.12, 3);
+  b.chords(title, BPM, THEME_CHORDS.slice(0, 2), 0.04, { attack: 0.2, release: 0.6 });
+  b.tune(title, BPM, THEME.slice(0, 9), 'horn', 0.1);
+  b.strings(morning.end - 2.3, 2.3, CHORDS.D, 0.04, { attack: 0.1, release: 1.6 });
+  b.sparkle(title, 10, 0.04);
 }
 
-function ending(b) {
-  // 0–6.5: the last bop, a pop, a fanfare.
-  b.timpaniRoll(0, 1.5, 'A2', 0.2);
-  b.pop(1.5, 0.35);
-  b.crash(1.5, 0.14, 3);
-  for (const [i, n] of ['D4', 'F#4', 'A4', 'D5'].entries()) b.horn(1.55 + i * 0.12, 1.8 - i * 0.12, n, 0.08);
-  b.sparkle(1.6, 14, 0.05);
-  b.cheer(1.8, 3.5, 0.03);
-  b.choir(2.5, 4, ['D4', 'A4', 'D5'], 0.025);
-  // 6.5–13.5: the shards flying home: harp rising, strings, sparkles.
-  b.chords(6.5, BPM, ['G', 'A', 'Bm'], 0.03, { attack: 0.6, release: 0.8 });
-  for (let k = 0; k < 28; k++) b.pluck(6.5 + k * 0.25, hz(['D4', 'F#4', 'A4', 'D5', 'E5', 'F#5', 'A5'][k % 7]), { gain: 0.07, decay: 1.4, type: 'triangle', verb: 0.45 });
-  for (let k = 0; k < 6; k++) b.whoosh(7 + k * 1.1, 0.05, 1.2, (k % 2) - 0.5);
-  // 13.5–22: round the lighthouse, and the Star whole: a big swell and chord.
-  b.choir(13.5, 8.5, ['A3', 'D4', 'F#4', 'A4'], 0.03);
-  b.swell(13.5, 3.1, 0.1);
-  b.crash(16.6, 0.16, 4);
-  b.drum(16.6, { f: 80, to: 40, decay: 1.5, gain: 0.55 });
-  b.sparkle(16.6, 20, 0.06);
-  b.strings(16.6, 5.4, ['D3', 'A3', 'D4', 'F#4', 'A4'], 0.045, { attack: 0.05, release: 2 });
-  b.horn(16.6, 4, 'D5', 0.08);
-  b.horn(16.6, 4, 'A4', 0.06);
-  // 22–37.6: all over the isle: the theme, bright, with drums.
-  b.beat(22, BPM, 6, 0.26);
-  b.chords(22, BPM, THEME_CHORDS.slice(0, 6), 0.035, { attack: 0.05, release: 0.4 });
-  b.tune(22, BPM, THEME.slice(0, 22), 'horn', 0.085);
-  b.arps(22, BPM, THEME_CHORDS.slice(0, 6), 0.035);
-  // 37.6–46.6: the party on the beach: fireworks, cheering, the theme's end.
-  b.chords(37.6, BPM, ['G', 'A7', 'D', 'D'], 0.035, { attack: 0.05, release: 0.5 });
-  b.tune(37.6, BPM, THEME.slice(14), 'flute', 0.08);
-  b.beat(37.6, BPM, 3, 0.22);
-  for (let k = 0; k < 8; k++) b.firework(37.9 + k * 1.05, 0.1);
-  b.cheer(37.8, 6, 0.035);
-  // 46.6–61.6: the credits, gently: a music box and strings.
-  b.chords(46.6, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.025, { attack: 1, release: 1.4 });
-  b.arps(46.6, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.04);
-  b.tune(47.8, 80, THEME.slice(0, 14), 'flute', 0.06);
-  b.sea(46.6, 15, 0.025);
-  // 61.6–70: but out at sea… King Grumble's tune, and a question.
-  b.sea(61.6, 8.4, 0.05);
-  b.tune(63.5, BPM, GRUMBLE, 'bassoon', 0.08);
-  b.pluck(67.6, hz('D2'), { gain: 0.14, decay: 0.6 });
-  b.strings(66.5, 3.5, ['D3', 'A3', 'G#4'], 0.03, { attack: 0.3, release: 1.6 });
-  b.horn(67.8, 1.8, 'A4', 0.07);
+function ending(b, c) {
+  const last = c('pop');
+  const home = c('home');
+  const whole = c('whole');
+  const cheers = c.all('cheer');
+  const beach = c('beach');
+  const credits = c('credits');
+  const teaser = c('teaser');
+  const pop = last.m.pop;
+  // The last bop: a drum roll as he swells, a pop, a fanfare.
+  b.timpaniRoll(last.at + 0.2, pop - last.at - 0.2, 'A2', 0.2);
+  b.pop(pop, 0.35);
+  b.crash(pop, 0.14, 3);
+  for (const [i, n] of ['D4', 'F#4', 'A4', 'D5'].entries()) b.horn(pop + 0.05 + i * 0.12, 1.8 - i * 0.12, n, 0.08);
+  b.sparkle(pop + 0.1, 14, 0.05);
+  b.cheer(pop + 0.3, 3.5, 0.03);
+  b.choir(pop + 1, last.end - pop - 0.6, ['D4', 'A4', 'D5'], 0.025);
+  // The shards flying home: harp rising, strings, sparkles.
+  b.bed(home.at, home.end, BPM, ['G', 'A', 'Bm'], 0.03, { attack: 0.6, release: 0.8 });
+  for (let t = home.at, k = 0; t < home.end - 0.2; t += 0.25, k++) b.pluck(t, hz(['D4', 'F#4', 'A4', 'D5', 'E5', 'F#5', 'A5'][k % 7]), { gain: 0.07, decay: 1.4, type: 'triangle', verb: 0.45 });
+  for (let k = 0; k < 6; k++) b.whoosh(home.at + 0.5 + k * 1.1, 0.05, 1.2, (k % 2) - 0.5);
+  // Round the lighthouse, and the Star whole: a big swell and chord.
+  const won = whole.at + 3.1;
+  b.choir(whole.at, whole.dur, ['A3', 'D4', 'F#4', 'A4'], 0.03);
+  b.swell(whole.at, 3.1, 0.1);
+  b.crash(won, 0.16, 4);
+  b.drum(won, { f: 80, to: 40, decay: 1.5, gain: 0.55 });
+  b.sparkle(won, 20, 0.06);
+  b.strings(won, whole.end - won, ['D3', 'A3', 'D4', 'F#4', 'A4'], 0.045, { attack: 0.05, release: 2 });
+  b.horn(won, 4, 'D5', 0.08);
+  b.horn(won, 4, 'A4', 0.06);
+  // All over the isle: the theme, bright, with drums.
+  const c0 = cheers[0].at;
+  const c1 = cheers.at(-1).end;
+  b.beat(c0, BPM, Math.ceil((c1 - c0) / BAR), 0.26);
+  b.bed(c0, c1, BPM, THEME_CHORDS.slice(0, 6), 0.035, { attack: 0.05, release: 0.4 });
+  b.tune(c0, BPM, THEME.slice(0, 22), 'horn', 0.085);
+  b.twinkle(c0, c1, BPM, THEME_CHORDS.slice(0, 6), 0.035);
+  // The party on the beach: fireworks, cheering, the theme's end.
+  b.bed(beach.at, beach.end, BPM, ['G', 'A7', 'D', 'D'], 0.035, { attack: 0.05, release: 0.5 });
+  b.tune(beach.at, BPM, THEME.slice(14), 'flute', 0.08);
+  b.beat(beach.at, BPM, Math.floor(beach.dur / BAR), 0.22);
+  for (let t = beach.at + 0.3; t < beach.end - 0.5; t += 1.05) b.firework(t, 0.1);
+  b.cheer(beach.at + 0.2, 6, 0.035);
+  // The credits, gently: a music box and strings.
+  b.bed(credits.at, credits.end, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.025, { attack: 1, release: 1.4 });
+  b.twinkle(credits.at, credits.end, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.04);
+  b.tune(credits.at + 1.2, 80, THEME.slice(0, 14), 'flute', 0.06);
+  b.sea(credits.at, credits.dur, 0.025);
+  // But out at sea… King Grumble's tune, and a question.
+  b.sea(teaser.at, teaser.dur, 0.05);
+  b.tune(teaser.at + 1.9, BPM, GRUMBLE, 'bassoon', 0.08);
+  const q = teaser.m.title;
+  b.pluck(q, hz('D2'), { gain: 0.14, decay: 0.6 });
+  b.strings(q - 1, teaser.end - q + 1, ['D3', 'A3', 'G#4'], 0.03, { attack: 0.3, release: 1.6 });
+  b.horn(q + 0.2, 1.8, 'A4', 0.07);
 }
 
 // Queen Grizzle's tune: her little brother's, prim and an octave up, with a
@@ -481,90 +598,108 @@ const GRIZZLE = [
   ['Bb4', 0.5], ['A4', 0.5], ['G4', 0.5], ['F4', 0.5], ['E4', 0.5], ['C#4', 0.5], ['D4', 0.5], ['A4', 0.25], ['D5', 0.25],
 ];
 
-function intro2(b) {
-  // 0–6.5: a rainbow over the happy isle: a music box, strings, the theme on a flute.
-  b.chords(0, BPM, ['D', 'G', 'A'], 0.022, { attack: 1.2, release: 1.2 });
-  b.arps(0, BPM, ['D', 'G', 'A'], 0.045);
+function intro2(b, c) {
+  const morning = c('morning');
+  const down = c('grizzle');
+  const catchIt = c('catch');
+  const help = c.all('help');
+  const drab = c('drab');
+  const fields = c('fields');
+  // A rainbow over the happy isle: a music box, strings, the theme on a flute.
+  b.bed(0, morning.end, BPM, ['D', 'G', 'A'], 0.022, { attack: 1.2, release: 1.2 });
+  b.twinkle(0, morning.end - 0.4, BPM, ['D', 'G', 'A'], 0.045);
   b.tune(1.2, BPM, THEME.slice(0, 8), 'flute', 0.07);
-  b.sea(0, 7, 0.03);
+  b.sea(0, morning.end + 0.5, 0.03);
   b.sparkle(0.6, 8, 0.04);
-  // 6.5–13.5: Queen Grizzle comes down: the sky goes grey, her tune.
-  b.strings(6.5, 7, ['D2', 'A2', 'D3', 'F3'], 0.035, { attack: 1, release: 1, tremolo: true });
-  b.tune(7.2, BPM, GRIZZLE, 'bassoon', 0.08);
-  b.whoosh(9.2, 0.08, 1.1);
-  b.drum(9.9, { f: 100, to: 50, decay: 0.5, gain: 0.35 });
-  // 13.5–21: the rainbow caught: a long whoosh down, a crash, the jars flying off.
-  b.strings(13.5, 4.6, ['Bb1', 'F2', 'Bb2', 'D3'], 0.04, { attack: 0.4, release: 0.6, tremolo: true });
-  for (let k = 0; k < 6; k++) b.whoosh(14.7 + k * 0.5, 0.07, 1, (k % 2) - 0.5);
-  b.timpaniRoll(16.4, 1.6, 'D2', 0.2);
-  b.crash(18, 0.16, 3.5);
-  b.drum(18, { f: 90, to: 40, decay: 1.2, gain: 0.55 });
-  b.sparkle(18, 16, 0.06);
-  for (let k = 0; k < 7; k++) b.whoosh(18.2 + k * 0.16, 0.06, 0.8, (k % 2) - 0.5);
-  b.tune(18.8, BPM, GRIZZLE.slice(8), 'bassoon', 0.07);
-  // 21–36: her helpers, a bar each: drums, a low ostinato, a horn hit at each cut.
-  const m0 = 21;
-  b.beat(m0, BPM, 6, 0.3);
+  // Queen Grizzle comes down: the sky goes grey, her tune.
+  b.strings(down.at, down.dur, ['D2', 'A2', 'D3', 'F3'], 0.035, { attack: 1, release: 1, tremolo: true });
+  b.tune(down.at + 0.7, BPM, GRIZZLE, 'bassoon', 0.08);
+  b.whoosh(down.at + 2.7, 0.08, 1.1);
+  b.drum(down.at + 3.4, { f: 100, to: 50, decay: 0.5, gain: 0.35 });
+  // The rainbow caught: a long whoosh down, a crash, the jars flying off.
+  const shake = catchIt.at + 4.5;
+  b.strings(catchIt.at, 4.6, ['Bb1', 'F2', 'Bb2', 'D3'], 0.04, { attack: 0.4, release: 0.6, tremolo: true });
+  for (let k = 0; k < 6; k++) b.whoosh(catchIt.at + 1.2 + k * 0.5, 0.07, 1, (k % 2) - 0.5);
+  b.timpaniRoll(shake - 1.6, 1.6, 'D2', 0.2);
+  b.crash(shake, 0.16, 3.5);
+  b.drum(shake, { f: 90, to: 40, decay: 1.2, gain: 0.55 });
+  b.sparkle(shake, 16, 0.06);
+  for (let k = 0; k < 7; k++) b.whoosh(shake + 0.2 + k * 0.16, 0.06, 0.8, (k % 2) - 0.5);
+  b.bed(shake + 0.5, catchIt.end, BPM, ['Dm', 'Gm', 'A'], 0.022, { attack: 0.6, release: 0.8 });
+  b.tune(shake + 0.8, BPM, GRIZZLE.slice(8), 'bassoon', 0.06);
+  // Her helpers, a bar each: drums, a low ostinato, a horn hit at each cut.
+  const m0 = help[0].at;
+  b.beat(m0, BPM, help.length, 0.3);
   const helpers = ['Dm', 'Bb', 'Gm', 'A', 'Dm', 'A'];
   b.chords(m0, BPM, helpers, 0.03, { attack: 0.08, release: 0.3 });
-  helpers.forEach((c, i) => {
+  helpers.forEach((ch, i) => {
     const t = m0 + i * BAR;
-    b.horn(t, 0.35, CHORDS[c][2], 0.08);
-    b.horn(t, 0.35, CHORDS[c][3], 0.06);
-    for (let k = 0; k < 8; k++) b.pluck(t + k * (BAR / 8), hz(CHORDS[c][k % 2 ? 1 : 0]), { gain: 0.08, decay: 0.3, type: 'sawtooth', verb: 0.15 });
+    b.horn(t, 0.35, CHORDS[ch][2], 0.08);
+    b.horn(t, 0.35, CHORDS[ch][3], 0.06);
+    for (let k = 0; k < 8; k++) b.pluck(t + k * (BAR / 8), hz(CHORDS[ch][k % 2 ? 1 : 0]), { gain: 0.08, decay: 0.3, type: 'sawtooth', verb: 0.15 });
   });
-  // 36–41.5: Queen Grizzle in Castle Drab: her tune, low.
-  b.tune(36.1, BPM, GRIZZLE.slice(0, 8), 'bassoon', 0.09);
-  b.chords(36, BPM, ['Dm', 'A'], 0.025, { attack: 0.1, release: 0.5 });
-  for (let k = 0; k < 8; k++) b.pluck(36 + k * 0.625, hz(k % 2 ? 'A2' : 'D2'), { gain: 0.1, decay: 0.4, type: 'triangle', verb: 0.2 });
-  // 41.5–50.5: the heroes and the title: the theme in full.
-  b.swell(41.5, 2.5, 0.08);
-  b.timpaniRoll(43.2, 0.8, 'D2', 0.2);
-  b.chords(44, BPM, THEME_CHORDS.slice(0, 3), 0.04, { attack: 0.2, release: 0.6 });
-  b.tune(44, BPM, THEME.slice(0, 14), 'horn', 0.1);
-  b.crash(45.3, 0.12, 3);
-  b.sparkle(45.3, 10, 0.04);
-  b.strings(50.5 - 2.3, 2.3, CHORDS.D, 0.04, { attack: 0.1, release: 1.6 });
+  // Queen Grizzle in Castle Drab: her tune, low.
+  b.tune(drab.at + 0.1, BPM, GRIZZLE.slice(0, 8), 'bassoon', 0.09);
+  b.bed(drab.at, drab.end, BPM, ['Dm', 'A'], 0.025, { attack: 0.1, release: 0.5 });
+  for (let t = drab.at; t < drab.end - 0.3; t += 0.625) b.pluck(t, hz(Math.round((t - drab.at) / 0.625) % 2 ? 'A2' : 'D2'), { gain: 0.1, decay: 0.4, type: 'triangle', verb: 0.2 });
+  // You and the title: the theme in full.
+  const title = fields.m.title;
+  b.swell(fields.at, 2.5, 0.08);
+  b.bed(fields.at + 1, title, BPM, ['Bm', 'G', 'A'], 0.022, { attack: 0.8, release: 0.8 });
+  b.timpaniRoll(title - 0.8, 0.8, 'D2', 0.2);
+  b.chords(title, BPM, THEME_CHORDS.slice(0, 2), 0.04, { attack: 0.2, release: 0.6 });
+  b.tune(title, BPM, THEME.slice(0, 9), 'horn', 0.1);
+  b.crash(title, 0.12, 3);
+  b.sparkle(title, 10, 0.04);
+  b.strings(fields.end - 2.3, 2.3, CHORDS.D, 0.04, { attack: 0.1, release: 1.6 });
 }
 
-function ending2(b) {
-  // 0–6: the last bop, a pop, a fanfare.
-  b.timpaniRoll(0, 1.6, 'A2', 0.2);
-  b.pop(1.6, 0.35);
-  b.crash(1.6, 0.14, 3);
-  for (const [i, n] of ['D4', 'F#4', 'A4', 'D5'].entries()) b.horn(1.65 + i * 0.12, 1.8 - i * 0.12, n, 0.08);
-  b.sparkle(1.7, 14, 0.05);
-  b.cheer(1.9, 3.6, 0.03);
-  b.choir(2.6, 3.4, ['D4', 'A4', 'D5'], 0.025);
-  // 6–13.5: the colours flying up: a harp rising, a swell, and the rainbow whole.
-  b.chords(6, BPM, ['G', 'A', 'Bm'], 0.03, { attack: 0.6, release: 0.8 });
-  for (let k = 0; k < 14; k++) b.pluck(6.2 + k * 0.25, hz(['D4', 'E4', 'F#4', 'G4', 'A4', 'B4', 'C#5'][k % 7]), { gain: 0.07, decay: 1.4, type: 'triangle', verb: 0.45 });
-  for (let k = 0; k < 7; k++) b.whoosh(6.3 + k * 0.25, 0.05, 1.2, (k % 2) - 0.5);
-  b.swell(7.6, 2, 0.1);
-  b.crash(9.6, 0.16, 4);
-  b.drum(9.6, { f: 80, to: 40, decay: 1.5, gain: 0.5 });
-  b.sparkle(9.6, 20, 0.06);
-  b.strings(9.6, 3.9, ['D3', 'A3', 'D4', 'F#4', 'A4'], 0.045, { attack: 0.05, release: 1.6 });
-  b.horn(9.6, 3.4, 'D5', 0.08);
-  b.horn(9.6, 3.4, 'A4', 0.06);
-  // 13.5–22: the party on the beach: the theme, bright, with drums and fireworks.
-  b.beat(13.5, BPM, 3, 0.26);
-  b.chords(13.5, BPM, THEME_CHORDS.slice(0, 3), 0.035, { attack: 0.05, release: 0.4 });
-  b.tune(13.5, BPM, THEME.slice(0, 14), 'horn', 0.085);
-  b.arps(13.5, BPM, THEME_CHORDS.slice(0, 3), 0.035);
-  for (let k = 0; k < 7; k++) b.firework(13.9 + k * 1.1, 0.1);
-  b.cheer(13.7, 6.5, 0.035);
-  // 22–36: the credits, gently: a music box and strings.
-  b.chords(22, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.025, { attack: 1, release: 1.4 });
-  b.arps(22, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.04);
-  b.tune(23.2, 80, THEME.slice(0, 14), 'flute', 0.06);
-  b.sea(22, 14, 0.025);
-  // 36–43.5: Queen Grizzle floating home: her tune, and — for once — a happy end to it.
-  b.sea(36, 7.5, 0.05);
-  b.tune(36.6, BPM, GRIZZLE.slice(0, 8), 'bassoon', 0.075);
-  b.strings(39.6, 3.6, ['D3', 'A3', 'F#4'], 0.035, { attack: 0.4, release: 1.6 });
-  for (const [i, n] of ['D4', 'F#4', 'A4', 'D5'].entries()) b.pluck(40.3 + i * 0.16, hz(n), { gain: 0.09, decay: 1.6, type: 'triangle', bell: true, verb: 0.45 });
-  b.sparkle(40.9, 8, 0.04);
+function ending2(b, c) {
+  const last = c('pop');
+  const bow = c('bow');
+  const party = c('party');
+  const credits = c('credits');
+  const teaser = c('teaser');
+  const pop = last.m.pop;
+  // The last bop, a pop, a fanfare.
+  b.timpaniRoll(last.at + 0.2, pop - last.at - 0.2, 'A2', 0.2);
+  b.pop(pop, 0.35);
+  b.crash(pop, 0.14, 3);
+  for (const [i, n] of ['D4', 'F#4', 'A4', 'D5'].entries()) b.horn(pop + 0.05 + i * 0.12, 1.8 - i * 0.12, n, 0.08);
+  b.sparkle(pop + 0.1, 14, 0.05);
+  b.cheer(pop + 0.3, 3.6, 0.03);
+  b.choir(pop + 1, last.end - pop - 0.6, ['D4', 'A4', 'D5'], 0.025);
+  // The colours flying up: a harp rising, a swell, and the rainbow whole.
+  const whole = bow.at + 3.6;
+  b.chords(bow.at, BPM, ['G', 'A'], 0.03, { attack: 0.6, release: 0.8 });
+  for (let k = 0; k < 14; k++) b.pluck(bow.at + 0.2 + k * 0.25, hz(['D4', 'E4', 'F#4', 'G4', 'A4', 'B4', 'C#5'][k % 7]), { gain: 0.07, decay: 1.4, type: 'triangle', verb: 0.45 });
+  for (let k = 0; k < 7; k++) b.whoosh(bow.at + 0.3 + k * 0.25, 0.05, 1.2, (k % 2) - 0.5);
+  b.swell(whole - 2, 2, 0.1);
+  b.crash(whole, 0.16, 4);
+  b.drum(whole, { f: 80, to: 40, decay: 1.5, gain: 0.5 });
+  b.sparkle(whole, 20, 0.06);
+  b.strings(whole, bow.end - whole, ['D3', 'A3', 'D4', 'F#4', 'A4'], 0.045, { attack: 0.05, release: 1.6 });
+  b.horn(whole, 3.4, 'D5', 0.08);
+  b.horn(whole, 3.4, 'A4', 0.06);
+  // The party on the beach: the theme, bright, with drums and fireworks.
+  b.beat(party.at, BPM, Math.floor(party.dur / BAR), 0.26);
+  b.bed(party.at, party.end, BPM, THEME_CHORDS.slice(0, 4), 0.035, { attack: 0.05, release: 0.4 });
+  b.tune(party.at, BPM, THEME.slice(0, 14), 'horn', 0.085);
+  b.twinkle(party.at, party.end, BPM, THEME_CHORDS.slice(0, 4), 0.035);
+  for (let t = party.at + 0.4; t < party.end - 0.5; t += 1.1) b.firework(t, 0.1);
+  b.cheer(party.at + 0.2, 6.5, 0.035);
+  // The credits, gently: a music box and strings.
+  b.bed(credits.at, credits.end, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.025, { attack: 1, release: 1.4 });
+  b.twinkle(credits.at, credits.end, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.04);
+  b.tune(credits.at + 1.2, 80, THEME.slice(0, 14), 'flute', 0.06);
+  b.sea(credits.at, credits.dur, 0.025);
+  // Queen Grizzle floating home: her tune, and — for once — a happy end to it.
+  const title = teaser.m.title;
+  b.sea(teaser.at, teaser.dur, 0.05);
+  b.tune(teaser.at + 0.6, BPM, GRIZZLE.slice(0, 8), 'bassoon', 0.075);
+  b.strings(title - 1, teaser.end - title + 1, ['D3', 'A3', 'F#4'], 0.035, { attack: 0.4, release: 1.6 });
+  for (const [i, n] of ['D4', 'F#4', 'A4', 'D5'].entries()) b.pluck(title + i * 0.16, hz(n), { gain: 0.09, decay: 1.6, type: 'triangle', bell: true, verb: 0.45 });
+  b.sparkle(title + 0.6, 8, 0.04);
 }
 
 // Old Murk's tune: slow and low, a howl rising at the end of it.
@@ -573,79 +708,101 @@ const MURK = [
   ['F3', 0.5], ['E3', 0.5], ['D3', 0.5], ['E3', 0.5], ['A3', 1.5], [null, 0.5],
 ];
 
-function intro3(b) {
-  // 0–6.5: the rainbow over the happy isle, its end out to sea.
-  b.chords(0, BPM, ['D', 'G', 'A'], 0.022, { attack: 1.2, release: 1.2 });
-  b.arps(0, BPM, ['D', 'G', 'A'], 0.04);
+function intro3(b, c) {
+  const bow = c('rainbow');
+  const wild = c('wild');
+  const howl = c('howl');
+  const beasts = c.all('beast');
+  const tower = c('tower');
+  const beach = c('beach');
+  // The rainbow over the happy isle, its end out to sea.
+  b.bed(0, bow.end, BPM, ['D', 'G', 'A'], 0.022, { attack: 1.2, release: 1.2 });
+  b.twinkle(0, bow.end - 0.3, BPM, ['D', 'G', 'A'], 0.04);
   b.tune(1, BPM, THEME.slice(0, 8), 'flute', 0.06);
-  b.sea(0, 7, 0.03);
-  // 6.5–14.5: out of the fog, the Wild Isle: the sea, wide strings, a swell.
-  b.sea(6.5, 8, 0.06);
-  b.strings(6.5, 8, ['D3', 'A3', 'E4', 'F#4'], 0.04, { attack: 1.4, release: 1.4 });
-  b.swell(11.5, 3, 0.07);
-  b.horn(12.4, 2, 'A4', 0.06);
-  // 14.5–21: Old Murk howling, the Sunstones scattering.
-  b.strings(14.5, 6.5, ['A1', 'E2', 'A2', 'C3'], 0.04, { attack: 0.8, release: 1, tremolo: true });
-  b.tune(15, BPM, MURK, 'bassoon', 0.09);
-  b.whoosh(17.6, 0.09, 1.4);
-  b.timpaniRoll(17, 0.8, 'A1', 0.2);
-  b.crash(17.8, 0.12, 3);
-  for (let k = 0; k < 5; k++) b.whoosh(17.9 + k * 0.2, 0.06, 0.8, (k % 2) - 0.5);
-  // 21–31.4: his helpers, a bar each.
-  const m0 = 21;
-  b.beat(m0, BPM, 4, 0.28);
+  b.sea(0, bow.end + 0.5, 0.03);
+  // Out of the fog, the Wild Isle: the sea, wide strings, a swell.
+  b.sea(wild.at, wild.dur, 0.06);
+  b.bed(wild.at, wild.end, 72, ['D', 'Em', 'G', 'D'], 0.04, { attack: 1.4, release: 1.4 });
+  b.swell(wild.end - 3, 3, 0.07);
+  b.horn(wild.end - 2.1, 2, 'A4', 0.06);
+  // Old Murk, the fog coming in, his howl, the Sunstones scattering.
+  const at = howl.m.howl;
+  b.strings(howl.at, howl.dur, ['A1', 'E2', 'A2', 'C3'], 0.04, { attack: 0.8, release: 1, tremolo: true });
+  b.tune(at, BPM, MURK, 'bassoon', 0.08);
+  b.whoosh(at + 1, 0.09, 1.4);
+  b.timpaniRoll(at + 0.4, 0.8, 'A1', 0.2);
+  b.crash(at + 1.2, 0.12, 3);
+  for (let k = 0; k < 5; k++) b.whoosh(at + 1.3 + k * 0.2, 0.06, 0.8, (k % 2) - 0.5);
+  // His helpers, a bar each.
+  const m0 = beasts[0].at;
+  b.beat(m0, 92.3, beasts.length, 0.28);
   const helpers = ['Am', 'F', 'Dm', 'E'];
-  b.chords(m0, BPM, helpers, 0.03, { attack: 0.08, release: 0.3 });
-  helpers.forEach((c, i) => {
+  helpers.forEach((ch, i) => {
     const t = m0 + i * 2.6;
-    b.horn(t, 0.35, CHORDS[c][2], 0.08);
-    for (let k = 0; k < 8; k++) b.pluck(t + k * 0.325, hz(CHORDS[c][k % 2 ? 1 : 0]), { gain: 0.08, decay: 0.3, type: 'sawtooth', verb: 0.15 });
+    b.strings(t, 2.65, CHORDS[ch], 0.03, { attack: 0.08, release: 0.3 });
+    b.bass(t, 1.25, CHORDS[ch][0], 0.1);
+    b.horn(t, 0.35, CHORDS[ch][2], 0.08);
+    for (let k = 0; k < 8; k++) b.pluck(t + k * 0.325, hz(CHORDS[ch][k % 2 ? 1 : 0]), { gain: 0.08, decay: 0.3, type: 'sawtooth', verb: 0.15 });
   });
-  // 31.4–36.4: Old Murk in Murk Tower: his tune, low.
-  b.tune(31.6, BPM, MURK.slice(0, 5), 'bassoon', 0.09);
-  b.strings(31.4, 5, ['A1', 'E2', 'A2'], 0.03, { attack: 0.4, release: 1 });
-  // 36.4–45.4: the heroes and the title: the theme in full.
-  b.swell(36.4, 2.5, 0.08);
-  b.timpaniRoll(38, 0.8, 'D2', 0.2);
-  b.chords(38.8, BPM, THEME_CHORDS.slice(0, 3), 0.04, { attack: 0.2, release: 0.6 });
-  b.tune(38.8, BPM, THEME.slice(0, 14), 'horn', 0.1);
-  b.crash(40.2, 0.12, 3);
-  b.sparkle(40.2, 10, 0.04);
-  b.strings(45.4 - 2.3, 2.3, CHORDS.D, 0.04, { attack: 0.1, release: 1.6 });
+  // Old Murk in Murk Tower: his tune, low.
+  b.tune(tower.at + 0.2, BPM, MURK.slice(0, 5), 'bassoon', 0.09);
+  b.bed(tower.at, tower.end, BPM, ['Am', 'E'], 0.03, { attack: 0.4, release: 1 });
+  // You and the title: the theme in full.
+  const title = beach.m.title;
+  b.swell(beach.at, 2.5, 0.08);
+  b.sea(beach.at, beach.dur, 0.03);
+  b.bed(beach.at + 1, title, BPM, ['Bm', 'G', 'A'], 0.022, { attack: 0.8, release: 0.8 });
+  b.timpaniRoll(title - 0.8, 0.8, 'D2', 0.2);
+  b.chords(title, BPM, THEME_CHORDS.slice(0, 2), 0.04, { attack: 0.2, release: 0.6 });
+  b.tune(title, BPM, THEME.slice(0, 9), 'horn', 0.1);
+  b.crash(title, 0.12, 3);
+  b.sparkle(title, 10, 0.04);
+  b.strings(beach.end - 2.3, 2.3, CHORDS.D, 0.04, { attack: 0.1, release: 1.6 });
 }
 
-function ending3(b) {
-  // 0–6: the last bop, a pop, a fanfare.
-  b.timpaniRoll(0, 1.6, 'A2', 0.2);
-  b.pop(1.6, 0.35);
-  b.crash(1.6, 0.14, 3);
-  for (const [i, n] of ['D4', 'F#4', 'A4', 'D5'].entries()) b.horn(1.65 + i * 0.12, 1.8 - i * 0.12, n, 0.08);
-  b.sparkle(1.7, 14, 0.05);
-  b.cheer(1.9, 3.6, 0.03);
-  // 6–13.5: the Sunstones flying up, the sun coming out.
-  b.chords(6, BPM, ['G', 'A', 'Bm'], 0.03, { attack: 0.6, release: 0.8 });
-  for (let k = 0; k < 10; k++) b.pluck(6.2 + k * 0.3, hz(['D4', 'E4', 'F#4', 'A4', 'B4'][k % 5]), { gain: 0.07, decay: 1.4, type: 'triangle', verb: 0.45 });
-  b.swell(8, 2, 0.1);
-  b.crash(10, 0.16, 4);
-  b.drum(10, { f: 80, to: 40, decay: 1.5, gain: 0.5 });
-  b.sparkle(10, 20, 0.06);
-  b.strings(10, 3.5, ['D3', 'A3', 'D4', 'F#4', 'A4'], 0.045, { attack: 0.05, release: 1.6 });
-  b.choir(10.2, 3.2, ['D4', 'A4', 'D5'], 0.025);
-  // 13.5–22: the party on the beach.
-  b.beat(13.5, BPM, 3, 0.26);
-  b.chords(13.5, BPM, THEME_CHORDS.slice(0, 3), 0.035, { attack: 0.05, release: 0.4 });
-  b.tune(13.5, BPM, THEME.slice(0, 14), 'horn', 0.085);
-  for (let k = 0; k < 7; k++) b.firework(13.9 + k * 1.1, 0.1);
-  b.cheer(13.7, 6.5, 0.035);
-  // 22–36: the credits, gently.
-  b.chords(22, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.025, { attack: 1, release: 1.4 });
-  b.arps(22, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.04);
-  b.tune(23.2, 80, THEME.slice(0, 14), 'flute', 0.06);
-  b.sea(22, 14, 0.025);
-  // 36–43: Old Murk asleep in the sun: his tune, warm at last.
-  b.tune(36.4, BPM, MURK.slice(0, 5), 'flute', 0.06);
-  b.strings(38.5, 4, ['D3', 'A3', 'F#4'], 0.035, { attack: 0.4, release: 1.6 });
-  for (const [i, n] of ['D4', 'F#4', 'A4', 'D5'].entries()) b.pluck(40.2 + i * 0.16, hz(n), { gain: 0.09, decay: 1.6, type: 'triangle', bell: true, verb: 0.45 });
+function ending3(b, c) {
+  const last = c('pop');
+  const sun = c('sun');
+  const party = c('party');
+  const credits = c('credits');
+  const teaser = c('teaser');
+  const pop = last.m.pop;
+  // The last bop, a pop, a fanfare.
+  b.timpaniRoll(last.at + 0.2, pop - last.at - 0.2, 'A2', 0.2);
+  b.pop(pop, 0.35);
+  b.crash(pop, 0.14, 3);
+  for (const [i, n] of ['D4', 'F#4', 'A4', 'D5'].entries()) b.horn(pop + 0.05 + i * 0.12, 1.8 - i * 0.12, n, 0.08);
+  b.sparkle(pop + 0.1, 14, 0.05);
+  b.cheer(pop + 0.3, 3.6, 0.03);
+  // The Sunstones flying up, the sun coming out.
+  const out = sun.at + 4;
+  b.chords(sun.at, BPM, ['G', 'A'], 0.03, { attack: 0.6, release: 0.8 });
+  for (let k = 0; k < 10; k++) b.pluck(sun.at + 0.2 + k * 0.3, hz(['D4', 'E4', 'F#4', 'A4', 'B4'][k % 5]), { gain: 0.07, decay: 1.4, type: 'triangle', verb: 0.45 });
+  b.swell(out - 2, 2, 0.1);
+  b.crash(out, 0.16, 4);
+  b.drum(out, { f: 80, to: 40, decay: 1.5, gain: 0.5 });
+  b.sparkle(out, 20, 0.06);
+  b.strings(out, sun.end - out, ['D3', 'A3', 'D4', 'F#4', 'A4'], 0.045, { attack: 0.05, release: 1.6 });
+  b.choir(out + 0.2, sun.end - out - 0.2, ['D4', 'A4', 'D5'], 0.025);
+  // The party on the beach.
+  b.beat(party.at, BPM, Math.floor(party.dur / BAR), 0.26);
+  b.bed(party.at, party.end, BPM, THEME_CHORDS.slice(0, 4), 0.035, { attack: 0.05, release: 0.4 });
+  b.tune(party.at, BPM, THEME.slice(0, 14), 'horn', 0.085);
+  for (let t = party.at + 0.4; t < party.end - 0.5; t += 1.1) b.firework(t, 0.1);
+  b.cheer(party.at + 0.2, 6.5, 0.035);
+  // The credits, gently.
+  b.bed(credits.at, credits.end, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.025, { attack: 1, release: 1.4 });
+  b.twinkle(credits.at, credits.end, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.04);
+  b.tune(credits.at + 1.2, 80, THEME.slice(0, 14), 'flute', 0.06);
+  b.sea(credits.at, credits.dur, 0.025);
+  // Old Murk asleep in the sun: his tune, warm at last; and a magpie.
+  const title = teaser.m.title;
+  b.tune(teaser.at + 0.4, BPM, MURK.slice(0, 5), 'flute', 0.06);
+  b.bed(teaser.at + 2, title, 72, ['D', 'G'], 0.03, { attack: 0.6, release: 1 });
+  b.whoosh(teaser.m.shiny - 0.4, 0.05, 0.8, 0.4);
+  b.sparkle(teaser.m.shiny, 6, 0.04);
+  b.strings(title - 0.4, teaser.end - title + 0.4, ['D3', 'A3', 'F#4'], 0.035, { attack: 0.4, release: 1.6 });
+  for (const [i, n] of ['D4', 'F#4', 'A4', 'D5'].entries()) b.pluck(title + i * 0.16, hz(n), { gain: 0.09, decay: 1.6, type: 'triangle', bell: true, verb: 0.45 });
 }
 
 // Jinx the Magpie's tune: cheeky and quick, hopping about, a cackle at the end.
@@ -659,80 +816,96 @@ const peal = (b, t, gap = 0.32, gain = 0.09, times = 1) => {
   for (let r = 0; r < times; r++) PEAL.forEach((n, i) => b.pluck(t + (r * PEAL.length + i) * gap, hz(n), { gain, decay: 2.2, type: 'triangle', bell: true, verb: 0.5, pan: (i % 2) - 0.5 }));
 };
 
-function intro4(b) {
-  // 0–7: dawn, the five Golden Bells ringing round the lighthouse.
-  b.chords(0, BPM, ['D', 'G', 'A'], 0.022, { attack: 1.2, release: 1.2 });
+function intro4(b, c) {
+  const dawn = c('dawn');
+  const swoop = c('swoop');
+  const cages = c.all('cage');
+  const nest = c('nest');
+  const bay = c('bay');
+  // Dawn, the five Golden Bells ringing round the lighthouse.
+  b.bed(0, dawn.end, BPM, ['D', 'G', 'A'], 0.022, { attack: 1.2, release: 1.2 });
   peal(b, 0.6, 0.36, 0.08, 2);
-  b.sea(0, 7, 0.03);
+  b.sea(0, dawn.end + 0.5, 0.03);
   b.tune(3.6, BPM, THEME.slice(0, 6), 'flute', 0.05);
-  // 7–15: night, Jinx swooping down and off with the bells.
-  b.strings(7, 8, ['A2', 'E3', 'A3', 'C4'], 0.035, { attack: 0.6, release: 1, tremolo: true });
-  b.tune(7.4, 132, JINX, 'flute', 0.07);
-  for (let k = 0; k < 8; k++) b.pluck(7.2 + k * 0.45, hz(['A2', 'E3'][k % 2]), { gain: 0.06, decay: 0.3, type: 'sawtooth', verb: 0.15 });
-  b.whoosh(8.6, 0.08, 1.2);
-  b.crash(10.4, 0.1, 2.5);
-  b.sparkle(10.4, 6, 0.05);
-  for (let k = 0; k < 5; k++) b.pluck(10.5 + k * 0.12, hz(PEAL[k]), { gain: 0.07, decay: 1.2, type: 'triangle', bell: true, verb: 0.5 });
-  b.whoosh(11.2, 0.09, 1.6);
-  // 15–26.6: his Puzzle Isles, a bar each, cheeky.
-  const m0 = 15;
-  // (A bar to each isle's shot, 2.9 s.)
+  // Night, Jinx swooping down and off with the bells.
+  const off = swoop.m.off;
+  b.strings(swoop.at, swoop.dur, ['A2', 'E3', 'A3', 'C4'], 0.035, { attack: 0.6, release: 1, tremolo: true });
+  b.tune(swoop.at + 0.4, 132, JINX, 'flute', 0.07);
+  for (let t = swoop.at + 0.2; t < off; t += 0.45) b.pluck(t, hz(Math.round((t - swoop.at) / 0.45) % 2 ? 'E3' : 'A2'), { gain: 0.06, decay: 0.3, type: 'sawtooth', verb: 0.15 });
+  b.whoosh(swoop.at + 1.6, 0.08, 1.2);
+  b.crash(off - 0.2, 0.1, 2.5);
+  b.sparkle(off - 0.2, 6, 0.05);
+  for (let k = 0; k < 5; k++) b.pluck(off - 0.1 + k * 0.12, hz(PEAL[k]), { gain: 0.07, decay: 1.2, type: 'triangle', bell: true, verb: 0.5 });
+  b.whoosh(off + 0.6, 0.09, 1.6);
+  b.tune(off + 1.2, 150, JINX, 'flute', 0.05);
+  // His Puzzle Isles, a bar each, cheeky.
+  const m0 = cages[0].at;
   const bar = 240 / 2.9;
-  b.beat(m0, bar, 4, 0.22);
+  b.beat(m0, bar, cages.length, 0.22);
   const isles = ['C', 'Am', 'F', 'G'];
   b.chords(m0, bar, isles, 0.028, { attack: 0.05, release: 0.3 });
-  isles.forEach((c, i) => {
+  isles.forEach((ch, i) => {
     const t = m0 + i * 2.9;
-    b.pluck(t, hz(CHORDS[c][3]), { gain: 0.1, decay: 1.6, type: 'triangle', bell: true, verb: 0.4 });
-    for (let k = 0; k < 6; k++) b.pluck(t + 0.3 + k * 0.4, hz(CHORDS[c][k % 2 ? 2 : 3]), { gain: 0.06, decay: 0.25, type: 'square', verb: 0.1 });
+    b.pluck(t, hz(CHORDS[ch][3]), { gain: 0.1, decay: 1.6, type: 'triangle', bell: true, verb: 0.4 });
+    for (let k = 0; k < 6; k++) b.pluck(t + 0.3 + k * 0.4, hz(CHORDS[ch][k % 2 ? 2 : 3]), { gain: 0.06, decay: 0.25, type: 'square', verb: 0.1 });
   });
-  // 26.6–32.1: Jinx on his nest, chattering: his tune, quicker.
-  b.tune(26.8, 150, JINX, 'flute', 0.08);
-  b.strings(26.6, 5.5, ['C3', 'G3', 'E4'], 0.025, { attack: 0.3, release: 1 });
-  b.pluck(29.8, hz('C5'), { gain: 0.1, decay: 2, type: 'triangle', bell: true, verb: 0.5 });
-  // 32.1–41.1: the heroes and the title: the theme in full, the bells pealing.
-  b.swell(32.1, 2.5, 0.07);
-  b.timpaniRoll(34.2, 0.8, 'D2', 0.2);
-  b.chords(35, BPM, THEME_CHORDS.slice(0, 3), 0.04, { attack: 0.2, release: 0.6 });
-  b.tune(35, BPM, THEME.slice(0, 12), 'horn', 0.1);
-  b.crash(36.3, 0.12, 3);
-  peal(b, 36.4, 0.3, 0.06, 2);
-  b.sparkle(36.3, 8, 0.04);
-  b.strings(41.1 - 2.3, 2.3, CHORDS.D, 0.04, { attack: 0.1, release: 1.6 });
+  // Jinx on his nest, chattering: his tune, quicker.
+  b.tune(nest.at + 0.2, 150, JINX, 'flute', 0.08);
+  b.bed(nest.at, nest.end, BPM, ['C', 'G'], 0.025, { attack: 0.3, release: 1 });
+  b.pluck(nest.end - 1.6, hz('C5'), { gain: 0.1, decay: 2, type: 'triangle', bell: true, verb: 0.5 });
+  // You and the title: the theme in full, the bells pealing.
+  const title = bay.m.title;
+  b.swell(bay.at, 2.5, 0.07);
+  b.bed(bay.at + 1, title, BPM, ['G', 'D', 'A'], 0.022, { attack: 0.8, release: 0.8 });
+  b.timpaniRoll(title - 0.8, 0.8, 'D2', 0.2);
+  b.chords(title, BPM, THEME_CHORDS.slice(0, 2), 0.04, { attack: 0.2, release: 0.6 });
+  b.tune(title, BPM, THEME.slice(0, 9), 'horn', 0.1);
+  b.crash(title, 0.12, 3);
+  peal(b, title + 0.1, 0.3, 0.06, 1);
+  b.sparkle(title, 8, 0.04);
+  b.strings(bay.end - 2.3, 2.3, CHORDS.D, 0.04, { attack: 0.1, release: 1.6 });
 }
 
-function ending4(b) {
-  // 0–6: Jinx dazzled, and caught: a pop, a fanfare.
-  b.tune(0.2, 150, JINX.slice(0, 7), 'flute', 0.06);
-  b.timpaniRoll(0.4, 1.2, 'A2', 0.2);
-  b.pop(1.6, 0.35);
-  b.crash(1.6, 0.14, 3);
-  for (const [i, n] of ['D4', 'F#4', 'A4', 'D5'].entries()) b.horn(1.65 + i * 0.12, 1.8 - i * 0.12, n, 0.08);
-  b.sparkle(1.7, 14, 0.05);
-  b.cheer(1.9, 3.6, 0.03);
-  // 6–13.5: the bells flying home, pealing as they go.
-  b.chords(6, BPM, ['G', 'A', 'Bm'], 0.03, { attack: 0.6, release: 0.8 });
-  peal(b, 6.3, 0.34, 0.08, 3);
-  b.swell(10, 2, 0.08);
-  b.strings(10.5, 3, ['D3', 'A3', 'D4', 'F#4', 'A4'], 0.04, { attack: 0.1, release: 1.6 });
-  b.choir(10.6, 2.9, ['D4', 'A4', 'D5'], 0.02);
-  // 13.5–22: the party round the open cage, the bells ringing over it.
-  b.beat(13.5, BPM, 3, 0.26);
-  b.chords(13.5, BPM, THEME_CHORDS.slice(0, 3), 0.035, { attack: 0.05, release: 0.4 });
-  b.tune(13.5, BPM, THEME.slice(0, 14), 'horn', 0.085);
-  peal(b, 13.6, 0.5, 0.05, 2);
-  for (let k = 0; k < 7; k++) b.firework(13.9 + k * 1.1, 0.1);
-  b.cheer(13.7, 6.5, 0.035);
-  // 22–36: the credits, gently.
-  b.chords(22, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.025, { attack: 1, release: 1.4 });
-  b.arps(22, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.04);
-  b.tune(23.2, 80, THEME.slice(0, 14), 'flute', 0.06);
-  b.sea(22, 14, 0.025);
-  // 36–43: dawn, the bells, and Jinx listening — his tune, and a wink at the end.
-  peal(b, 36.3, 0.4, 0.06);
-  b.tune(38.8, 132, JINX.slice(0, 7), 'flute', 0.06);
-  b.strings(38.5, 4, ['D3', 'A3', 'F#4'], 0.035, { attack: 0.4, release: 1.6 });
-  for (const [i, n] of ['D4', 'F#4', 'A4', 'D5'].entries()) b.pluck(40.4 + i * 0.16, hz(n), { gain: 0.09, decay: 1.6, type: 'triangle', bell: true, verb: 0.45 });
+function ending4(b, c) {
+  const caught = c('caught');
+  const home = c('home');
+  const party = c('party');
+  const credits = c('credits');
+  const teaser = c('teaser');
+  const at = caught.m.caught;
+  // Jinx dazzled, and caught: a pop, a fanfare.
+  b.tune(caught.at + 0.2, 150, JINX.slice(0, 7), 'flute', 0.06);
+  b.timpaniRoll(at - 1.2, 1.2, 'A2', 0.2);
+  b.pop(at, 0.35);
+  b.crash(at, 0.14, 3);
+  for (const [i, n] of ['D4', 'F#4', 'A4', 'D5'].entries()) b.horn(at + 0.05 + i * 0.12, 1.8 - i * 0.12, n, 0.08);
+  b.sparkle(at + 0.1, 14, 0.05);
+  b.cheer(at + 0.3, 3.6, 0.03);
+  // The bells flying home, pealing as they go.
+  b.bed(home.at, home.end, BPM, ['G', 'A', 'Bm'], 0.03, { attack: 0.6, release: 0.8 });
+  peal(b, home.at + 0.3, 0.34, 0.06, 3);
+  b.swell(home.end - 3.5, 2, 0.08);
+  b.strings(home.end - 3, 3, ['D3', 'A3', 'D4', 'F#4', 'A4'], 0.04, { attack: 0.1, release: 1.6 });
+  b.choir(home.end - 2.9, 2.9, ['D4', 'A4', 'D5'], 0.02);
+  // The party round the open cage, the bells ringing over it.
+  b.beat(party.at, BPM, Math.floor(party.dur / BAR), 0.26);
+  b.bed(party.at, party.end, BPM, THEME_CHORDS.slice(0, 4), 0.035, { attack: 0.05, release: 0.4 });
+  b.tune(party.at, BPM, THEME.slice(0, 14), 'horn', 0.085);
+  peal(b, party.at + 0.1, 0.5, 0.04, 2);
+  for (let t = party.at + 0.4; t < party.end - 0.5; t += 1.1) b.firework(t, 0.1);
+  b.cheer(party.at + 0.2, 6.5, 0.035);
+  // The credits, gently.
+  b.bed(credits.at, credits.end, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.025, { attack: 1, release: 1.4 });
+  b.twinkle(credits.at, credits.end, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.04);
+  b.tune(credits.at + 1.2, 80, THEME.slice(0, 14), 'flute', 0.06);
+  b.sea(credits.at, credits.dur, 0.025);
+  // Dawn, the bells, and Jinx listening — his tune, and a wink at the end.
+  const title = teaser.m.title;
+  peal(b, teaser.at + 0.3, 0.4, 0.05);
+  b.bed(teaser.at + 2, title, 72, ['D', 'G'], 0.022, { attack: 0.6, release: 1 });
+  b.tune(title - 2.4, 132, JINX.slice(0, 7), 'flute', 0.05);
+  b.strings(title - 0.3, teaser.end - title + 0.3, ['D3', 'A3', 'F#4'], 0.035, { attack: 0.4, release: 1.6 });
+  for (const [i, n] of ['D4', 'F#4', 'A4', 'D5'].entries()) b.pluck(title + i * 0.16, hz(n), { gain: 0.09, decay: 1.6, type: 'triangle', bell: true, verb: 0.45 });
 }
 
 // The fifth episode's: the Baron's pompous little march, a tuba's, and the
@@ -742,69 +915,87 @@ const BLUSTER = [
   ['D3', 0.5], ['E3', 0.5], ['F3', 0.5], ['A3', 0.5], ['D4', 2],
 ];
 
-function intro5(b) {
-  // 0–8: out at sea, sailing up to the clouds.
-  b.sea(0, 8, 0.035);
-  b.chords(0, BPM, ['D', 'G', 'A'], 0.022, { attack: 1.2, release: 1.2 });
+function intro5(b, c) {
+  const sea = c('sea');
+  const blow = c('blow');
+  const bads = c.all('bad');
+  const top = c('top');
+  const walk = c('walk');
+  // Out at sea, sailing up to the clouds.
+  b.sea(0, sea.end + 0.5, 0.035);
+  b.bed(0, sea.end, BPM, ['D', 'G', 'A'], 0.022, { attack: 1.2, release: 1.2 });
   b.tune(2.4, BPM, THEME.slice(0, 6), 'flute', 0.05);
-  // 8–16: Baron Bluster, laughing, blowing out the lanterns one by one.
-  b.strings(8, 8, ['D2', 'A2', 'D3', 'F3'], 0.035, { attack: 0.5, release: 1, tremolo: true });
-  b.tune(8.4, 112, BLUSTER, 'horn', 0.07);
-  for (let k = 0; k < 5; k++) b.whoosh(9.4 + k * 1.3, 0.07, 0.6);
-  b.thunder?.(14.5, 0.08);
-  // 16–28: the Big Bads of each corner, a bar each.
+  // Baron Bluster, laughing, blowing out the lanterns one by one.
+  b.strings(blow.at, blow.dur, ['D2', 'A2', 'D3', 'F3'], 0.035, { attack: 0.5, release: 1, tremolo: true });
+  b.tune(blow.at + 0.4, 112, BLUSTER, 'horn', 0.06);
+  for (let k = 0; k < 5; k++) b.whoosh(blow.at + 1.4 + k * 1.3, 0.07, 0.6);
+  b.tune(blow.at + 7.2, 112, BLUSTER, 'horn', 0.04);
+  // The Big Bads of each corner, a bar each.
+  const m0 = bads[0].at;
   const bar = 240 / 3;
-  b.beat(16, bar, 4, 0.22);
+  b.beat(m0, bar, bads.length, 0.22);
   const corners = ['Dm', 'Bb', 'C', 'A'];
-  b.chords(16, bar, corners, 0.03, { attack: 0.05, release: 0.3 });
-  corners.forEach((c, i) => b.timpaniRoll(16 + i * 3, 0.5, 'D2', 0.12));
-  // 28–34: Thunder Top, lightning.
-  b.strings(28, 6, ['D2', 'A2', 'F3'], 0.04, { attack: 0.2, release: 1, tremolo: true });
-  b.crash(29.2, 0.1, 2);
-  b.crash(31, 0.1, 2);
-  b.crash(32.6, 0.1, 2);
-  b.tune(29.4, 140, BLUSTER, 'horn', 0.06);
-  // 34–44: the heroes on the beach, the clouds rolling back; the title.
-  b.swell(34, 2.4, 0.07);
-  b.chords(35.2, BPM, THEME_CHORDS.slice(0, 3), 0.04, { attack: 0.2, release: 0.6 });
-  b.tune(35.2, BPM, THEME.slice(0, 12), 'horn', 0.1);
-  b.sparkle(36, 8, 0.04);
-  b.crash(39, 0.12, 3);
-  b.strings(44 - 2.3, 2.3, CHORDS.D, 0.04, { attack: 0.1, release: 1.6 });
+  b.chords(m0, bar, corners, 0.03, { attack: 0.05, release: 0.3 });
+  corners.forEach((ch, i) => b.timpaniRoll(m0 + i * 3, 0.5, 'D2', 0.12));
+  // Thunder Top, lightning.
+  b.strings(top.at, top.dur, ['D2', 'A2', 'F3'], 0.04, { attack: 0.2, release: 1, tremolo: true });
+  for (const k of [1.2, 3, 4.6, 6.6]) if (k < top.dur) b.thunder(top.at + k, 0.25);
+  b.tune(top.at + 1.4, 140, BLUSTER, 'horn', 0.05);
+  // You on the beach, the clouds rolling back; the title.
+  const title = walk.m.title;
+  b.swell(walk.at, 2.4, 0.07);
+  b.bed(walk.at + 1, title, BPM, ['G', 'D', 'A'], 0.022, { attack: 0.8, release: 0.8 });
+  b.twinkle(walk.at + 1, title - 0.3, BPM, ['G', 'D', 'A'], 0.03);
+  b.timpaniRoll(title - 0.8, 0.8, 'D2', 0.2);
+  b.chords(title, BPM, THEME_CHORDS.slice(0, 2), 0.04, { attack: 0.2, release: 0.6 });
+  b.tune(title, BPM, THEME.slice(0, 9), 'horn', 0.1);
+  b.crash(title, 0.12, 3);
+  b.sparkle(title, 8, 0.04);
+  b.strings(walk.end - 2.3, 2.3, CHORDS.D, 0.04, { attack: 0.1, release: 1.6 });
 }
 
-function ending5(b) {
-  // 0–7: the Baron popped, whizzing round and shrinking.
-  b.timpaniRoll(0.2, 0.8, 'A2', 0.2);
-  b.pop(1, 0.35);
-  b.crash(1, 0.14, 3);
-  b.whoosh(1.2, 0.1, 4.5);
-  b.tune(1.6, 180, BLUSTER, 'flute', 0.05);
-  b.cheer(1.4, 5, 0.03);
-  // 7–14: the five lanterns floating up.
-  b.chords(7, BPM, ['G', 'A', 'Bm'], 0.03, { attack: 0.6, release: 0.8 });
-  b.choir(7.4, 6.4, ['D4', 'A4', 'D5'], 0.02);
-  b.sparkle(7.4, 6, 0.04);
-  // 14–22: the Cloud Blanket blowing away.
-  b.swell(14, 2, 0.08);
-  b.whoosh(14.6, 0.1, 3);
-  b.strings(15, 7, ['D3', 'A3', 'D4', 'F#4', 'A4'], 0.04, { attack: 0.3, release: 1.6 });
-  b.tune(16, BPM, THEME.slice(0, 10), 'horn', 0.08);
-  // 22–30: everyone on the beach, fireworks.
-  b.beat(22, BPM, 3, 0.26);
-  b.chords(22, BPM, THEME_CHORDS.slice(0, 3), 0.035, { attack: 0.05, release: 0.4 });
-  b.tune(22, BPM, THEME.slice(0, 14), 'horn', 0.085);
-  for (let k = 0; k < 7; k++) b.firework(22.4 + k * 1.1, 0.1);
-  b.cheer(22.2, 7, 0.035);
-  // 30–44: the credits, gently.
-  b.chords(30, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.025, { attack: 1, release: 1.4 });
-  b.arps(30, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.04);
-  b.tune(31.2, 80, THEME.slice(0, 14), 'flute', 0.06);
-  b.sea(30, 14, 0.025);
-  // 44–51: the little cloud and the toadstools.
-  b.tune(44.6, 132, BLUSTER.slice(0, 6), 'flute', 0.05);
-  b.strings(44.4, 5, ['D3', 'A3', 'F#4'], 0.035, { attack: 0.4, release: 1.6 });
-  for (const [i, n] of ['D4', 'F#4', 'A4', 'D5'].entries()) b.pluck(48.2 + i * 0.16, hz(n), { gain: 0.09, decay: 1.6, type: 'triangle', bell: true, verb: 0.45 });
+function ending5(b, c) {
+  const pop = c('pop');
+  const lanterns = c('lanterns');
+  const clear = c('clear');
+  const party = c('party');
+  const credits = c('credits');
+  const teaser = c('teaser');
+  const at = pop.m.pop;
+  // The Baron popped, whizzing round and shrinking.
+  b.timpaniRoll(pop.at + 0.2, at - pop.at - 0.2, 'A2', 0.2);
+  b.pop(at, 0.35);
+  b.crash(at, 0.14, 3);
+  b.whoosh(at + 0.2, 0.08, pop.end - at - 0.5);
+  b.tune(at + 0.6, 180, BLUSTER, 'flute', 0.05);
+  b.tune(at + 3.4, 180, BLUSTER, 'flute', 0.04);
+  b.cheer(at + 0.4, 5, 0.03);
+  // The five lanterns floating up.
+  b.bed(lanterns.at, lanterns.end, BPM, ['G', 'A', 'Bm'], 0.03, { attack: 0.6, release: 0.8 });
+  b.choir(lanterns.at + 0.4, lanterns.dur - 0.6, ['D4', 'A4', 'D5'], 0.02);
+  b.sparkle(lanterns.at + 0.4, 6, 0.04);
+  // The Cloud Blanket blowing away.
+  b.swell(clear.at, 2, 0.08);
+  b.whoosh(clear.at + 0.6, 0.1, 3);
+  b.strings(clear.at + 1, clear.dur - 1, ['D3', 'A3', 'D4', 'F#4', 'A4'], 0.04, { attack: 0.3, release: 1.6 });
+  b.tune(clear.at + 2, BPM, THEME.slice(0, 10), 'horn', 0.08);
+  // Everyone on the beach, fireworks.
+  b.beat(party.at, BPM, Math.floor(party.dur / BAR), 0.26);
+  b.bed(party.at, party.end, BPM, THEME_CHORDS.slice(0, 4), 0.035, { attack: 0.05, release: 0.4 });
+  b.tune(party.at, BPM, THEME.slice(0, 14), 'horn', 0.085);
+  for (let t = party.at + 0.4; t < party.end - 0.5; t += 1.1) b.firework(t, 0.1);
+  b.cheer(party.at + 0.2, 7, 0.035);
+  // The credits, gently.
+  b.bed(credits.at, credits.end, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.025, { attack: 1, release: 1.4 });
+  b.twinkle(credits.at, credits.end, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.04);
+  b.tune(credits.at + 1.2, 80, THEME.slice(0, 14), 'flute', 0.06);
+  b.sea(credits.at, credits.dur, 0.025);
+  // The little cloud and the toadstools.
+  const title = teaser.m.title;
+  b.tune(teaser.at + 0.6, 132, BLUSTER.slice(0, 6), 'flute', 0.05);
+  b.bed(teaser.at + 2, title, 72, ['D', 'G'], 0.022, { attack: 0.6, release: 1 });
+  b.strings(title - 0.4, teaser.end - title + 0.4, ['D3', 'A3', 'F#4'], 0.035, { attack: 0.4, release: 1.6 });
+  for (const [i, n] of ['D4', 'F#4', 'A4', 'D5'].entries()) b.pluck(title + i * 0.16, hz(n), { gain: 0.09, decay: 1.6, type: 'triangle', bell: true, verb: 0.45 });
 }
 
 // The sixth episode's: a cradle song, on a music box, and the Night Mare's
@@ -825,84 +1016,104 @@ const musicBox = (b, t, bpm, notes, gain = 0.07) => {
   }
 };
 
-function intro6(b) {
-  // 0–9: dusk on the beach, the cradle song on a music box, and down they sink.
-  b.sea(0, 9, 0.028);
+function intro6(b, c) {
+  const pillow = c('pillow');
+  const fall = c('fall');
+  const mare = c('mare');
+  const dreams = c.all('dream');
+  const frights = c('frights');
+  const start = c('start');
+  // Dusk on the beach, the cradle song on a music box, and down they sink.
+  b.sea(0, pillow.end, 0.028);
   musicBox(b, 0.6, 76, CRADLE.slice(0, 8), 0.07);
-  b.chords(0.4, 76, ['C', 'F', 'G'], 0.02, { attack: 1.2, release: 1.2 });
-  b.whoosh(5.6, 0.05, 2.6);
-  b.sparkle(5.6, 10, 0.05);
-  // 9–17: down through the sky of the dream.
-  b.swell(9, 2.2, 0.06);
-  b.choir(9.6, 7, ['C4', 'G4', 'E5'], 0.022);
-  b.chords(9.4, 70, ['C', 'Am', 'F', 'G'], 0.03, { attack: 0.8, release: 1.2 });
-  musicBox(b, 10, 84, CRADLE, 0.06);
-  b.sparkle(11, 12, 0.04);
-  // 17–25: the Night Mare galloping round her moon.
-  gallop(b, 17, 8, 0.09);
-  b.strings(17, 8, ['E2', 'B2', 'E3', 'G3'], 0.04, { attack: 0.5, release: 0.8, tremolo: true });
-  b.crash(17, 0.1, 2);
-  b.timpaniRoll(20.6, 0.8, 'E2', 0.16);
-  b.tune(18, 100, [['E4', 1], ['G4', 1], ['F#4', 2], ['D4', 1], ['E4', 3]], 'horn', 0.06);
-  // 25–37: a dream after another, a bar each.
+  b.bed(0.4, pillow.end, 76, ['C', 'F', 'G'], 0.02, { attack: 1.2, release: 1.2 });
+  b.whoosh(pillow.at + 5.6, 0.05, 2.6);
+  b.sparkle(pillow.at + 5.6, 10, 0.05);
+  // Down through the sky of the dream.
+  b.swell(fall.at, 2.2, 0.06);
+  b.choir(fall.at + 0.6, fall.dur - 0.8, ['C4', 'G4', 'E5'], 0.022);
+  b.bed(fall.at + 0.4, fall.end, 70, ['C', 'Am', 'F', 'G'], 0.03, { attack: 0.8, release: 1.2 });
+  musicBox(b, fall.at + 1, 84, CRADLE, 0.06);
+  b.sparkle(fall.at + 2, 12, 0.04);
+  // The Night Mare galloping round her moon.
+  gallop(b, mare.at, mare.dur, 0.09);
+  b.strings(mare.at, mare.dur, ['E2', 'B2', 'E3', 'G3'], 0.04, { attack: 0.5, release: 0.8, tremolo: true });
+  b.crash(mare.at, 0.1, 2);
+  b.timpaniRoll(mare.at + 3.6, 0.8, 'E2', 0.16);
+  b.tune(mare.at + 1, 100, [['E4', 1], ['G4', 1], ['F#4', 2], ['D4', 1], ['E4', 3]], 'horn', 0.06);
+  // A dream after another, a bar each.
+  const m0 = dreams[0].at;
   const bar = 240 / 3;
-  b.beat(25, bar, 4, 0.22);
-  const dreams = ['C', 'F', 'Am', 'G'];
-  b.chords(25, bar, dreams, 0.03, { attack: 0.05, release: 0.3 });
-  dreams.forEach((c, i) => {
-    b.pluck(25 + i * 3, hz(CHORDS[c][3]), { gain: 0.1, decay: 1.6, type: 'triangle', bell: true, verb: 0.4 });
-    musicBox(b, 25.4 + i * 3, 150, CRADLE.slice(i * 4, i * 4 + 4), 0.06);
+  b.beat(m0, bar, dreams.length, 0.22);
+  const keys = ['C', 'F', 'Am', 'G'];
+  b.chords(m0, bar, keys, 0.03, { attack: 0.05, release: 0.3 });
+  keys.forEach((ch, i) => {
+    b.pluck(m0 + i * 3, hz(CHORDS[ch][3]), { gain: 0.1, decay: 1.6, type: 'triangle', bell: true, verb: 0.4 });
+    musicBox(b, m0 + 0.4 + i * 3, 150, CRADLE.slice(i * 4, i * 4 + 4), 0.06);
   });
-  // 37–43: her frights, coming.
-  gallop(b, 37, 5.6, 0.06, 0.2);
-  b.strings(37, 6, ['E2', 'B2', 'G3'], 0.035, { attack: 0.4, release: 1, tremolo: true });
-  for (let k = 0; k < 6; k++) b.pluck(37.4 + k * 0.9, hz(['E3', 'G3', 'F#3'][k % 3]), { gain: 0.08, decay: 0.5, type: 'square', verb: 0.2 });
-  b.timpaniRoll(41.6, 1.2, 'G2', 0.2);
-  // 43–53: the heroes, and the title: the theme in full, the cradle song over it.
-  b.swell(43, 1.6, 0.07);
-  b.chords(44, BPM, THEME_CHORDS.slice(0, 3), 0.04, { attack: 0.2, release: 0.6 });
-  b.tune(44, BPM, THEME.slice(0, 12), 'horn', 0.1);
-  b.crash(48, 0.12, 3);
-  b.sparkle(48, 10, 0.05);
-  musicBox(b, 48.4, 96, CRADLE.slice(0, 8), 0.05);
-  b.strings(53 - 2.4, 2.4, CHORDS.D, 0.04, { attack: 0.1, release: 1.6 });
+  // Her frights, coming.
+  gallop(b, frights.at, frights.dur - 0.4, 0.06, 0.2);
+  b.strings(frights.at, frights.dur, ['E2', 'B2', 'G3'], 0.035, { attack: 0.4, release: 1, tremolo: true });
+  for (let t = frights.at + 0.4; t < frights.end - 0.5; t += 0.9) b.pluck(t, hz(['E3', 'G3', 'F#3'][Math.round((t - frights.at) / 0.9) % 3]), { gain: 0.08, decay: 0.5, type: 'square', verb: 0.2 });
+  b.timpaniRoll(frights.end - 1.4, 1.2, 'G2', 0.2);
+  // You, and the title: the theme in full, the cradle song over it.
+  const title = start.m.title;
+  b.swell(start.at, 1.6, 0.07);
+  b.bed(start.at + 1, title, 76, ['C', 'F', 'G'], 0.022, { attack: 0.8, release: 0.8 });
+  musicBox(b, start.at + 1.2, 76, CRADLE.slice(8), 0.05);
+  b.timpaniRoll(title - 0.8, 0.8, 'D2', 0.2);
+  b.chords(title, BPM, THEME_CHORDS.slice(0, 2), 0.04, { attack: 0.2, release: 0.6 });
+  b.tune(title, BPM, THEME.slice(0, 9), 'horn', 0.1);
+  b.crash(title, 0.12, 3);
+  b.sparkle(title, 10, 0.05);
+  b.strings(start.end - 2.4, 2.4, CHORDS.D, 0.04, { attack: 0.1, release: 1.6 });
 }
 
-function ending6(b) {
-  // 0–8: the Night Mare in the light, trembling: her gallop, slowing down.
-  b.strings(0, 8, ['E3', 'B3', 'G4'], 0.025, { attack: 0.8, release: 1.4, tremolo: true });
-  for (let k = 0; k < 9; k++) b.pluck(0.4 + k * (0.36 + k * 0.05), hz(['E2', 'B2', 'G2'][k % 3]), { gain: 0.07 - k * 0.005, decay: 0.4, type: 'triangle', verb: 0.3 });
-  b.tune(4.4, 72, [['E4', 1], ['G4', 1], ['C5', 2]], 'flute', 0.05);
-  // 8–16: the night-light, and she sleeps.
-  b.chords(8, 66, ['C', 'F', 'G', 'C'], 0.026, { attack: 1, release: 1.6 });
-  musicBox(b, 8.8, 70, CRADLE.slice(0, 8), 0.07);
-  b.choir(11, 5, ['C4', 'E4', 'G4'], 0.016);
-  // 16–24: the five Sweet Dreams, floating home.
-  b.swell(16, 2, 0.08);
-  for (let k = 0; k < 5; k++) b.pluck(16.6 + k * 0.5, hz(['C5', 'E5', 'G5', 'B5', 'C6'][k]), { gain: 0.09, decay: 2.4, type: 'triangle', bell: true, verb: 0.5 });
-  b.strings(17, 7, ['C3', 'G3', 'C4', 'E4', 'G4'], 0.04, { attack: 0.4, release: 1.6 });
-  b.choir(17.4, 6.4, ['C4', 'G4', 'E5'], 0.024);
-  b.tune(18.4, 92, CRADLE.slice(0, 8), 'horn', 0.07);
-  b.sparkle(17, 14, 0.05);
-  // 24–32: the party on the great pillow.
-  b.beat(24, BPM, 3, 0.26);
-  b.chords(24, BPM, THEME_CHORDS.slice(0, 3), 0.035, { attack: 0.05, release: 0.4 });
-  b.tune(24, BPM, THEME.slice(0, 14), 'horn', 0.085);
-  for (let k = 0; k < 7; k++) b.firework(24.4 + k * 1.1, 0.1);
-  b.cheer(24.2, 7, 0.035);
-  // 32–46: the credits, gently.
-  b.chords(32, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.025, { attack: 1, release: 1.4 });
-  b.arps(32, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.04);
-  b.tune(33.2, 80, THEME.slice(0, 14), 'flute', 0.06);
-  // 46–53: morning on the beach.
-  b.sea(46, 7, 0.03);
-  musicBox(b, 46.6, 80, CRADLE.slice(0, 8), 0.06);
-  b.strings(46.4, 5.4, ['C3', 'G3', 'E4'], 0.03, { attack: 0.4, release: 1.6 });
-  for (const [i, n] of ['C4', 'E4', 'G4', 'C5'].entries()) b.pluck(50.6 + i * 0.16, hz(n), { gain: 0.09, decay: 1.6, type: 'triangle', bell: true, verb: 0.45 });
+function ending6(b, c) {
+  const calm = c('calm');
+  const light = c('light');
+  const dreams = c('dreams');
+  const party = c('party');
+  const credits = c('credits');
+  const morning = c('morning');
+  // The Night Mare in the light, trembling: her gallop, slowing down.
+  b.strings(calm.at, calm.dur, ['E3', 'B3', 'G4'], 0.025, { attack: 0.8, release: 1.4, tremolo: true });
+  for (let k = 0, t = calm.at + 0.4; k < 12 && t < calm.end; k++, t += 0.36 + k * 0.05) b.pluck(t, hz(['E2', 'B2', 'G2'][k % 3]), { gain: Math.max(0.02, 0.07 - k * 0.005), decay: 0.4, type: 'triangle', verb: 0.3 });
+  b.tune(calm.end - 3.6, 72, [['E4', 1], ['G4', 1], ['C5', 2]], 'flute', 0.05);
+  // The night-light, and she sleeps.
+  b.bed(light.at, light.end, 66, ['C', 'F', 'G', 'C'], 0.026, { attack: 1, release: 1.6 });
+  musicBox(b, light.at + 0.8, 70, CRADLE.slice(0, 8), 0.06);
+  b.choir(light.at + 3, light.dur - 3, ['C4', 'E4', 'G4'], 0.016);
+  // The five Sweet Dreams, floating home.
+  b.swell(dreams.at, 2, 0.08);
+  for (let k = 0; k < 5; k++) b.pluck(dreams.at + 0.6 + k * 0.5, hz(['C5', 'E5', 'G5', 'B5', 'C6'][k]), { gain: 0.09, decay: 2.4, type: 'triangle', bell: true, verb: 0.5 });
+  b.strings(dreams.at + 1, dreams.dur - 1, ['C3', 'G3', 'C4', 'E4', 'G4'], 0.04, { attack: 0.4, release: 1.6 });
+  b.choir(dreams.at + 1.4, dreams.dur - 1.6, ['C4', 'G4', 'E5'], 0.024);
+  b.tune(dreams.at + 2.4, 92, CRADLE.slice(0, 8), 'horn', 0.07);
+  b.sparkle(dreams.at + 1, 14, 0.05);
+  // The party on the great pillow.
+  b.beat(party.at, BPM, Math.floor(party.dur / BAR), 0.26);
+  b.bed(party.at, party.end, BPM, THEME_CHORDS.slice(0, 4), 0.035, { attack: 0.05, release: 0.4 });
+  b.tune(party.at, BPM, THEME.slice(0, 14), 'horn', 0.085);
+  for (let t = party.at + 0.4; t < party.end - 0.5; t += 1.1) b.firework(t, 0.1);
+  b.cheer(party.at + 0.2, 7, 0.035);
+  // The credits, gently.
+  b.bed(credits.at, credits.end, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.025, { attack: 1, release: 1.4 });
+  b.twinkle(credits.at, credits.end, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.04);
+  b.tune(credits.at + 1.2, 80, THEME.slice(0, 14), 'flute', 0.06);
+  // Morning on the beach.
+  const title = morning.m.title;
+  b.sea(morning.at, morning.dur, 0.03);
+  musicBox(b, morning.at + 0.6, 80, CRADLE.slice(0, 8), 0.06);
+  b.bed(morning.at + 0.4, title, 80, ['C', 'G'], 0.022, { attack: 0.6, release: 1.2 });
+  b.strings(title - 0.4, morning.end - title + 0.4, ['C3', 'G3', 'E4'], 0.03, { attack: 0.4, release: 1.6 });
+  for (const [i, n] of ['C4', 'E4', 'G4', 'C5'].entries()) b.pluck(title + i * 0.16, hz(n), { gain: 0.09, decay: 1.6, type: 'triangle', bell: true, verb: 0.45 });
 }
 
-export async function score(name, secs) {
+export async function score(name, secs, cues) {
   const b = new Band(secs);
-  ({ intro, ending, intro2, ending2, intro3, ending3, intro4, ending4, intro5, ending5, intro6, ending6 }[name] ?? ending)(b);
+  const c = cueBook(cues);
+  ({ intro, ending, intro2, ending2, intro3, ending3, intro4, ending4, intro5, ending5, intro6, ending6 }[name] ?? ending)(b, c);
+  await b.voices(cues.lines);
   return b.render();
 }

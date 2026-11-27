@@ -17,6 +17,7 @@ import { buildIsle } from '/js/shared/isle-maps.js';
 import { nodWorld } from '/js/shared/nod/worlds/index.js';
 import { World } from '/js/shared/world.js';
 import { palette } from '/js/shared/worldgen.js';
+import { CAST, lineId } from './cast.js';
 
 export const W = 1280;
 export const H = 720;
@@ -145,7 +146,7 @@ export function monster(kind, act) {
   const id = nextId++;
   const model = renderer.addMonster(id, kind);
   model.bubble && (model.bubble.visible = false);
-  const a = { id, kind: 'monster', model, act };
+  const a = { id, kind: 'monster', model, act, base: model.group.scale.x };
   actors.push(a);
   return a;
 }
@@ -154,7 +155,7 @@ export function monster(kind, act) {
 export function kid(look, act) {
   const id = nextId++;
   const model = renderer.addAvatar(id, look, '');
-  const a = { id, kind: 'avatar', model, act };
+  const a = { id, kind: 'avatar', model, act, base: model.root.scale.x };
   actors.push(a);
   return a;
 }
@@ -163,7 +164,7 @@ export function kid(look, act) {
 export function critter(type, act) {
   const id = nextId++;
   const model = renderer.addCritter(id, type);
-  const a = { id, kind: 'critter', model, act };
+  const a = { id, kind: 'critter', model, act, base: model.group.scale.x };
   actors.push(a);
   return a;
 }
@@ -188,9 +189,41 @@ export function prop(obj, act) {
   return a;
 }
 
+// An actor who talks: while `who` (cast.js) is saying something, it bobs and
+// squashes with how loud the words are, as cartoons do. how: how much (1 as
+// usual).
+export function voiced(a, who, how = 1) {
+  a.voice = who;
+  a.talkHow = how;
+  return a;
+}
+
+// How loud `who` is just now, 0 to 1 (0 while saying nothing).
+export function loud(who, t = clock) {
+  for (const l of film?.lines ?? []) {
+    if (l.who !== who || t < l.at || t >= l.at + l.dur) continue;
+    return l.env?.[Math.floor((t - l.at) * 30)] ?? 0.5;
+  }
+  return 0;
+}
+
+// The bob of a talking actor: up and wider at each loud bit, smoothed.
+function talk(a, dt) {
+  const want = a.voice ? loud(a.voice) : 0;
+  a.talking = (a.talking ?? 0) + (want - (a.talking ?? 0)) * Math.min(1, dt * 18);
+  return a.talking * (a.talkHow ?? 1);
+}
+
+// (size: how big it is when it is quiet.)
+function bob(obj, k, size) {
+  if (k < 0.01) obj.scale.setScalar(size);
+  else obj.scale.set(size * (1 + 0.05 * k), size * (1 + 0.1 * k), size * (1 + 0.05 * k));
+}
+
 function stepActors(t, dt, night) {
   for (const a of actors) {
     const s = a.act(t, dt) ?? {};
+    const k = talk(a, dt);
     if (a.kind === 'monster') {
       const m = a.model;
       m.group.visible = s.visible !== false;
@@ -199,6 +232,8 @@ function stepActors(t, dt, night) {
       m.update(dt, s.state ?? 'idle', s.air ?? 0, night, Boolean(s.shielded));
       if (m.bubble) m.bubble.visible = m.bubbleRim.visible = Boolean(s.shielded);
       if (s.scale) m.group.scale.setScalar(s.scale);
+      if (a.voice) bob(m.group, k, s.scale ?? a.base);
+      if (k > 0.01) m.group.position.y += 0.12 * k * (s.scale ?? 1);
       renderer.placeShadow(m.shadow, s.x, s.y, s.z, (m.shadowScale ?? 1) * (s.scale ?? 1));
       m.shadow.visible = s.visible !== false;
     } else if (a.kind === 'avatar') {
@@ -210,6 +245,8 @@ function stepActors(t, dt, night) {
       else m.root.rotation.set(0, s.yaw ?? 0, 0);
       if (s.emote && m.emote !== s.emote) m.playEmote(s.emote);
       m.update(dt, s.anim ?? ANIM.idle, s.speed ?? 0);
+      if (a.voice) bob(m.root, k * 0.8, a.base);
+      if (k > 0.01 && !s.up) m.root.position.y += 0.05 * k;
       if (s.up) m.shadow.visible = false;
       else renderer.placeShadow(m.shadow, s.x, s.y, s.z, 1);
     } else if (a.kind === 'fright') {
@@ -219,6 +256,7 @@ function stepActors(t, dt, night) {
       a.obj.position.set(s.x + up.x * alt, s.y + up.y * alt, s.z + up.z * alt);
       quatOf(up, s.h, a.obj.quaternion);
       a.obj.scale.setScalar(s.scale ?? 1);
+      if (a.voice) bob(a.obj, k, s.scale ?? 1);
       a.model.update(dt, { state: s.state ?? 'idle', k: s.k ?? 0, run: s.run ?? 0, kind: s.kind ?? null, look: null, open: s.open ?? null, speed: s.speed ?? 0, alt, come: 1, hearts: 3, max: 3, more: s.more ?? [], act: null });
       a.model.shadow.visible = false;
     } else if (a.kind === 'critter') {
@@ -228,6 +266,8 @@ function stepActors(t, dt, night) {
       if (s.roll !== undefined) m.group.rotation.z = s.roll;
       if (s.pitch !== undefined) m.group.rotation.x = s.pitch;
       m.update(dt, s.state ?? 'idle', Boolean(s.moving), 0);
+      if (a.voice) bob(m.group, k * 1.4, a.base);
+      if (k > 0.01) m.group.position.y += 0.08 * k;
       if (m.shadow) m.shadow.visible = false;
     } else {
       const o = a.obj;
@@ -252,6 +292,8 @@ function stepActors(t, dt, night) {
 let film = null;
 let shotIndex = -1;
 let lastT = 0;
+// The film's own time, at the frame being drawn.
+let clock = 0;
 const focus = new THREE.Vector3();
 
 export function load(f) {
@@ -262,7 +304,98 @@ export function load(f) {
     at += s.dur;
   }
   film.length = at;
+  film.lines ??= [];
   shotIndex = -1;
+}
+
+// ------------------------------------------------------------ words
+
+// What every line said in the films is like, as voices.mjs made it ({ [lineId]:
+// { key, dur, env } }); before it has, how long each is is guessed, for a
+// first look at the film to see what is said in it.
+let voices = {};
+export function useVoices(table) {
+  voices = table ?? {};
+}
+function voiceOf(who, text, max) {
+  const v = voices[lineId(who, text, max)];
+  if (v) return v;
+  const words = text.split(/\s+/).length;
+  return { key: null, dur: Math.min(max ?? 99, 0.45 + words / 2.6), env: null };
+}
+
+// A film put together a shot at a time: add(shot) puts a shot after the last
+// one, as long as it says (dur) or as long as the lines said in it need, if
+// longer: shot.lines, each [who, text, { at, gap, max, pan }], said one after
+// another from shot.speak (or half a second) in, a little gap between them —
+// or from `at` in, for one that waits for something; max: the longest it may
+// take (said faster to fit). A shot made longer for its lines takes its
+// camera along slower (shot.base: as long as it was made for), unless it says
+// keepCamera. shot.said: when each line starts and ends, in the shot's own time,
+// for its actors to go by. say(): a line at a time of the film's own; over():
+// something drawn over it (captions, cards); done(): the film.
+export function reel() {
+  const shots = [];
+  const overlays = [];
+  const lines = [];
+  let at = 0;
+  const put = (who, text, when, o = {}) => {
+    const v = voiceOf(who, text, o.max);
+    const l = { who, text, max: o.max, at: when, dur: v.dur, key: v.key, env: v.env, pan: o.pan ?? 0, gain: o.gain ?? 1 };
+    lines.push(l);
+    if (!o.quiet) overlays.push(subtitle(l));
+    return l;
+  };
+  return {
+    shots,
+    overlays,
+    lines,
+    get at() {
+      return at;
+    },
+    add(shot) {
+      shot.start = at;
+      shot.said = [];
+      let t = shot.speak ?? 0.5;
+      for (const [who, text, o = {}] of shot.lines ?? []) {
+        if (shot.said.length) t += o.gap ?? 0.3;
+        if (o.at !== undefined) t = Math.max(t, o.at);
+        const l = put(who, text, at + t, o);
+        shot.said.push({ who, at: t, end: t + l.dur });
+        t += l.dur;
+      }
+      shot.base = shot.dur;
+      if (shot.said.length && !shot.fixed) shot.dur = Math.max(shot.dur ?? 0, t + (shot.hold ?? 0.7));
+      if (shot.fixed && t > shot.dur + 0.05) console.warn(`a fixed shot of ${shot.dur} s with ${t.toFixed(2)} s of words`);
+      at += shot.dur;
+      shots.push(shot);
+      return shot;
+    },
+    say(who, text, when, o) {
+      return put(who, text, when, o);
+    },
+    over(...o) {
+      overlays.push(...o);
+    },
+    done(more = {}) {
+      return { shots, overlays, lines, ...more };
+    },
+  };
+}
+
+// Every line said in the film loaded, for voices.mjs: { who, text, max } each.
+export const linesOf = () => (film?.lines ?? []).map(({ who, text, max }) => ({ who, text, max }));
+
+// Where each shot and line is in the film loaded, for its music and sound:
+// shots { name, at, dur, marks } (marks: moments in it to time a sound to, as
+// the shot names them: shot.marks, or shot.marks(shot) once its lines are
+// placed, in its own time) and lines { who, at, dur, key, pan, gain }.
+export function cuesOf() {
+  return {
+    length: film.length,
+    shots: film.shots.map((s) => ({ name: s.name ?? null, at: s.at, dur: s.dur, marks: Object.fromEntries(Object.entries((typeof s.marks === 'function' ? s.marks(s) : s.marks) ?? {}).map(([k, v]) => [k, s.at + v])) })),
+    lines: film.lines.map(({ who, at, dur, key, pan, gain }) => ({ who, at, dur, key, pan, gain })),
+  };
 }
 
 function shotAt(t) {
@@ -278,6 +411,7 @@ export function frame(t) {
   const i = shotAt(t);
   const shot = film.shots[i];
   const local = t - shot.at;
+  clock = t;
   let dt = Math.max(0, Math.min(0.1, t - lastT));
   if (i !== shotIndex) {
     clearActors();
@@ -290,11 +424,15 @@ export function frame(t) {
     dt = 1 / FPS;
   }
   lastT = t;
-  const time = typeof shot.time === 'function' ? shot.time(local) : (shot.time ?? 0.3);
+  // (A shot made longer for its words: its camera and its time of day go slower.)
+  const slow = shot.base && shot.dur > shot.base && !shot.keepCamera ? shot.base / shot.dur : 1;
+  const time = typeof shot.time === 'function' ? shot.time(local * slow) : (shot.time ?? 0.3);
   const night = time < 0.2 || time > 0.8;
-  stepActors(local, dt, night);
-  shot.fx?.(local, dt);
-  const cam = shot.camera(local);
+  // (Its actors too, for a shot that says stretch: everything slower.)
+  const acting = shot.stretch ? local * slow : local;
+  stepActors(acting, dt * (shot.stretch ? slow : 1), night);
+  shot.fx?.(acting, dt);
+  const cam = shot.camera(local * slow);
   renderer.camera.position.set(...cam.pos);
   renderer.camera.up.set(...(cam.up ?? [0, 1, 0]));
   renderer.camera.lookAt(...cam.look);
@@ -384,8 +522,56 @@ export function caption(at, secs, text) {
   };
 }
 
-// A name over a shot of one of the captains: its icon, name and where.
-export function nameCard(at, secs, title, sub) {
+// What is said, shown at the bottom while it is said: the storyteller's words
+// as a caption, anyone else's under their name, in their colour (cast.js).
+export function subtitle(l) {
+  const c0 = CAST[l.who] ?? {};
+  const tag = c0.name || c0.icon ? [c0.icon, c0.name].filter(Boolean).join(' ') : '';
+  return {
+    at: Math.max(0, l.at - 0.12),
+    until: l.at + Math.max(l.dur + 0.3, 1.1),
+    draw(c, k) {
+      const font = `600 32px ${FONT}`;
+      const lines = wrap(tag ? `“${l.text}”` : l.text, W * 0.78, font);
+      const lh = 42;
+      const h = lines.length * lh + 26;
+      c.font = font;
+      let w = Math.max(...lines.map((x) => c.measureText(x).width)) + 56;
+      c.font = `700 26px ${FONT}`;
+      const tw = tag ? c.measureText(tag).width + 34 : 0;
+      w = Math.min(W * 0.86, Math.max(w, tw + 40));
+      const y = H - h - 34 + (1 - k) * 10;
+      const x = (W - w) / 2;
+      c.save();
+      c.globalAlpha = k;
+      c.fillStyle = 'rgba(24,18,40,0.66)';
+      roundRect(c, x, y, w, h, 22);
+      c.fill();
+      if (tag) {
+        c.lineWidth = 3;
+        c.strokeStyle = c0.color ?? '#ffffff';
+        c.stroke();
+        c.fillStyle = c0.color ?? '#ffffff';
+        roundRect(c, x + 18, y - 22, tw, 40, 20);
+        c.fill();
+        c.fillStyle = '#2a1e3a';
+        c.textAlign = 'left';
+        c.textBaseline = 'middle';
+        c.fillText(tag, x + 35, y - 1);
+      }
+      c.font = font;
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.fillStyle = '#fffaf0';
+      lines.forEach((line, i) => c.fillText(line, W / 2, y + 13 + lh * (i + 0.5) + (tag ? 6 : 0)));
+      c.restore();
+    },
+  };
+}
+
+// A name over a shot of one of the captains: its icon, name and where (at the
+// top, out of the way of what is said: { top: true }).
+export function nameCard(at, secs, title, sub, { top = false } = {}) {
   return {
     at,
     until: at + secs,
@@ -393,18 +579,19 @@ export function nameCard(at, secs, title, sub) {
       c.save();
       c.globalAlpha = k;
       const x = 70 + (1 - k) * -30;
+      const y = top ? 96 : H - 120;
       c.font = `700 46px ${FONT}`;
       c.textBaseline = 'alphabetic';
       c.lineWidth = 8;
       c.strokeStyle = 'rgba(30,20,50,0.75)';
-      c.strokeText(title, x, H - 120);
+      c.strokeText(title, x, y);
       c.fillStyle = '#ffe680';
-      c.fillText(title, x, H - 120);
+      c.fillText(title, x, y);
       c.font = `600 28px ${FONT}`;
       c.lineWidth = 6;
-      c.strokeText(sub, x + 4, H - 78);
+      c.strokeText(sub, x + 4, y + 42);
       c.fillStyle = '#ffffff';
-      c.fillText(sub, x + 4, H - 78);
+      c.fillText(sub, x + 4, y + 42);
       c.restore();
     },
   };

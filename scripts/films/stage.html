@@ -19,14 +19,19 @@
       await document.fonts.load('600 32px Fredoka');
       await document.fonts.load('700 46px Fredoka');
       window.film = {
-        load(name) {
+        // A film, with what its lines are like (voices.mjs), or with how long
+        // each is guessed, for a first look at what is said in it.
+        load(name, voices = null) {
+          stage.useVoices(voices);
           stage.load(films[name]());
-          return { length: films[name].length ?? null };
+          return { length: stage.lengthOf() };
         },
+        lines: () => stage.linesOf(),
+        cues: () => stage.cuesOf(),
         length: () => stage.lengthOf(),
         poster: () => stage.posterOf(),
         frame: (t) => stage.frame(t),
-        score: (name, secs) => score(name, secs),
+        score: (name, secs) => score(name, secs, stage.cuesOf()),
       };
       window.filmReady = true;
     </script>
