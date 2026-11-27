@@ -307,6 +307,13 @@ const RANKING_WORLDS = [
 // ⭐N, with the level said aloud on a hover.
 const levelTag = (look) => (look?.level ? h('span', { class: 'tag-level', title: `Level ${look.level}` }, `⭐${look.level} `) : null);
 
+// No more than four things told at a time: the oldest goes, but never a line
+// still being said (speech).
+function trimToasts() {
+  const box = $('toasts');
+  while (box.children.length > 4) ([...box.children].find((e) => !e.classList.contains('speech')) ?? box.firstElementChild).remove();
+}
+
 export class UI {
   constructor({ profile, isle = null, sound, atlas, input }) {
     this.home = profile;
@@ -422,8 +429,18 @@ export class UI {
     const el = h('div', { class: `toast ${kind}` }, h('span', { class: 'icon' }, icon), h('span', {}, text));
     el.told = { what: [icon, text, kind], at: performance.now() };
     $('toasts').append(el);
-    while ($('toasts').children.length > 4) $('toasts').firstElementChild.remove();
+    trimToasts();
     setTimeout(() => el.remove(), 4100);
+  }
+
+  // A boss saying something out loud (boss-voice.js): its words at the top,
+  // under its name in its own colour, for as long as they take to say.
+  speech({ who, name, icon, color, text, secs }) {
+    const el = h('div', { class: 'toast speech', style: `--who:${color};animation-duration:${(secs + 0.9).toFixed(2)}s`, 'data-who': who }, h('span', { class: 'speaker' }, `${icon} ${name}`), h('span', { class: 'said' }, `“${text}”`));
+    // (First, over whatever else is being told, and kept till it is said.)
+    $('toasts').prepend(el);
+    trimToasts();
+    setTimeout(() => el.remove(), (secs + 1) * 1000);
   }
 
   // A reward for something you did, over where you did it: a popped
@@ -4071,6 +4088,7 @@ export class UI {
     });
     on('undo', () => this.buildToolbar());
     on('toast', (e) => this.toast(e.detail.icon, e.detail.text));
+    on('speech', (e) => this.speech(e.detail));
     on('reward', (e) => this.reward(e.detail));
     // What a popped monster dropped, come to you (game.js lootShown), and the
     // bricks one marching on a tower defense island was worth.

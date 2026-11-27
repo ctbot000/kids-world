@@ -6,6 +6,7 @@
 // island's `bfx` news), and the tags over each battle found (for ui.js
 // adventureTags). game.js keeps the state (game.adventure.battles, .fog) and
 // calls in here.
+import { bossSays } from './boss-voice.js';
 import { BATTLE_COLORS, BATTLE_ICONS, unpackFog } from './shared/isle-battles.js';
 import { battleOf } from './shared/isle-story.js';
 
@@ -182,6 +183,7 @@ export function battleFx(g, msg) {
       else if (b.kind === 'hunt') {
         g.sound.play('roar');
         toast('🐾', `${b.who || 'The Big Bad'} is here! Bop it — and when it runs off, run after it!`);
+        bossSays(g, b.beast, 'before', `b${b.id}`);
       }
       break;
     case 'hatch':
@@ -219,6 +221,7 @@ export function battleFx(g, msg) {
       if (here) {
         g.sound.play('boom');
         toast('🎩', 'Baron Bluster floats down over his arena on his cloud, laughing! He is out of reach up there: stand on all three lightning rods at once to zap him down!');
+        bossSays(g, 'bluster', 'before');
       }
       break;
     case 'rod': {
@@ -279,6 +282,8 @@ export function battleWon(g, msg) {
   if (lamp && g.near(lamp[0], lamp[1], lamp[2], 90)) fx.sparkles(lamp[0] + 0.5, lamp[1] + 0.6, lamp[2] + 0.5, 30, GOLD);
   if (g.near(b.x, b.y, b.z, 80)) fx.confetti(b.x, b.y + 2, b.z, 90, 1.2);
   g.sound.play('fanfare');
+  // (A Big Bad hunted down has something to say about it.)
+  if (b.kind === 'hunt') bossSays(g, b.beast, 'after', `b${b.id}`);
   const left = [...adv.battles.values()].filter((o) => !o.done).length;
   const more = left ? ` A spark flies off to the Sky Lantern — ${left === 1 ? 'one more battle' : `${left} more battles`} to go!` : '';
   g.emit('toast', { icon: '✨', text: `${b.doneText || `${b.name}: won!`}${msg.won ? '' : more}` });

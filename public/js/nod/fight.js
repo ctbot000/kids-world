@@ -5,6 +5,7 @@
 // out of the air, a roll, and once you have been brave enough often enough, a
 // Brave Burst.
 import * as THREE from '../../vendor/three.module.js';
+import { bossSays } from '../boss-voice.js';
 import { swingOf } from '../render/avatar.js';
 import { LaneMark, Shot, Beam, BurstDome } from '../render/nod/fx.js';
 import { makeFright } from '../render/nod/frights.js';
@@ -1212,6 +1213,7 @@ export class Fight {
       g.sound.play('grumble', { big: true });
       g.renderer.shake(0.4);
       g.emit('toast', { icon: told.icon ?? '🌑', text: `${told.name} is coming! ${told.hint}` });
+      bossSays(g, this.nod.world.boss.kind, 'before');
     } else if (m.k === 'boss') {
       g.sound.play('roar');
       g.renderer.shake(0.5);
@@ -1235,6 +1237,7 @@ export class Fight {
     if (f.spec.boss) {
       g.sound.play('nod-bosspop');
       g.renderer.shake(0.8);
+      bossSays(g, f.kind, 'after');
       this.domes.push(new BurstDome(this.scene, c, 14, '#ffe27a', 1400));
     }
     // What it drops, on the ground of its body (shared/loot.js).

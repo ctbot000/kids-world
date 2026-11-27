@@ -38,6 +38,7 @@ import { cleanStage, HELP_REACH } from './shared/adventure.js';
 import { chapterOf, ticketOf, ticketsHeld, tokensBack, toldKey } from './shared/isle-story.js';
 import { questBeaten, questFrame, questFx, readQuests, readRow } from './isle-quests-view.js';
 import { battleFrame, battleFx, battleWon, fogNews, fogSeen, readBattleRow, readBattles, readFog } from './isle-battles-view.js';
+import { bossSays } from './boss-voice.js';
 import { NodGame } from './nod/nod-game.js';
 import { LootView } from './loot-view.js';
 import { JEWELS } from './shared/loot.js';
@@ -3572,6 +3573,8 @@ export class Game extends EventTarget {
     this.sound.play('shield');
     const boss = this.bossInfo();
     this.emit('toast', { icon: '🫧', text: `Every camp is free! ${boss.name}’s bubble popped. Off to the ${adv.story.lair}, and pop ${boss.kind === 'moltok' ? 'it' : 'him'}!` });
+    // (And the boss, out of its bubble, has something to say about it.)
+    bossSays(this, boss.kind, 'before');
     this.emit('adventure');
   }
 
@@ -3598,6 +3601,7 @@ export class Game extends EventTarget {
       }
       this.sound.play('roar');
       const boss = this.bossInfo();
+      bossSays(this, boss.kind, 'again');
       this.emit('toast', { icon: '😤', text: `${boss.name} puffs ${boss.she ? 'herself' : 'himself'} up, bigger and grumpier than ever — and gets half ${boss.she ? 'her' : 'his'} hearts back! Keep at ${boss.she ? 'her' : 'him'}, together!` });
     }
     if (entry) entry.model.squash = msg.dazed ? 0.6 : 0.45;
@@ -3780,6 +3784,9 @@ export class Game extends EventTarget {
     }
     const hero = msg.hero === this.pid ? 'You' : this.players.get(msg.hero)?.name;
     const boss = this.bossInfo();
+    // The boss popped, after its battle (a fright of the Land of Nod says its
+    // as it goes: nod/fight.js).
+    if (msg.hero && !adv?.nod) bossSays(this, boss.kind, 'after');
     const quests = Boolean(adv?.quests);
     const battles = Boolean(adv?.battles);
     const nod = Boolean(adv?.nod);
@@ -4131,6 +4138,16 @@ export class Game extends EventTarget {
       // or Toon Isle's battles' sparks and glints.)
       if (adv.quests) questFrame(this, now);
       if (adv.battles) battleFrame(this, now);
+      // Come along after the boss's bubble popped: it says what it had to
+      // say as you come near it.
+      if (!adv.shield && !adv.won && adv.camps.size && now >= (this.bossNearAt ?? 0)) {
+        this.bossNearAt = now + 500;
+        const boss = this.bossInfo();
+        for (const e of this.monsters.values()) {
+          const p = e.model.group.position;
+          if (e.kind === boss.kind && this.near(p.x, p.y, p.z, 40)) bossSays(this, boss.kind, 'before');
+        }
+      }
     }
     while (this.fireworks.length && this.fireworks[0].at <= now) {
       const f = this.fireworks.shift();

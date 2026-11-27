@@ -13,7 +13,8 @@
     "test": "node scripts/test.mjs",
     "check": "node scripts/check.mjs",
     "prepare": "git config core.hooksPath .githooks || true",
-    "films": "node scripts/films/make-films.mjs"
+    "films": "node scripts/films/make-films.mjs",
+    "voices": "node scripts/films/boss-voices.mjs"
   },
   "engines": {
     "node": ">=22"

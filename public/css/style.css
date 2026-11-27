@@ -2283,6 +2283,35 @@ body.touch.playing #joystick {
   background: #ffe3e3;
 }
 
+/* A boss saying something out loud (ui.js speech): its words under its name,
+   in its own colour, on the dark, as the films show what is said. */
+.toast.speech {
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin-top: 14px;
+  padding: 18px 22px 12px;
+  position: relative;
+  background: rgba(24, 18, 40, 0.86);
+  border: 3px solid var(--who, #ffffff);
+  color: #fffaf0;
+  font-size: 1.15rem;
+  text-align: center;
+}
+
+.toast.speech .speaker {
+  position: absolute;
+  top: -15px;
+  left: 18px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: var(--who, #ffffff);
+  color: #2a1e3a;
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 /* Invitations to a friend's island, over everything but the loading screen,
    until you answer them. */
 #invitations {

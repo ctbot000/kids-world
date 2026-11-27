@@ -6,6 +6,7 @@
 // each challenge, its monkey, its lost animals, its bonfires and Jinx (for
 // ui.js adventureTags). game.js keeps the state (game.adventure.quests) and
 // calls in here.
+import { bossSays } from './boss-voice.js';
 import * as B from './shared/blocks.js';
 import { LOCK_COLORS, questIcon } from './shared/isle-quests.js';
 import { questOf } from './shared/isle-story.js';
@@ -168,6 +169,8 @@ export function questFx(g, msg) {
       if (msg.k === 'lit') {
         fx.sparkles(x + 0.5, y + 1, z + 0.5, 16, ['#ffd84d', '#ff9a3d', '#ff5a1f', '#fff3a0']);
         g.sound.play('fire');
+        // (The first of Jinx's own beacons lit: his last challenge is on.)
+        if (q.kind === 'jinx') bossSays(g, 'jinx', 'before');
         if (mine && !q.toldLit) {
           q.toldLit = true;
           toast('🔥', `Lit! It soon burns out (${q.burn ?? 30} seconds), so hurry and light ${q.fires.length > 2 ? 'all the others' : 'the other one'} too${q.kind === 'jinx' ? ' — every beacon at once dazzles Jinx!' : ' — or bring friends!'}`);
@@ -366,6 +369,7 @@ export function questBeaten(g, msg) {
   if (!q) return false;
   q.done = true;
   q.n = q.of;
+  if (q.kind === 'jinx') bossSays(g, 'jinx', 'after');
   const fx = g.renderer.effects;
   const lock = adv.hub?.locks?.[q.id - 1];
   if (lock && g.near(lock[0], lock[1], lock[2], 90)) fx.sparkles(lock[0] + 0.5, lock[1] + 1, lock[2] + 0.5, 30, [q.color, '#ffffff', '#ffd84d']);

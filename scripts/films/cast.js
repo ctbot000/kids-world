@@ -56,6 +56,7 @@ export const CAST = {
   thumpwood: { name: 'Thumpwood', icon: '🌳', color: '#a8d080', voice: 'am_onyx', pitch: 0.8, speed: 0.86 },
   rumbletooth: { name: 'Rumbletooth', icon: '🦖', color: '#ff9a5a', voice: 'am_michael', pitch: 0.84, speed: 0.95 },
   blink: { name: 'Big Blink', icon: '👁️', color: '#9fd8ff', voice: 'am_eric', pitch: 0.86, speed: 0.95 },
+  gusto: { name: 'Gusto', icon: '🧙', color: '#b8a8ff', voice: 'bm_daniel', pitch: 0.96, speed: 1 },
 
   // Episode 6: the Night Mare and the frights of the Land of Nod.
   mare: { name: 'The Night Mare', icon: '🐴', color: '#d0a8ff', voice: 'af_nicole', pitch: 1.08, speed: 0.9 },

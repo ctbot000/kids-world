@@ -14,6 +14,10 @@ const NOTE = (n) => 440 * 2 ** ((n - 69) / 12);
 // Mixer levels at full volume: effects peak around -10 dB, music sits below them.
 const SFX_GAIN = 2.5;
 const MUSIC_GAIN = 0.6;
+// Words said out loud (say): how loud, with the sound turned up all the way,
+// and how far the music goes down under them.
+const VOICE_GAIN = 1.5;
+const UNDER_VOICE = 0.35;
 // C major pentatonic, the notes that always sound nice together.
 const PENTA = [0, 2, 4, 7, 9];
 // Up a major scale, for blows in a row.
@@ -91,8 +95,44 @@ export class Sound {
     if (music !== undefined) this.musicLevel = music;
     if (this.ctx) {
       this.sfx.gain.setTargetAtTime(this.sfxLevel * SFX_GAIN, this.ctx.currentTime, 0.05);
-      this.music.gain.setTargetAtTime(this.hushed || this.singing ? 0 : this.musicLevel * MUSIC_GAIN, this.ctx.currentTime, 0.05);
+      this.music.gain.setTargetAtTime(this.hushed || this.singing ? 0 : this.musicLevel * MUSIC_GAIN * (this.talking ? UNDER_VOICE : 1), this.ctx.currentTime, 0.05);
     }
+  }
+
+  // Words said out loud: a recording (a boss's line, boss-voice.js), over
+  // everything else, as loud as the sound is set, the music quieter while it
+  // lasts. Resolves to how long it is, in seconds: 0 when it cannot be heard
+  // (no sound yet, the sound off, or the file not to be had).
+  async say(url) {
+    if (!this.ready || this.offline || this.sfxLevel <= 0) return 0;
+    this.said ??= new Map();
+    if (!this.said.has(url)) {
+      this.said.set(
+        url,
+        fetch(url)
+          .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
+          .then((b) => this.ctx.decodeAudioData(b))
+          .catch(() => null),
+      );
+    }
+    const buf = await this.said.get(url);
+    if (!buf) {
+      this.said.delete(url);
+      return 0;
+    }
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    const g = this.ctx.createGain();
+    g.gain.value = this.sfxLevel * VOICE_GAIN;
+    src.connect(g).connect(this.master);
+    this.talking = (this.talking ?? 0) + 1;
+    this.setLevels({});
+    src.onended = () => {
+      this.talking = Math.max(0, this.talking - 1);
+      this.setLevels({});
+    };
+    src.start();
+    return buf.duration;
   }
 
   // The music quiet while something else plays (a live show on a TV), or
