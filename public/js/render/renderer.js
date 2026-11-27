@@ -1284,17 +1284,23 @@ export class Renderer {
     this.time += dt;
     const { book } = this;
     const cam = this.camera;
-    const fov = this.bookFov();
-    if (Math.abs(cam.fov - fov) > 1e-3 || cam.far < 900) {
-      cam.fov = fov;
+    // (A film's camera is its own: scripts/films/stage.js.)
+    if (!state.freeCamera) {
+      const fov = this.bookFov();
+      if (Math.abs(cam.fov - fov) > 1e-3 || cam.far < 900) {
+        cam.fov = fov;
+        cam.far = 1500;
+        cam.updateProjectionMatrix();
+      }
+      cam.up.set(0, 1, 0);
+      cam.position.set(state.focus.x, state.focus.y, BOOK_D);
+      cam.lookAt(state.focus.x, state.focus.y, 0);
+      this.camDist = BOOK_D;
+      this.finishCamera(dt);
+    } else if (cam.far < 900) {
       cam.far = 1500;
       cam.updateProjectionMatrix();
     }
-    cam.up.set(0, 1, 0);
-    cam.position.set(state.focus.x, state.focus.y, BOOK_D);
-    cam.lookAt(state.focus.x, state.focus.y, 0);
-    this.camDist = BOOK_D;
-    this.finishCamera(dt);
     const L = book.theme.light;
     const env = this.env;
     env.day = 1;

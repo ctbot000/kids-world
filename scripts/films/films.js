@@ -30,7 +30,9 @@
 // (intro5, ending5): Baron Bluster, his Cloud Blanket and the five Sky
 // Lanterns of Toon Isle, drawn as a cartoon (render/cartoon.js). And the
 // sixth's (intro6, ending6): the Night Mare and the five Sweet Dreams of the
-// Land of Nod, where there is no island at all (shared/nod/worlds).
+// Land of Nod, where there is no island at all (shared/nod/worlds); the
+// seventh's (intro7, ending7): Count Inkblot and the five Happy Endings of the
+// Storybook, as flat as its pages (shared/book).
 import { BOSSES } from '/js/shared/bosses.js';
 import { questIcon } from '/js/shared/isle-quests.js';
 import { BATTLE_ICONS } from '/js/shared/isle-battles.js';
@@ -38,7 +40,7 @@ import { CHAPTERS, RAINBOW } from '/js/shared/isle-story.js';
 import { laneAt } from '/js/shared/nod/attacks.js';
 import { NOD_BOSSES } from '/js/shared/nod/bosses.js';
 import { add as plus, cross, flatUnit, sub, turn, unit } from '/js/shared/nod/shape.js';
-import { ANIM, B, critter, dreamOf, fright, isle, kid, monster, nameCard, NightLight, prop, reel, renderer, roll, star, THREE, titleCard, toon, voiced } from './stage.js';
+import { ANIM, B, bookOf, critter, dreamOf, fright, isle, kid, monster, nameCard, NightLight, prop, reel, renderer, roll, star, THREE, titleCard, toon, voiced } from './stage.js';
 
 const SEA = 20;
 const lerp = (a, b, k) => a + (b - a) * k;
@@ -3121,8 +3123,467 @@ function ending6() {
     ]),
   });
   const title = morning.start + morning.marks(morning).title;
-  r.over(titleCard(title, morning.start + morning.dur - title - 0.2, 'A new journey begins!', 'Come back to Adventure Isle!', { size: 70 }));
+  r.over(titleCard(title, morning.start + morning.dur - title - 0.2, 'The story goes on…', 'The Night Mare’s storybook: Episode 7, The Storybook', { size: 70 }));
   return r.done({ poster: dreams.start + 5 });
 }
 
-export const films = { intro, ending, intro2, ending2, intro3, ending3, intro4, ending4, intro5, ending5, intro6, ending6 };
+// ------------------------------------------------------------ the seventh episode
+
+const BOOK_CHAPTERS = CHAPTERS.filter((ch) => ch.episode === 7);
+// A page of the Storybook is seen from in front, from far off, through a long
+// lens, as the game sees it (render/book/themes.js BOOK_D).
+const PAGE_D = 60;
+const pageFov = (high) => (2 * Math.atan(high / 2 / PAGE_D) * 180) / Math.PI;
+// A camera before a page, looking at (x, y) on it with `high` metres of it top
+// to bottom, eased from one key to the next: each [t, x, y, high].
+function pageCam(list) {
+  return keys(list.map(([t, x, y, high]) => ({ t, pos: [x, y, PAGE_D], look: [x, y, 0], fov: pageFov(high) })));
+}
+// Facing along the page, a little round towards you (book-game.js faceYaw).
+const RIGHT = Math.PI / 2 - 0.6;
+const LEFT = -RIGHT;
+
+// The Bedtime Storybook: red covers, its pages, a gold star on the front;
+// open, 0 (shut) to 1 (wide open).
+function storybook(size = 1) {
+  const group = new THREE.Group();
+  const w = 1.1 * size;
+  const d = 1.5 * size;
+  const red = toon('#c8423a');
+  const back = new THREE.Mesh(new THREE.BoxGeometry(w, 0.06 * size, d), red);
+  back.position.y = 0.03 * size;
+  const pages = new THREE.Mesh(new THREE.BoxGeometry(w * 0.94, 0.14 * size, d * 0.94), toon('#fff6e0', { emissive: 0.08 }));
+  pages.position.y = 0.13 * size;
+  const hinge = new THREE.Group();
+  hinge.position.set(-w / 2, 0.23 * size, 0);
+  const front = new THREE.Mesh(new THREE.BoxGeometry(w, 0.06 * size, d), red);
+  front.position.x = w / 2;
+  const mark = star(0.22 * size, '#ffd23f');
+  mark.userData.halo.scale.setScalar(0.6 * size);
+  mark.rotation.x = -Math.PI / 2;
+  mark.position.set(w / 2, 0.05 * size, 0);
+  hinge.add(front, mark);
+  group.add(back, pages, hinge);
+  group.userData.open = (k) => {
+    hinge.rotation.z = k * Math.PI * 0.96;
+  };
+  return group;
+}
+
+// Count Inkblot, as his moves have him (shared/book/bosses.js): phase, begun at
+// `at` seconds into the shot, from (x, y) facing face, going for x `to`.
+const inkblot = (phase, at, x, y, face = 1, to = null, hearts = 6) => ({ kind: 'inkblot', phase, at: at * 1000, from: { x, y, face }, to: to === null ? null : { x: to }, n: 1, hearts, max: 6, prev: null });
+
+// A story's page as the film shows it: its boss doing as `boss(t)` says.
+const story = (boss) => (t) => {
+  const b = boss?.(t) ?? null;
+  return b ? { boss: b, bossState: 'on' } : {};
+};
+
+function intro7() {
+  const dark = dreamOf('mare');
+  const meadow = bookOf('meadow');
+  const harbor = bookOf('harbor');
+  const turret = bookOf('turret');
+  const starry = bookOf('starry');
+  const inkwell = bookOf('inkwell');
+  const moon = dark.dream.space.byKey.get('moon');
+  const top = { ...moon.spot(V(0.4, 12, 6)) };
+  top.dir = flatUnit(V(0.1, 0, 1), top.up);
+  const bookAt = moon.walk(top, turn(top.dir, top.up, 0.3), 3.4, 0.5).at(-1);
+  const r = reel();
+  const kidsRound = (far, emote) => {
+    for (const i of [0, 1, 2]) {
+      const way = turn(top.dir, top.up, [-1.25, -0.85, 1.15][i]);
+      const s0 = moon.walk(top, way, far, 0.7).at(-1);
+      hero(i, (t) => ({ x: s0.x, y: s0.y, z: s0.z, up: s0.up, h: flatUnit(sub(bookAt, s0), s0.up), anim: ANIM.idle, emote: emote?.(t, i) }));
+    }
+  };
+  const book = storybook(1.3);
+  const bookProp = (open, lift = () => 0) =>
+    prop(book, (t) => {
+      book.userData.open(open(t));
+      const up = lift(t);
+      return { x: bookAt.x + bookAt.up.x * (0.02 + up), y: bookAt.y + bookAt.up.y * (0.02 + up), z: bookAt.z + bookAt.up.z * (0.02 + up), up: bookAt.up, h: flatUnit(top.dir, bookAt.up) };
+    });
+
+  // 1. The Night Mare, asleep at last with her night-light on: one more present.
+  r.add({
+    name: 'gift',
+    dur: 9,
+    world: dark,
+    cut: 'fade',
+    lit: 1,
+    speak: 0.6,
+    lines: [
+      ['teller', 'The Night Mare slept soundly at last, with her night-light on — and she had one more present for everyone who calmed her.'],
+      ['mare', 'My Bedtime Storybook. Will you read me a story?', { gap: 0.5 }],
+    ],
+    setup(shot) {
+      const [, ask] = shot.said;
+      for (const l of renderer.nod.lanterns) l.set(true);
+      voiced(fright('mare', (t) => ({ ...top, h: top.dir, state: t < ask.at - 0.4 ? 'sleep' : 'idle', speed: 0, more: [0, 0] })), 'mare', 0.5);
+      kidsRound(4.2, (t) => (t > ask.end ? 'cheer' : undefined));
+      // (Floating down to them.)
+      bookProp(() => 0, (t) => Math.max(0, 3 - t * 0.6));
+    },
+    fx(t) {
+      if (Math.random() < 0.3) renderer.effects.sparkles(bookAt.x, bookAt.y + 1, bookAt.z, 2, ['#fff3a0', '#ffd0e6']);
+    },
+    camera: facing(top, top.dir, 1.2, [[9.5, 4.4, 3, 50], [7.4, 3.4, 1.6, 48]], 9),
+  });
+
+  // 2. Open it… and in you fall.
+  r.add({
+    name: 'open',
+    dur: 7,
+    world: dark,
+    cut: 'cut',
+    lit: 1,
+    speak: 0.4,
+    lines: [
+      ['girl', 'Once upon a time…'],
+      ['teller', 'Open it — and in you fall, right on to the page!', { gap: 0.5 }],
+    ],
+    setup() {
+      for (const l of renderer.nod.lanterns) l.set(true);
+      bookProp((t) => ease(Math.min(1, Math.max(0, (t - 0.6) / 2.2))));
+    },
+    fx(t) {
+      if (t > 1.6 && Math.random() < 0.8) renderer.effects.sparkles(bookAt.x + (Math.random() - 0.5) * 0.8, bookAt.y + 0.4, bookAt.z + (Math.random() - 0.5) * 1.2, 4, ['#ffffff', '#fff3a0', '#ffd0e6', '#b9d4ff']);
+    },
+    camera: facing(bookAt, top.dir, 0.2, [[3.2, 2.6, 0.4, 46], [1.6, 1.3, 0.1, 40]], 7),
+  });
+
+  // 3. On the page: as flat as paper.
+  const land = [8, 10, 12];
+  r.add({
+    name: 'flat',
+    dur: 8,
+    world: meadow,
+    cut: 'white',
+    speak: 1.6,
+    lines: [
+      ['boy', 'Whoa! Everything is flat!'],
+      ['bunny', 'There’s only left and right… and up and down!', { gap: 0.3, pan: 0.2 }],
+    ],
+    setup() {
+      for (const i of [0, 1, 2]) {
+        const at = 0.3 + i * 0.35;
+        hero(i, (t) => {
+          const k = Math.max(0, t - at);
+          // (Down out of the sky on to the page, with a bounce.)
+          const y = k < 0.9 ? 16 - 12 * (k / 0.9) ** 2 : 4 + Math.max(0, Math.sin((k - 0.9) * 9) * 0.6 * Math.exp(-(k - 0.9) * 4));
+          return { x: land[i], y, z: 0, yaw: t < 3.4 ? 0 : RIGHT, anim: k < 0.9 ? ANIM.air : ANIM.idle };
+        });
+      }
+    },
+    camera: pageCam([
+      [0, 10, 8.4, 11],
+      [8, 10.6, 7.2, 9],
+    ]),
+  });
+
+  // 4. Count Inkblot, who cannot stand a happy ending.
+  const A = inkwell.level.arena;
+  const mid = (A.x0 + A.x1) / 2;
+  r.add({
+    name: 'count',
+    dur: 9,
+    world: inkwell,
+    cut: 'fade',
+    speak: 0.8,
+    lines: [
+      ['inkblot', 'Happy endings? Not in my book! Ha!'],
+      ['teller', 'But Count Inkblot, a blot of ink in a top hat, has spilt himself over five of its stories — and taken every Happy Ending.', { gap: 0.4 }],
+    ],
+    book: story((t) => (t < 3.2 ? inkblot('glide', 0, A.x0 + 3, A.floor + 6, 1) : t < 5.1 ? inkblot('blots', 3.2, A.x1 - 3, A.floor + 6, -1, mid) : inkblot('flood', 5.1, A.x1 - 3, A.floor + 6.2, -1, null, 3))),
+    camera: pageCam([
+      [0, mid - 3, A.floor + 5.2, 11.5],
+      [9, mid, A.floor + 5.6, 13],
+    ]),
+  });
+
+  // 5. Its stories, one after another.
+  const H = harbor.level;
+  r.add({
+    name: 'harbor',
+    dur: 4,
+    world: harbor,
+    cut: 'cut',
+    speak: 0.3,
+    lines: [['teller', 'A harbor of paper boats…']],
+    camera: pageCam([
+      [0, 26, 7, 12],
+      [4, 40, 7, 12],
+    ]),
+  });
+  const T = turret.level.arena;
+  r.add({
+    name: 'castle',
+    dur: 4,
+    world: turret,
+    cut: 'cut',
+    speak: 0.3,
+    lines: [['teller', 'a castle with a dragon on its roof…']],
+    book: story((t) => ({ kind: 'paperdragon', phase: 'fly', at: 0, from: { x: T.x0 + 3, y: T.floor + 7, face: 1 }, to: null, n: 1, hearts: 4, max: 4, prev: null })),
+    camera: pageCam([
+      [0, T.x0 + 9, T.floor + 5.5, 13],
+      [4, T.x0 + 14, T.floor + 5.5, 13],
+    ]),
+  });
+  const S = starry.level.arena;
+  r.add({
+    name: 'moon',
+    dur: 4,
+    world: starry,
+    cut: 'cut',
+    speak: 0.3,
+    lines: [['teller', 'a moon made of cheese, and a very greedy mouse…']],
+    book: story((t) => ({ kind: 'nibbles', phase: 'hop', at: Math.floor(t / 1.2) * 1200, from: { x: S.x0 + 8 + Math.floor(t / 1.2) * 3, y: S.floor, face: 1 }, to: { x: S.x0 + 11 + Math.floor(t / 1.2) * 3 }, n: 1, hearts: 4, max: 4, prev: 'hop' })),
+    camera: pageCam([
+      [0, S.x0 + 11, S.floor + 4.5, 12],
+      [4, S.x0 + 15, S.floor + 4.5, 12],
+    ]),
+  });
+
+  // 6. Off you go: run, jump, land on his foes.
+  const f = meadow.level.foes[0];
+  const go = r.add({
+    name: 'go',
+    dur: 8,
+    world: meadow,
+    cut: 'fade',
+    speak: 0.4,
+    lines: [
+      ['boy', 'Come on — let’s go!'],
+      ['teller', 'Run, jump, land on his foes — and bring all five Happy Endings back!', { gap: 0.4 }],
+    ],
+    hold: 3,
+    marks: (shot) => ({ title: shot.said[1].end + 0.2, stomp: 2.3 }),
+    setup(shot) {
+      const hop = 2.3;
+      for (const i of [0, 1, 2]) {
+        const x0 = 18 - i * 1.6;
+        hero(i, (t) => {
+          const x = x0 + Math.min(t, 3.6) * 4.2;
+          // (The first of them up, and down on the Inkling.)
+          const k = i === 0 ? t - (hop - 0.45) : -1;
+          const y = k > 0 && k < 0.9 ? 4 + 7 * k * (0.9 - k) * 2.2 : 4;
+          return { x, y: Math.max(4, y), z: 0, yaw: RIGHT, anim: t > 3.6 ? ANIM.idle : y > 4.05 ? ANIM.air : ANIM.run, speed: 6, emote: t > 4.4 ? 'cheer' : undefined };
+        });
+      }
+      shot.foeAt = null;
+    },
+    book: (t) => (t > 2.3 ? { gone: new Set([f.id]) } : {}),
+    fx(t) {
+      once(go, 'pop', t, 2.3, () => {
+        renderer.book?.popFoe(f, { x: 18 + 2.3 * 4.2 + 0.4, y: 4, face: 1 }, 'stomp');
+      });
+    },
+    camera: pageCam([
+      [0, 22, 7, 11],
+      [8, 30, 7.4, 12],
+    ]),
+  });
+  const title = go.start + go.marks(go).title;
+  r.over(titleCard(title, go.start + go.dur - title - 0.2, 'The Storybook', 'Episode 7 · Bring back all five Happy Endings — together!', { size: 84 }));
+  return r.done({ poster: go.start + 2.6 });
+}
+
+// THE END, written in ink, the way a storybook ends.
+function theEnd(at, secs) {
+  return {
+    at,
+    until: at + secs,
+    draw(c, k, local) {
+      c.save();
+      c.globalAlpha = k;
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.font = `italic 700 120px Georgia, "Times New Roman", serif`;
+      const text = 'The End';
+      const shown = Math.min(text.length, Math.floor(local * 6));
+      c.lineJoin = 'round';
+      c.lineWidth = 12;
+      c.strokeStyle = 'rgba(255,250,235,0.9)';
+      c.strokeText(text.slice(0, shown), 640, 300);
+      c.fillStyle = '#2b2050';
+      c.fillText(text.slice(0, shown), 640, 300);
+      c.restore();
+    },
+  };
+}
+
+function ending7() {
+  const meadow = bookOf('meadow');
+  const harbor = bookOf('harbor');
+  const starry = bookOf('starry');
+  const inkwell = bookOf('inkwell');
+  const dark = dreamOf('mare');
+  const A = inkwell.level.arena;
+  const mid = (A.x0 + A.x1) / 2;
+  const r = reel();
+  const kids = (xs, y, emote) => {
+    for (const i of [0, 1, 2]) hero(i, (t) => ({ x: xs[i], y, z: 0, yaw: i === 2 ? LEFT : RIGHT, anim: ANIM.idle, emote: emote?.(t, i) }));
+  };
+
+  // 1. SPLOSH.
+  const splosh = r.add({
+    name: 'splosh',
+    dur: 8,
+    world: inkwell,
+    cut: 'fade',
+    speak: 0.6,
+    lines: [
+      ['inkblot', 'Splosh! The end… of me.'],
+      ['teller', 'Count Inkblot goes pop with an enormous SPLOSH!', { gap: 0.6 }],
+    ],
+    marks: (shot) => ({ pop: shot.said[0].end + 0.3 }),
+    setup(shot) {
+      kids([mid - 6, mid - 4.4, mid + 6.5], A.floor, (t) => (t > shot.marks(shot).pop + 0.6 ? 'cheer' : undefined));
+    },
+    book: (t) => {
+      const pop = splosh.marks(splosh).pop;
+      return { boss: t < pop ? inkblot('land', -1, mid + 1, A.floor, -1, null, 1) : { ...inkblot('land', 0, mid + 1, A.floor, -1, null, 0), phase: 'beaten', at: pop * 1000 }, bossState: 'on' };
+    },
+    fx(t) {
+      once(splosh, 'pop', t, splosh.marks(splosh).pop, () => {
+        renderer.effects.confetti(mid + 1, A.floor + 2, 0.5, 200, 2);
+        renderer.book?.burst(mid + 1, A.floor + 2.5, 'POP!');
+      });
+    },
+    camera: pageCam([
+      [0, mid, A.floor + 3.6, 10],
+      [8, mid, A.floor + 4, 11],
+    ]),
+  });
+
+  // 2. Back into his inkwell, and THE END.
+  const end = r.add({
+    name: 'theend',
+    dur: 8,
+    world: inkwell,
+    cut: 'cut',
+    speak: 0.4,
+    lines: [['teller', 'Every drop of him runs back into his inkwell, where ink belongs — and writes, in the neatest letters anybody ever saw…']],
+    hold: 2.6,
+    setup() {
+      kids([mid - 6, mid - 4.4, mid + 6.5], A.floor, () => 'surprise');
+    },
+    fx(t) {
+      if (t < 4 && Math.random() < 0.7) renderer.effects.add('drop', mid + 1 + (Math.random() - 0.5) * 6, A.floor + 0.6 + Math.random() * 3, 0.6, { vy: 3 + Math.random() * 3, size: 0.18, life: 0.9, color: '#2b2050' });
+    },
+    camera: pageCam([
+      [0, mid, A.floor + 4.2, 11],
+      [8, mid, A.floor + 4.6, 12],
+    ]),
+  });
+  r.over(theEnd(end.start + end.said[0].end + 0.2, end.dur - end.said[0].end - 0.3));
+
+  // 3. Every story's Happy Ending.
+  r.add({
+    name: 'meadow',
+    dur: 4.5,
+    world: meadow,
+    cut: 'fade',
+    speak: 0.3,
+    lines: [['teller', 'All five Happy Endings are back.']],
+    setup() {
+      kids([12, 14, 16.5], 4, (t, i) => ((t + i) % 2 < 1 ? 'cheer' : 'dance'));
+    },
+    fx() {
+      if (Math.random() < 0.15) renderer.effects.firework(8 + Math.random() * 14, 12 + Math.random() * 3, -3);
+    },
+    camera: pageCam([
+      [0, 13.5, 6.6, 9],
+      [4.5, 15, 6.6, 9],
+    ]),
+  });
+  r.add({
+    name: 'harbor',
+    dur: 4,
+    world: harbor,
+    cut: 'cut',
+    speak: 0.3,
+    lines: [['boy', 'Toot toot! The boats are all home!']],
+    setup() {
+      kids([6, 8, 10], 4, () => 'wave');
+    },
+    camera: pageCam([
+      [0, 9, 6.2, 9],
+      [4, 11, 6.2, 9],
+    ]),
+  });
+  const S = starry.level.arena;
+  r.add({
+    name: 'moon',
+    dur: 4.5,
+    world: starry,
+    cut: 'cut',
+    speak: 0.3,
+    lines: [['girl', 'And the moon is round again!']],
+    setup() {
+      kids([S.x0 + 8, S.x0 + 10, S.x0 + 12.5], S.floor, (t, i) => (i === 1 ? 'hearts' : 'cheer'));
+    },
+    camera: pageCam([
+      [0, S.x0 + 10.5, S.floor + 3.8, 10],
+      [4.5, S.x0 + 11, S.floor + 4.2, 11],
+    ]),
+  });
+
+  // 4. The credits, going along Hopscotch Meadow.
+  const credits = r.add({
+    name: 'credits',
+    dur: 14,
+    world: meadow,
+    cut: 'fade',
+    camera: pageCam([
+      [0, 20, 7.5, 12],
+      [14, 120, 8.5, 12],
+    ]),
+  });
+  r.over(roll(credits.start + 0.3, 13.5, ['#The Storybook', 'Episode 7', '', '#Starring', 'You and your friends', '', '#and', '🎩 Count Inkblot', '🌻 Grumbleweed', '🦀 Captain Crumple', '🐉 The Paper Dragon', '🐭 King Nibbles', '', '#The five stories', ...BOOK_CHAPTERS.map((ch) => `${ch.icon} ${ch.name}`), '', '#Voices', 'Kokoro', '', '#Made in Kids World', 'Thank you for playing!']));
+
+  // 5. Back in the Land of Nod: the Storybook shuts itself, with a happy sigh.
+  const moon = dark.dream.space.byKey.get('moon');
+  const top = { ...moon.spot(V(0.4, 12, 6)) };
+  top.dir = flatUnit(V(0.1, 0, 1), top.up);
+  const bookAt = moon.walk(top, turn(top.dir, top.up, 0.3), 3.4, 0.5).at(-1);
+  const night = r.add({
+    name: 'goodnight',
+    dur: 8,
+    world: dark,
+    cut: 'white',
+    out: 'fade',
+    lit: 1,
+    speak: 0.6,
+    lines: [
+      ['bunny', 'Again! Read it again!'],
+      ['teller', 'And the Storybook shuts itself with a happy sigh. The End.', { gap: 0.6 }],
+    ],
+    hold: 3,
+    marks: (shot) => ({ title: shot.said[1].end + 0.3, shut: shot.said[0].end + 0.4 }),
+    setup(shot) {
+      const shut = shot.marks(shot).shut;
+      for (const l of renderer.nod.lanterns) l.set(true);
+      fright('mare', () => ({ ...top, h: top.dir, state: 'sleep', speed: 0, more: [0, 0] }));
+      for (const i of [0, 1, 2]) {
+        const way = turn(top.dir, top.up, [-1.25, -0.85, 1.15][i]);
+        const s0 = moon.walk(top, way, 4.2, 0.7).at(-1);
+        hero(i, (t) => ({ x: s0.x, y: s0.y, z: s0.z, up: s0.up, h: flatUnit(sub(bookAt, s0), s0.up), anim: ANIM.idle, emote: t > shut + 0.8 ? 'sleepy' : i === 2 && t < shut ? 'cheer' : undefined }));
+      }
+      const book = storybook(1.3);
+      prop(book, (t) => {
+        book.userData.open(1 - ease(Math.min(1, Math.max(0, (t - shut) / 1.6))));
+        return { x: bookAt.x + bookAt.up.x * 0.02, y: bookAt.y + bookAt.up.y * 0.02, z: bookAt.z + bookAt.up.z * 0.02, up: bookAt.up, h: flatUnit(top.dir, bookAt.up) };
+      });
+    },
+    camera: facing(top, top.dir, 1.2, [[9, 4.2, 2.6, 50], [7.6, 3.6, 1.8, 48]], 8),
+  });
+  const title = night.start + night.marks(night).title;
+  r.over(titleCard(title, night.start + night.dur - title - 0.2, 'A new journey begins!', 'Come back to Adventure Isle!', { size: 70 }));
+  return r.done({ poster: end.start + 6 });
+}
+
+export const films = { intro, ending, intro2, ending2, intro3, ending3, intro4, ending4, intro5, ending5, intro6, ending6, intro7, ending7 };

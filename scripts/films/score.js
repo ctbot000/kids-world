@@ -1110,10 +1110,116 @@ function ending6(b, c) {
   for (const [i, n] of ['C4', 'E4', 'G4', 'C5'].entries()) b.pluck(title + i * 0.16, hz(n), { gain: 0.09, decay: 1.6, type: 'triangle', bell: true, verb: 0.45 });
 }
 
+// The seventh episode's: a storybook's tune, bright and bouncy, played on a
+// xylophone as the pages turn, and Count Inkblot's own, low and sly, on a
+// bassoon.
+const STORY = [
+  ['C5', 0.5], ['E5', 0.5], ['G5', 1], ['E5', 0.5], ['G5', 0.5], ['A5', 1], ['G5', 0.5], ['E5', 0.5], ['C5', 1], ['D5', 2],
+  ['D5', 0.5], ['F5', 0.5], ['A5', 1], ['G5', 0.5], ['F5', 0.5], ['E5', 1], ['D5', 0.5], ['B4', 0.5], ['C5', 2],
+];
+const INK = [['D3', 0.75], ['F3', 0.25], ['E3', 0.75], ['C#3', 0.25], ['D3', 1], ['A2', 1], ['Bb2', 0.75], ['A2', 0.25], ['D3', 2]];
+const xylo = (b, t, bpm, notes, gain = 0.09) => {
+  let at = t;
+  for (const [n, beats] of notes) {
+    if (n) b.pluck(at, hz(n), { gain, decay: 0.7, type: 'triangle', bell: true, verb: 0.3 });
+    at += (beats * 60) / bpm;
+  }
+  return at;
+};
+// A page turning: a soft swish of paper.
+const turnPage = (b, t, gain = 0.05) => b.hiss(t, 0.45, { type: 'bandpass', f: 2600, f2: 900, q: 0.8, gain, attack: 0.03, verb: 0.2 });
+
+function intro7(b, c) {
+  const gift = c('gift');
+  const open = c('open');
+  const flat = c('flat');
+  const count = c('count');
+  const pages = [c('harbor'), c('castle'), c('moon')];
+  const go = c('go');
+  // The Night Mare asleep: the cradle song, softly, on a music box.
+  b.bed(0.4, gift.end, 72, ['C', 'F', 'G', 'C'], 0.022, { attack: 1.2, release: 1.2 });
+  musicBox(b, 0.8, 72, CRADLE.slice(0, 8), 0.055);
+  b.sparkle(gift.at + 2, 8, 0.04);
+  // The book opening, the tune's first notes, and a rush of light.
+  b.swell(open.at + 0.6, 2.4, 0.07);
+  xylo(b, open.at + 0.8, 88, STORY.slice(0, 5), 0.07);
+  b.choir(open.at + 2, open.dur - 2, ['C4', 'G4', 'E5'], 0.02);
+  b.sparkle(open.at + 2.2, 14, 0.05);
+  b.whoosh(open.end - 0.8, 0.09, 1.2);
+  // On the page: boing, boing, boing — and the tune, bright.
+  for (let i = 0; i < 3; i++) b.pluck(flat.at + 1.2 + i * 0.35, hz(['G4', 'C5', 'E5'][i]), { gain: 0.12, decay: 0.5, type: 'sine', verb: 0.2 });
+  b.beat(flat.at + 1.6, 112, Math.floor((flat.dur - 1.6) / ((60 / 112) * 4)), 0.18);
+  b.bed(flat.at + 1.6, flat.end, 112, ['C', 'F', 'G', 'C'], 0.03, { attack: 0.05, release: 0.3 });
+  xylo(b, flat.at + 1.6, 112, STORY, 0.08);
+  // Count Inkblot: his own tune, low and sly, and something rising.
+  b.strings(count.at, count.dur, ['D2', 'A2', 'D3', 'F3'], 0.035, { attack: 0.6, release: 1, tremolo: true });
+  b.tune(count.at + 0.5, 84, INK, 'bassoon', 0.1);
+  b.tune(count.at + 4.4, 84, INK, 'bassoon', 0.08);
+  b.timpaniRoll(count.end - 1.6, 1.4, 'D2', 0.18);
+  // A story after another, a page turned for each.
+  for (const [i, p] of pages.entries()) {
+    turnPage(b, p.at, 0.06);
+    b.chords(p.at + 0.2, 112, [['F', 'Am', 'G'][i]], 0.03, { attack: 0.05, release: 0.4 });
+    xylo(b, p.at + 0.25, 112, STORY.slice(i * 3, i * 3 + 4), 0.07);
+  }
+  // Off you go, and the title.
+  const title = go.m.title;
+  b.beat(go.at, BPM, Math.floor(go.dur / BAR), 0.24);
+  b.bed(go.at, title, BPM, THEME_CHORDS.slice(0, 4), 0.032, { attack: 0.05, release: 0.4 });
+  xylo(b, go.at + 0.2, BPM, STORY.slice(0, 10), 0.07);
+  b.pop(go.at + go.m.stomp, 0.22);
+  b.timpaniRoll(title - 0.8, 0.8, 'D2', 0.2);
+  b.chords(title, BPM, THEME_CHORDS.slice(0, 2), 0.04, { attack: 0.2, release: 0.6 });
+  b.tune(title, BPM, THEME.slice(0, 9), 'horn', 0.1);
+  b.crash(title, 0.12, 3);
+  b.sparkle(title, 10, 0.05);
+  b.strings(go.end - 2.4, 2.4, CHORDS.D, 0.04, { attack: 0.1, release: 1.6 });
+}
+
+function ending7(b, c) {
+  const splosh = c('splosh');
+  const end = c('theend');
+  const happy = [c('meadow'), c('harbor'), c('moon')];
+  const credits = c('credits');
+  const night = c('goodnight');
+  // Count Inkblot, puffed out; then SPLOSH.
+  b.strings(splosh.at, splosh.dur, ['D3', 'A3', 'F4'], 0.03, { attack: 0.5, release: 1.2, tremolo: true });
+  b.tune(splosh.at + 0.4, 72, INK.slice(0, 5), 'bassoon', 0.08);
+  const pop = splosh.m.pop;
+  b.pop(pop, 0.3);
+  b.crash(pop, 0.12, 2.4);
+  b.firework(pop + 0.2, 0.1);
+  b.swell(pop, 1.6, 0.07);
+  // Back into the inkwell, and THE END, written.
+  b.bed(end.at, end.end, 70, ['F', 'C', 'G', 'C'], 0.026, { attack: 1, release: 1.4 });
+  for (let k = 0; k < 10; k++) b.pluck(end.at + 0.4 + k * 0.28, hz(['C6', 'B5', 'A5', 'G5', 'F5', 'E5', 'D5', 'C5', 'B4', 'C5'][k]), { gain: 0.05, decay: 0.4, type: 'sine', verb: 0.35 });
+  b.choir(end.end - 3, 3, ['C4', 'E4', 'G4', 'C5'], 0.022);
+  // Every story's Happy Ending, a page turned for each.
+  for (const [i, p] of happy.entries()) {
+    turnPage(b, p.at, 0.06);
+    b.chords(p.at + 0.1, 112, [['C', 'F', 'G'][i], ['Am', 'C', 'C'][i]], 0.034, { attack: 0.05, release: 0.4 });
+    xylo(b, p.at + 0.2, 112, STORY.slice(i * 6, i * 6 + 6), 0.08);
+  }
+  b.cheer(happy[0].at + 0.2, 3.5, 0.035);
+  for (let t = happy[0].at + 0.4; t < happy[0].end - 0.4; t += 1.2) b.firework(t, 0.08);
+  // The credits, gently.
+  b.bed(credits.at, credits.end, 84, ['C', 'Am', 'F', 'G', 'C'], 0.025, { attack: 1, release: 1.4 });
+  b.twinkle(credits.at, credits.end, 84, ['C', 'Am', 'F', 'G', 'C'], 0.04);
+  xylo(b, credits.at + 1, 84, STORY, 0.06);
+  b.tune(credits.at + 6.8, 84, STORY.slice(0, 9), 'flute', 0.05);
+  // Back in the Land of Nod: the cradle song, and the book shut.
+  const title = night.m.title;
+  musicBox(b, night.at + 0.5, 72, CRADLE.slice(0, 8), 0.06);
+  b.bed(night.at + 0.3, title, 72, ['C', 'F', 'G', 'C'], 0.022, { attack: 0.8, release: 1.2 });
+  b.drum(night.at + night.m.shut + 1.4, { f: 90, to: 50, decay: 0.3, gain: 0.25 });
+  b.strings(title - 0.4, night.end - title + 0.4, ['C3', 'G3', 'E4'], 0.03, { attack: 0.4, release: 1.6 });
+  for (const [i, n] of ['C4', 'E4', 'G4', 'C5'].entries()) b.pluck(title + i * 0.16, hz(n), { gain: 0.09, decay: 1.6, type: 'triangle', bell: true, verb: 0.45 });
+}
+
 export async function score(name, secs, cues) {
   const b = new Band(secs);
   const c = cueBook(cues);
-  ({ intro, ending, intro2, ending2, intro3, ending3, intro4, ending4, intro5, ending5, intro6, ending6 }[name] ?? ending)(b, c);
+  ({ intro, ending, intro2, ending2, intro3, ending3, intro4, ending4, intro5, ending5, intro6, ending6, intro7, ending7 }[name] ?? ending)(b, c);
   await b.voices(cues.lines);
   return b.render();
 }

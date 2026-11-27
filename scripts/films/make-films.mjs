@@ -6,7 +6,7 @@
 // browser too, round the words (score.js), and ffmpeg putting them together as
 // an MP4 (H.264 and AAC, which every browser plays) and a still for its poster.
 //
-// npm run films [-- intro|ending|intro2|ending2|intro3|ending3|intro4|ending4|intro5|ending5|intro6|ending6] (FROM=s TO=s for a part, PREVIEW=1 for a
+// npm run films [-- intro|ending|intro2|ending2|intro3|ending3|intro4|ending4|intro5|ending5|intro6|ending6|intro7|ending7] (FROM=s TO=s for a part, PREVIEW=1 for a
 // quick small one in the scratch folder of your choice, OUT=dir; VOICES=dir
 // for where the spoken lines are kept, ~/.cache/kids-world-voices if not)
 // Needs Google Chrome and ffmpeg (Homebrew's: /opt/homebrew/bin).
@@ -34,7 +34,7 @@ const OUT = process.env.OUT ?? join(root, 'public', 'video');
 const FFMPEG = process.env.FFMPEG ?? '/opt/homebrew/bin/ffmpeg';
 const CHROME = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const names = process.argv.slice(2).filter((a) => !a.startsWith('-'));
-const which = names.length ? names : ['intro', 'ending', 'intro2', 'ending2', 'intro3', 'ending3', 'intro4', 'ending4', 'intro5', 'ending5', 'intro6', 'ending6'];
+const which = names.length ? names : ['intro', 'ending', 'intro2', 'ending2', 'intro3', 'ending3', 'intro4', 'ending4', 'intro5', 'ending5', 'intro6', 'ending6', 'intro7', 'ending7'];
 const preview = Boolean(process.env.PREVIEW);
 mkdirSync(OUT, { recursive: true });
 

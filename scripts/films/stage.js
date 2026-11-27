@@ -15,6 +15,7 @@ import { blobShadow, mesh, toon } from '/js/render/toon.js';
 import * as B from '/js/shared/blocks.js';
 import { buildIsle } from '/js/shared/isle-maps.js';
 import { nodWorld } from '/js/shared/nod/worlds/index.js';
+import { bookLevel } from '/js/shared/book/stories/index.js';
 import { World } from '/js/shared/world.js';
 import { palette } from '/js/shared/worldgen.js';
 import { CAST, lineId } from './cast.js';
@@ -66,6 +67,26 @@ export function isle(stage, { freed = false } = {}) {
 export function dreamOf(key) {
   if (!made.has(key)) made.set(key, { world: new World({ W: 16, H: 16, D: 16, sea: 1, theme: `nod${key}` }), dream: nodWorld(key) });
   return made.get(key);
+}
+
+// A story of the Storybook (shared/book/stories): a flat page, no island at
+// all. Shots on it put their actors on the page (z 0) and look at it from in
+// front; its foes go about by the shot's own clock, and a shot may say how its
+// story is going (book(t): as book-game.js state has it, its boss too).
+export function bookOf(key) {
+  const k = `book:${key}`;
+  if (!made.has(k)) {
+    const level = bookLevel(key);
+    made.set(k, { world: new World({ W: Math.min(512, level.w + 2), H: Math.max(16, level.h + 10), D: 16, sea: 1, theme: `book${key}` }), level });
+  }
+  return made.get(k);
+}
+
+// How a story is going in a shot on it, t seconds in: nothing popped, nothing
+// lit, no boss — or as the shot says.
+function bookState(shot, t) {
+  const base = { t: t * 1000, fast: 1, gone: new Set(), popping: new Map(), broken: new Set(), got: new Set(), lit: new Set(), boss: null, bossState: 'idle', cam: {} };
+  return shot.book ? { ...base, ...shot.book(t) } : base;
 }
 
 let current = null;
@@ -440,7 +461,7 @@ export function frame(t) {
   renderer.camera.updateProjectionMatrix();
   focus.set(...cam.look);
   const up = cam.up ?? [0, 1, 0];
-  renderer.frame(dt, { time, weather: shot.weather ?? 'clear', focus, tornado: null, satIn: 0, up: { x: up[0], y: up[1], z: up[2] }, lit: shot.lit ?? 0, asleep: () => false, zones: shot.zones?.(local) ?? [] });
+  renderer.frame(dt, { time, weather: shot.weather ?? 'clear', focus, tornado: null, satIn: 0, up: { x: up[0], y: up[1], z: up[2] }, lit: shot.lit ?? 0, asleep: () => false, zones: shot.zones?.(local) ?? [], ...(renderer.book ? { book: bookState(shot, acting), freeCamera: true } : {}) });
   ctx.drawImage(canvas, 0, 0, W, H);
   // Coming in: a fade from black, or a flash of white.
   const into = local < 0.6 ? 1 - local / 0.6 : 0;
