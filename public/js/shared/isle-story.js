@@ -79,6 +79,20 @@
 // Skies, the Music Box, Tick-Tock Skies and the Dark Side, where the Night Mare
 // herself is — who is only afraid of the dark.
 //
+// Episode 7, "The Storybook", is as flat as a page. The Night Mare, asleep at
+// last, gave everyone who calmed her the Bedtime Storybook every dream comes
+// out of — and whoever opens it falls right in, on to its pages, where there
+// is no near or far, only left and right and up and down (book/ has them: a
+// grid of tiles, and nothing else). Count Inkblot, a blot of ink in a top
+// hat who cannot stand a happy ending, has spilt himself over five of its
+// stories, and every one has lost its Happy Ending. Each chapter is a story
+// to run through to its end: jump its gaps, land on its foes (or bop them),
+// pick up its stars, light its bookmarks (one at the end of each page, kept
+// for everyone), and on its last page, its boss (book/bosses.js), who has to
+// be landed on while it is weak. Five chapters: Hopscotch Meadow, Paper Boat
+// Harbor, Once-upon Castle, Twinkle Sky (where things fall slowly) and
+// Inkwell Keep, where the Count himself is.
+//
 // The last episode's last stage, won, starts a new journey from stage 1. The
 // first arrival on an episode plays its opening. A chapter told on a later
 // journey is its own map turned over (isle-maps.js mirror).
@@ -205,6 +219,21 @@ export const EPISODES = [
     again: (journey) =>
       `Journey ${journey}! One night the Night Mare’s night-light went out, and off she bolted again, in a worse fright than ever, trampling every dream in the Land of Nod as she went — and her frights have learnt a thing or two since last time.`,
   },
+  {
+    n: 7,
+    key: 'book',
+    icon: '📖',
+    title: 'The Storybook',
+    villain: 'Count Inkblot',
+    // As flat as a page (book/): only left and right, and up and down; told
+    // in the pages of each story, not camps: each chapter's are in its `pages`.
+    book: true,
+    token: { one: 'Happy Ending', many: 'Happy Endings', icon: '💖' },
+    ticket: { icon: '📕', name: 'Bedtime Storybook' },
+    films: { intro: 'intro7', ending: 'ending7', endingMs: 56000 },
+    again: (journey) =>
+      `Journey ${journey}! Count Inkblot oozed back out of his inkwell and blotted out every Happy Ending in the Storybook all over again — and this time his foes know their way about the pages.`,
+  },
 ];
 
 // Each chapter: its key (which map, isle-maps.js), icon and name, the kind
@@ -232,6 +261,10 @@ export const EPISODES = [
 // of the sixth episode (nod/dream.js), each { name, icon, hint (what to do), done
 // (what is told once it is over) }, its world having each in the same order
 // (nod/worlds), and the last of all its boss's.
+// pages: in place of camps, a lair and a boss, the pages of a story of the
+// seventh episode (book/tale.js), each { name, icon, hint (what to do there) },
+// its bookmark at its end (book/stories), and the last of all the boss's
+// ({ boss: true, ... }); boss: which boss that is (book/bosses.js).
 // battles: in place of camps, a lair and a boss, the battles of a chapter of
 // the fifth episode (isle-battles.js), each { kind, name, hint (what to do),
 // done (what is told once it is won), beast and who (for a hunt: which
@@ -1057,6 +1090,112 @@ export const CHAPTERS = [
       'So this is where she lives. On the Dark Side nobody has ever dreamt anything nice: a moon broken in bits, a ribbon of night with only one side to it, a bed with something under it — and, over it all, the black moon where the Night Mare gallops round and round and never, ever stops. Her best frights are here: Shadow Twins that know all your tricks, Under-bed Grabbers, Night Watchers and Gloom Moths. You have four Sweet Dreams to keep you company, and one little night-light. Be as brave as you can. It is always darkest just before…',
     won: 'The Night Mare does not pop. She stands there in the light of every lamp you lit, and shakes, and you see what nobody ever saw before: she is only a young horse, and she is afraid of the dark. That is why she runs. So you give her the night-light to keep — and she lies down, and puts her nose on it, and sleeps. All five Sweet Dreams are back, and there is not a nightmare left in the Land of Nod.',
   },
+  // ------------------------------------------------ Episode 7: The Storybook
+  {
+    key: 'meadow',
+    episode: 7,
+    level: 16,
+    icon: '🌼',
+    name: 'Hopscotch Meadow',
+    theme: 'bookmeadow',
+    day: 'day',
+    weather: ['clear'],
+    boss: 'grumbleweed',
+    pages: [
+      { name: 'The Garden Gate', icon: '🚪', hint: 'Run with ← and → (or the thumbstick) and jump with Space (or ⤴️): the longer you hold it, the higher you go. Land right on top of an Inkling to pop it!' },
+      { name: 'Puddle Lane', icon: '💧', hint: 'Mind the puddles, and hop on to the lily pad as it floats by. Burrs are prickly on top, so never land on one: jump over it, or bop it (X, or 👊).' },
+      { name: 'Windmill Hill', icon: '🌀', hint: 'Up the hill and down the other side. Molly the Mole pops up out of the ground: land on her while she is up. Bop the crates open — some have stars inside!' },
+      { name: 'Bramble Bridge', icon: '🌿', hint: 'Jump the thorns, then hop over the brambles from plank to plank. If a Buzzer gets in your way, land on it: it bounces you up!' },
+      { boss: true, name: 'Grumbleweed', icon: '🌻', hint: 'Grumbleweed comes up out of one flower pot after another and spits seeds at you: keep moving! Land on its flower while it is out — best of all when it wilts.' },
+    ],
+    intro:
+      'The Night Mare, sleeping soundly at last, had one more present for everyone who calmed her: her Bedtime Storybook, the book every dream in the Land of Nod comes out of. Open it, and in you fall — right on to the first page, where everything is as flat as paper! There is no near or far in here: only left and right, and up and down. But Count Inkblot, a blot of ink in a top hat who cannot stand a happy ending, has spilt himself all over five of its stories, and every one has lost its Happy Ending. Run through each story to its very last page: jump its gaps, land on its foes (or bop them), pick up its stars, and light each bookmark as you get to it — it keeps everyone’s place. First of all, Hopscotch Meadow, where the weeds have grown very grumpy indeed.',
+    won: 'Grumbleweed goes pop in a puff of petals, and a whole field of sunflowers springs up where it stood, every one of them smiling. The first Happy Ending is back! On the next page, somebody is ringing a ship’s bell…',
+  },
+  {
+    key: 'harbor',
+    episode: 7,
+    level: 17,
+    icon: '⛵',
+    name: 'Paper Boat Harbor',
+    theme: 'bookharbor',
+    day: 'day',
+    weather: ['clear'],
+    boss: 'crumple',
+    pages: [
+      { name: 'The Old Pier', icon: '🪵', hint: 'Along the planks of the old pier. Pinchers scuttle up and down it — land on them — but Urchins are all prickles: bop them, or jump right over.' },
+      { name: 'Bobbing Boats', icon: '🚤', hint: 'Paper boats bob up and down on the waves: jump on as one comes up to you. Squirts spit ink across the water, so time your jumps between their blobs.' },
+      { name: 'Lighthouse Rocks', icon: '🗼', hint: 'Up the rocks round the lighthouse, where the gulls swoop. Springs are bouncy buoys: land on one, and hold jump to go higher still!' },
+      { name: 'The Shipwreck', icon: '⚓', hint: 'Through the old wreck and out across its broken masts. Fish leap up out of the water between them!' },
+      { boss: true, name: 'Captain Crumple', icon: '🦀', hint: 'Captain Crumple sidles after you and snaps his claws: keep clear of them. When he charges, jump out of the way: he runs right into the wall and lands on his back. Stomp his tummy then!' },
+    ],
+    intro:
+      'Turn the page, and the sea is folded paper, the boats are folded paper — and so are the crabs, and very snippy they are too. In Paper Boat Harbor, Captain Crumple, the crabbiest crab who ever wore a paper hat, has blotted out the story’s Happy Ending. Run along the old pier, hop from boat to boat as they bob on the waves, climb the lighthouse rocks and get through the shipwreck to his cove — and mind the Urchins: never land on one!',
+    won: 'Captain Crumple goes pop, and his paper hat floats off on the tide. Every boat in the harbor toots its horn: the second Happy Ending is back! Beyond the harbor wall, a castle stands at the top of the next page…',
+  },
+  {
+    key: 'turret',
+    episode: 7,
+    level: 18,
+    icon: '🏰',
+    name: 'Once-upon Castle',
+    theme: 'bookturret',
+    day: 'day',
+    weather: ['clear'],
+    boss: 'paperdragon',
+    pages: [
+      { name: 'The Drawbridge', icon: '🌉', hint: 'Over the moat and across the drawbridge. Paper Knights march to and fro: land on their helmets! Thistles are prickly: bop them.' },
+      { name: 'The Great Hall', icon: '🕯️', hint: 'Spiders dangle from the rafters on their threads: wait for one to go up before you run under it — or land on it!' },
+      { name: 'The Tower Stairs', icon: '🪜', hint: 'Up, and up, and up the tower, plank by plank. Bats flap about inside: bounce off them to get higher.' },
+      { name: 'The Battlements', icon: '🚩', hint: 'Along the top of the castle wall, over the gaps between its towers. Lifts go up and down: ride one up!' },
+      { boss: true, name: 'The Paper Dragon', icon: '🐉', hint: 'The Paper Dragon flies over the roof dropping fire: keep out from under it! Then it swoops down at you — jump out of its way — and has to stop for breath. Land on its back then!' },
+    ],
+    intro:
+      'Once upon a time there was a castle, and everybody in it lived happily ever after — until Count Inkblot blotted out the ever after. Now Paper Knights march its halls, spiders dangle from its rafters and bats flap round its tower, and up on the roof the Paper Dragon, a kite with a very hot temper, has made its nest on the Happy Ending. Over the drawbridge, through the great hall, up the tower stairs and along the battlements to the roof!',
+    won: 'The Paper Dragon goes pop, and floats down as a perfectly ordinary kite, which the princess catches and flies from the tallest tower. The third Happy Ending is back! And now the pages are turning dark, and the stars are coming out…',
+  },
+  {
+    key: 'starry',
+    episode: 7,
+    level: 19,
+    icon: '🌙',
+    name: 'Twinkle Sky',
+    theme: 'bookstarry',
+    day: 'night',
+    weather: ['clear'],
+    boss: 'nibbles',
+    pages: [
+      { name: 'Cloud Steps', icon: '☁️', hint: 'Up here things do not fall half as fast, so every jump goes higher and further than you think! Hop from cloud to cloud, and ride the ones that drift.' },
+      { name: 'The Milky Way', icon: '🌌', hint: 'Along the Milky Way, where Star Bunnies bounce and Spikestars roll: never land on a Spikestar — bop it, or jump right over.' },
+      { name: 'The Cheese Moon', icon: '🧀', hint: 'The moon is made of cheese, of course, and Moon Mice are nibbling holes in it everywhere. Mind the cheese wheels rolling down the hills!' },
+      { name: 'Comet Corner', icon: '☄️', hint: 'Owls glide to and fro over the gaps of Comet Corner: bounce off them all the way across!' },
+      { boss: true, name: 'King Nibbles', icon: '🐭', hint: 'King Nibbles hops after you, and the moon shakes where he lands: jump the ripples! He bowls cheeses too. After a while he nods off: land on his crown then!' },
+    ],
+    intro:
+      'This is a bedtime story, so of course it is up in the night sky — and up here nothing falls half as fast, so every jump goes higher and further than you are used to. Hop up the clouds, along the Milky Way and on to the moon, which (as everybody knows) is made of cheese. That is just the trouble: King Nibbles, the greediest mouse in the sky, has been nibbling it away, and Count Inkblot has promised him all the rest if he keeps the Happy Ending out of sight.',
+    won: 'King Nibbles goes pop — and comes down again as a very small, very sorry mouse with a crumb of cheese. The moon fills itself in, round and golden. The fourth Happy Ending is back! There is only one story left now, the very last in the book, and it is all ink…',
+  },
+  {
+    key: 'inkwell',
+    episode: 7,
+    level: 20,
+    icon: '🖋️',
+    name: 'Inkwell Keep',
+    theme: 'bookinkwell',
+    day: 'night',
+    weather: ['clear'],
+    boss: 'inkblot',
+    pages: [
+      { name: 'The Blotted Pages', icon: '📃', hint: 'Every one of the Count’s foes is out here at once, and they are quicker than ever. Take it one at a time!' },
+      { name: 'The Quill Forest', icon: '🪶', hint: 'A forest of quills, with ink dripping from the tips. Splats rise up out of the puddles: land on them while they are up.' },
+      { name: 'The Ink Falls', icon: '🌊', hint: 'Over the ink falls on rafts that rise and sink. Inkpots spit blots across the gaps: wait for each one to pass.' },
+      { name: 'The Count’s Keep', icon: '🏯', hint: 'Up the keep to the Count’s own door, past ink barrels rolling down the stairs: jump over them!' },
+      { boss: true, name: 'Count Inkblot', icon: '🎩', hint: 'Count Inkblot glides over the top dripping ink and throws blots: keep moving! When he comes down for breath, land on his hat. With half his hearts gone, he floods the floor with ink — get up on a plank, quick!' },
+    ],
+    intro:
+      'At the very back of the book, where the last story ought to be, there is only ink: Inkwell Keep, Count Inkblot’s own home, where every foe he has is out at once, and quicker than ever. Through the blotted pages, the forest of quills, over the ink falls and up to the keep — and there, the Count himself, in his top hat. Land on his hat whenever he comes down to catch his breath; and when the ink comes up over the floor, get up on a plank, quick!',
+    won: 'Count Inkblot goes pop with an enormous SPLOSH — and every drop of him runs back into his inkwell, where ink belongs, and writes, in the neatest letters anybody ever saw: THE END. All five Happy Endings are back, and the Storybook closes itself with a happy sigh.',
+  },
 ];
 
 // The stages there are to conquer: a stage for each chapter, the episodes one
@@ -1143,6 +1282,7 @@ export function campName(stage, id, kind = 'camp') {
   if (ch.quests) return questOf(stage, id)?.name ?? null;
   if (ch.battles) return battleOf(stage, id)?.name ?? null;
   if (ch.nightmares) return ch.nightmares[id - 1]?.name ?? null;
+  if (ch.pages) return ch.pages[id - 1]?.name ?? null;
   if (kind === 'castle') return ch.lair;
   return ch.camps[id - 1] ?? null;
 }

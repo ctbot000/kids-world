@@ -60,6 +60,10 @@ import { NestModel } from './bluster-models.js';
 import { NodView } from './nod/view.js';
 import { nodLight } from './nod/light.js';
 import { nodKey, nodWorld } from '../shared/nod/worlds/index.js';
+import { BookView } from './book/view.js';
+import { AvatarCards } from './book/cards.js';
+import { BOOK_D, BOOK_VIEW_H } from './book/themes.js';
+import { bookKey, bookLevel } from '../shared/book/stories/index.js';
 
 // All of the biggest edit there can be, a huge tent on a hillside say.
 const MAX_PREVIEW = MAX_EDIT_CELLS;
@@ -328,6 +332,7 @@ export class Renderer {
     const wasReal = Boolean(this.real);
     const wasCartoon = Boolean(this.cartoon);
     const wasNod = Boolean(this.nod);
+    const wasBook = Boolean(this.book);
     this.terrain.setWorld(world, this.gl, this.level ?? 'low');
     // A dream of the Land of Nod (nod/view.js): no island and no blocks at
     // all, but bodies of any shape hung in a sky of its own, with its own
@@ -335,8 +340,18 @@ export class Renderer {
     this.nod?.dispose();
     const dream = nodKey(world.theme);
     this.nod = dream ? new NodView(this.scene, nodWorld(dream), { quality: this.level ?? 'low' }) : null;
-    this.sky.group.visible = !this.nod;
-    this.terrain.group.visible = !this.nod;
+    // A story of the Storybook (book/view.js): no island either, but a flat
+    // page, seen from straight in front, as a picture book is.
+    this.book?.dispose();
+    const story = bookKey(world.theme);
+    this.book = story ? new BookView(this.scene, bookLevel(story), { quality: this.level ?? 'low' }) : null;
+    // (Everyone stuck on the page as a cut-out: book/cards.js.)
+    if (!this.book) {
+      this.cards?.dispose();
+      this.cards = null;
+    }
+    this.sky.group.visible = !this.nod && !this.book;
+    this.terrain.group.visible = !this.nod && !this.book;
     this.effects.setUp(null);
     this.hemi.position.set(0, 1, 0);
     this.camera.up.set(0, 1, 0);
@@ -354,7 +369,7 @@ export class Renderer {
     this.gl.toneMapping = this.real ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
     this.gl.toneMappingExposure = 1;
     this.realFog = this.real ? new THREE.FogExp2(0xbfd8ee, 0.004) : null;
-    if ((wasReal !== Boolean(this.real) || wasCartoon !== Boolean(this.cartoon) || wasNod !== Boolean(this.nod)) && this.level) {
+    if ((wasReal !== Boolean(this.real) || wasCartoon !== Boolean(this.cartoon) || wasNod !== Boolean(this.nod) || wasBook !== Boolean(this.book)) && this.level) {
       this.buildFinish();
       this.resize();
     }
@@ -395,7 +410,7 @@ export class Renderer {
     this.camera.aspect = w / h;
     // Keep a sensible sideways view on tall, narrow screens.
     const wide = 2 * Math.atan(Math.tan((62 * Math.PI) / 360) / this.camera.aspect) * (180 / Math.PI);
-    this.camera.fov = Math.min(80, Math.max(58, wide));
+    this.camera.fov = this.book ? this.bookFov() : Math.min(80, Math.max(58, wide));
     this.camera.updateProjectionMatrix();
     const post = this.post;
     if (post) {
@@ -425,7 +440,8 @@ export class Renderer {
   buildFinish() {
     // (A cartoon is never soft: everything in it is in focus; and its
     // shading where things meet is painted on, cartoon-plants.js.)
-    const q = this.cartoon || this.nod ? { ...this.finish, ao: 0, dof: false } : this.finish;
+    // (Nor is a page of a storybook, which has no shadows either: it is paper.)
+    const q = this.book ? { ...this.finish, ao: 0, dof: false, shadows: 0 } : this.cartoon || this.nod ? { ...this.finish, ao: 0, dof: false } : this.finish;
     const gl = this.gl;
     this.disposePost();
     setFurLayers(q.fur);
@@ -1245,6 +1261,72 @@ export class Renderer {
     this.outline.position.set(cell[0] - 0.015, cell[1] - 0.015, cell[2] - 0.015);
   }
 
+  // ------------------------------------------------ a page of the Storybook
+
+  // How wide (in degrees) the camera sees on a page of the Storybook: BOOK_VIEW_H
+  // metres of it top to bottom from BOOK_D away, more on a tall narrow screen
+  // (so there is always room to see where you are going).
+  bookFov() {
+    const a = this.camera.aspect || 1;
+    const high = Math.min(24, Math.max(BOOK_VIEW_H, 12.5 / a));
+    return (2 * Math.atan(high / 2 / BOOK_D) * 180) / Math.PI;
+  }
+
+  // How much of the page the camera sees: { w, h } metres.
+  bookView() {
+    const h = 2 * BOOK_D * Math.tan((this.camera.fov * Math.PI) / 360);
+    return { w: h * this.camera.aspect, h };
+  }
+
+  // Each frame of a page of the Storybook (book/view.js): state { book (how the
+  // story is going: book-game.js state), focus (where the camera looks) }.
+  bookFrame(dt, state) {
+    this.time += dt;
+    const { book } = this;
+    const cam = this.camera;
+    const fov = this.bookFov();
+    if (Math.abs(cam.fov - fov) > 1e-3 || cam.far < 900) {
+      cam.fov = fov;
+      cam.far = 1500;
+      cam.updateProjectionMatrix();
+    }
+    cam.up.set(0, 1, 0);
+    cam.position.set(state.focus.x, state.focus.y, BOOK_D);
+    cam.lookAt(state.focus.x, state.focus.y, 0);
+    this.camDist = BOOK_D;
+    this.finishCamera(dt);
+    const L = book.theme.light;
+    const env = this.env;
+    env.day = 1;
+    env.daylight = 1;
+    this.scene.fog = null;
+    // Lit from in front and above, as a page is under a reading lamp.
+    this.sun.color.set(L.key);
+    this.sun.intensity = L.sun;
+    tmpV.set(-0.35, 0.75, 0.9).normalize();
+    env.sunDir = tmpV.clone();
+    this.aimSun(state.focus, tmpV);
+    this.hemi.position.set(0, 1, 0.4);
+    this.hemi.color.set(L.sky);
+    this.hemi.groundColor.set(L.earth);
+    this.hemi.intensity = L.hemi;
+    toyLight.studio.value = 1.0;
+    toyLight.rim.value = 0.25;
+    toyLight.rimColor.value.set('#ffffff');
+    this.effects.setUp(null);
+    if (this.focusPass) this.focusPass.enabled = false;
+    book.frame(dt, { state: state.book, camera: cam });
+    this.cards ??= new AvatarCards(this);
+    this.cards.update(dt, { every: 1 / 30 });
+    this.effects.update(dt);
+    this.shockwaves = this.shockwaves.filter((s) => s.update(dt));
+    if (this.drawing) this.draw();
+    else {
+      this.scene.updateMatrixWorld();
+      this.camera.updateMatrixWorld();
+    }
+  }
+
   // ------------------------------------------------ each frame
 
   // Each frame of a dream of the Land of Nod (nod/view.js): state { focus (where
@@ -1296,6 +1378,10 @@ export class Renderer {
   frame(dt, state) {
     if (this.nod) {
       this.nodFrame(dt, state);
+      return;
+    }
+    if (this.book) {
+      this.bookFrame(dt, state);
       return;
     }
     this.time += dt;
@@ -1451,6 +1537,8 @@ export class Renderer {
   dispose() {
     this.disposePost();
     this.nod?.dispose();
+    this.book?.dispose();
+    this.cards?.dispose();
     this.studio.dispose();
     this.terrain.dispose();
     this.gl.dispose();

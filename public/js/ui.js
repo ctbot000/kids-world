@@ -1087,7 +1087,7 @@ export class UI {
           const adv = it.adventure
             ? it.adventure.won
               ? '🏆 Freed'
-              : `⚔️ ${stageName(it.adventure.stage, true)} · ${chapterOf(it.adventure.stage).name} · ${it.adventure.freed} of ${it.adventure.camps} ${chapterOf(it.adventure.stage).quests ? 'locks open' : chapterOf(it.adventure.stage).battles ? 'battles won' : chapterOf(it.adventure.stage).nightmares ? 'nightmares over' : 'camps free'}`
+              : `⚔️ ${stageName(it.adventure.stage, true)} · ${chapterOf(it.adventure.stage).name} · ${it.adventure.freed} of ${it.adventure.camps} ${chapterOf(it.adventure.stage).quests ? 'locks open' : chapterOf(it.adventure.stage).battles ? 'battles won' : chapterOf(it.adventure.stage).nightmares ? 'nightmares over' : chapterOf(it.adventure.stage).pages ? 'pages done' : 'camps free'}`
             : it.defense
               ? it.defense.won
                 ? '🏆 Safe'
@@ -1777,7 +1777,17 @@ export class UI {
           // do; Toon Isle's battles (the fifth), each with what to do once it is
           // found; Jinx's challenges (the fourth), each with what to do; or the
           // camps one after another along the way, and the lair.
-          this.game.nod
+          // (A story of the Storybook's pages, the seventh episode's.)
+          this.game.book
+            ? h(
+                'ul',
+                { class: 'story-way quests' },
+                ...story.pages.map((n, i) => {
+                  const done = adv.won || (!n.boss && this.game.book?.lit.has(i + 1));
+                  return h('li', { class: done ? 'free' : '' }, h('b', {}, `${n.icon} ${n.name}${done ? ' ✓' : ''}`), h('span', { class: 'muted' }, ` ${n.hint}`));
+                }),
+              )
+            : this.game.nod
             ? h(
                 'ul',
                 { class: 'story-way quests' },
@@ -1814,6 +1824,30 @@ export class UI {
       },
       { narrow: true },
     );
+  }
+
+  // On a chapter of the seventh episode (shared/book/tale.js), the island card's
+  // part about it: its pages in place of camps, each done or not, the stars
+  // you have picked up, and how to get about.
+  bookCard(g, adv) {
+    const story = adv.story;
+    const endings = story.shards - (adv.won ? 0 : 1);
+    const { book } = g;
+    const status = (n, i) => (adv.won || (!n.boss && book.lit.has(i + 1)) ? 'done ✓' : n.boss ? (book.bossState === 'on' ? 'fighting!' : 'at the very end') : book.level.pageAt(book.h.x) === i ? 'you are here' : 'to come');
+    return [
+      h('h3', {}, adv.won ? `🏆 ${story.name}: happily ever after!` : `${story.icon} Chapter ${story.n}: ${story.name}`),
+      h(
+        'div',
+        { class: 'adventure-list' },
+        h('div', { class: 'camp' }, story.episode.icon, ` Episode ${story.episode.n}`, h('span', { class: 'muted' }, story.episode.title)),
+        h('div', { class: 'camp' }, '🌟', ' Stage', h('span', { class: 'muted' }, `${story.n} of ${story.of}`)),
+        h('div', { class: 'camp' }, '💖', ' Happy Endings', h('span', { class: 'muted' }, `${endings} of ${story.of}`)),
+        h('div', { class: 'camp' }, '⭐', ' Your stars', h('span', { class: 'muted' }, `${book.got.size} of ${book.starsAll}`)),
+        ...story.pages.map((n, i) => h('div', { class: `camp${status(n, i) === 'done ✓' ? ' free' : ''}` }, `${n.icon} ${n.name}`, h('span', { class: 'muted' }, status(n, i)))),
+      ),
+      adv.won ? '' : h('p', { class: 'muted' }, `A storybook is flat: ${g.touch ? 'the thumbstick runs' : '← and → run'}, ${g.touch ? '⤴️' : 'Space'} jumps (hold it to go higher), and ${g.touch ? '⬇️' : '↓'} drops you through a plank. Land on a foe to pop it, or bop it with ${g.touch ? '👊' : 'X'} — but never land on anything prickly! Every bookmark you get to keeps everyone’s place.`),
+      h('div', { class: 'row', style: 'justify-content:center;gap:8px' }, h('button', { class: 'chip', type: 'button', onclick: () => this.storyDialog() }, '📖 The story'), h('button', { class: 'chip', type: 'button', onclick: () => this.newIsleGameDialog() }, '🆕 New game')),
+    ];
   }
 
   // On a chapter of the sixth episode (shared/nod/dream.js), the island card's
@@ -2991,8 +3025,8 @@ export class UI {
           card('⌨️', 'Typing', ['Put down a Computer from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap ⌨️ Type). In ⌨️ Typing practice, copy a line of keys or words: the next key lights up on the keyboard, coloured by the finger that types it. In 🌧️ Word Rain, words fall from the sky: type one to pop it before it lands. Three that land end the game.']),
           card('📚', 'Studying', ['Put down a Study Desk from the toy box\'s 🛋️ Home tab and sit at it (press ', h('kbd', {}, 'Q'), ' beside it, or tap Sit): your workbooks open — adding, taking away, times tables, sharing and spelling. New facts are shown to you first, then you type the answers. Miss one and you see the answer and a way to work it out, and it comes back soon. Get a fact right in four studies and you know it by heart; the bar under each workbook fills up a little with every study. Press ', h('kbd', {}, 'Q'), ' (or tap Study) to open them again, and walk to get up.']),
           card('🔑', 'Key quizzes', ['On 🌟 Adventure Isle, each camp you help free gives you one quiz, at the level you pick: one question, one try, and the right answer is a 🔑 key to a treasure chest. Win a whole stage for one quiz for a 👑 golden key, which opens the golden chest. A quiz comes up by itself; if you shut it, the 🔑 button over the hotbar brings it back.']),
-          card('⚒️', 'Soul weapons', ['Six weapons no shop sells, one for each episode of 🌟 Adventure Isle. Each lies in pieces in the 👑 golden chests of its episode: the first you open on each island has a part for you — any of them, so maybe one you have already (melt one to spare for 🪙 coins). With every part, put it together at the ⚒️ Soul Forge, in the isle’s 🎒 backpack or 🛒 shop. Then its soul wakes: beat it on your own, rolling (', h('kbd', {}, 'Shift'), ' or 💨) just as a blow lands and bopping back what it throws or what flashes, and the weapon is yours. It never wears out — and two of yours combine into one that is mightier still!']),
-          card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner its bosses go pop. Its story has six episodes, each with a film at its start and its end. In the first, 📖 The Star of Adventure Isle, King Grumble broke the lighthouse’s Star into twelve Star Shards and gave them to his captains to keep, and every stage is a chapter with a map of its own — Shipwreck Shore, the Whispering Woods, Frostpeak Pass, Candy Canyon, Sunscorch Dunes, Misty Marsh, the Crystal Caverns, Haunted Hollow, Ember Mountain, Cogwheel City, the Stormcloud Spires and his castle on Gloom Rock. Free the camps one after another along the way: each one freed opens the gate on to the next (there is no way round a gate: swim round one, and back you go), and at the end waits the chapter’s boss — one of King Grumble’s eleven captains, or at the very last the King himself — each with moves of its own: run out of the red rings, step aside when it charges, jump when it stomps! Pop it for a Star Shard — then 🏆 everyone’s results show what each of you did for the stage, and pay each of you coins and diamonds by how much you helped — and the next chapter is up, harder — after the fireworks everyone there goes on to it by themselves (or tap Go now). The higher stages fight back: flags slide down while monsters hold them, monsters ambush you half way up a flag, and things come down on the way between the camps. Pop King Grumble on its last stage and everyone there gets the 🎫 Rainbow Ticket, to keep — the only way into the second episode, 🌈 The Rainbow of Adventure Isle, which begins there and then: his big sister Queen Grizzle caught the rainbow in her great grey umbrella and hid its seven colours in the Rainbow Lands — the Tulip Fields, Maple Ridge, the Honeycomb Hills, Tangle Jungle, Bubble Lagoon, Moonbeam Moor and Violet Vale — each with a boss of its own, and every one you pop brings a colour back. Pop Queen Grizzle at its end and everyone there gets the 🧭 Wild Isle Compass, the only way into the third episode, 🏞️ The Wild Isle: an island far out to sea that is not made of bricks at all — real rocks, real trees, real waves and real animals — where Old Murk, the Fog Wolf, has stolen its five Sunstones and given them to the biggest creatures there: Driftwood Bay, Deepwood Forest, Thunder Falls, Snowcap Ridge, and Murk Fen, where he waits in his tower. Pop Old Murk and everyone there gets the 🪶 Magpie Feather, the only way into the fourth episode, 🔔 The Golden Bells, which is another kind of adventure altogether: no camps, no gates, no monsters at all. Jinx the Magpie has carried off the isle’s five Golden Bells and locked each in a cage on one of his Puzzle Isles — Bellbuoy Bay, Henhouse Hills, Topsy Gardens, Kite Cliffs and his own Magpie’s Nest — with a lock for each of his challenges there, to beat in any order you like: find the shinies he dropped (they glint!), climb to a golden key at the top of something tall, catch a cheeky monkey (it runs out of puff), lead lost chicks or sheep home, light every bonfire at once, sing back the Singing Stones’ tune, and at the very last, dazzle Jinx with his own beacons and catch him. Catch Jinx and everyone there gets the 🗺️ Toon Isle Map, the only way into the fifth episode, ☁️ Toon Isle: the biggest islands of all, drawn as a cartoon and hidden under Baron Bluster’s Cloud Blanket until somebody gets there — then the clouds roll back for everyone. His Storm Gang fights in battles, not camps: ambushes that shut you in a ring of thorns, wave after wave; beacons to keep alight while they storm them; Storm Nests to burst; Big Bads to hunt across the island (follow them when they run off to rest); and gangs roaming the paths. Win every battle to light each island’s Sky Lantern — Lollipop Bay, Toadstool Woods, Rumble Canyon, Snowball Peaks, and Thunder Top, where you zap the Baron down off his cloud with his own lightning rods. Pop Baron Bluster and everyone there gets the 🛏️ Cloud Pillow, the only way into the sixth episode, 🌙 The Land of Nod, which has no island in it at all, and not one block: every dream is a sky of little worlds of any shape, and each has a down of its own, so you can walk right round every one of them; step on a spring and it flings you to the next. The Night Mare has trampled five dreams into nightmares — Pillow Moons, Pumpkin Skies, the Music Box, Tick-Tock Skies and the Dark Side — and here it is not how strong your weapon is that counts: her frights guard themselves, and each has a way in. Roll (Shift, or 💨) just as a blow lands, bop back what is thrown or what flashes, jump and bop to slam down, trick them into things — then bop while they are dizzy, and once your five ★ are full, let a ✨ Brave Burst out (', h('kbd', {}, 'V'), ')! Every nightmare over lights a lamp round the dream’s night-light; light them all, and its golden spring flings you up to the boss. Only calming the Night Mare on the very last stage starts the story over, on a new journey — but you can start a new game any time, from stage 1 or, with your ticket, straight from a later episode (🆕 New game in the island’s card, or from 🌟 Adventure Isle on the title), and the other games keep going, each at its own stage. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there. And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
+          card('⚒️', 'Soul weapons', ['Six weapons no shop sells, one for each of the first six episodes of 🌟 Adventure Isle. Each lies in pieces in the 👑 golden chests of its episode: the first you open on each island has a part for you — any of them, so maybe one you have already (melt one to spare for 🪙 coins). With every part, put it together at the ⚒️ Soul Forge, in the isle’s 🎒 backpack or 🛒 shop. Then its soul wakes: beat it on your own, rolling (', h('kbd', {}, 'Shift'), ' or 💨) just as a blow lands and bopping back what it throws or what flashes, and the weapon is yours. It never wears out — and two of yours combine into one that is mightier still!']),
+          card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner its bosses go pop. Its story has seven episodes, each with a film at its start and its end. In the first, 📖 The Star of Adventure Isle, King Grumble broke the lighthouse’s Star into twelve Star Shards and gave them to his captains to keep, and every stage is a chapter with a map of its own — Shipwreck Shore, the Whispering Woods, Frostpeak Pass, Candy Canyon, Sunscorch Dunes, Misty Marsh, the Crystal Caverns, Haunted Hollow, Ember Mountain, Cogwheel City, the Stormcloud Spires and his castle on Gloom Rock. Free the camps one after another along the way: each one freed opens the gate on to the next (there is no way round a gate: swim round one, and back you go), and at the end waits the chapter’s boss — one of King Grumble’s eleven captains, or at the very last the King himself — each with moves of its own: run out of the red rings, step aside when it charges, jump when it stomps! Pop it for a Star Shard — then 🏆 everyone’s results show what each of you did for the stage, and pay each of you coins and diamonds by how much you helped — and the next chapter is up, harder — after the fireworks everyone there goes on to it by themselves (or tap Go now). The higher stages fight back: flags slide down while monsters hold them, monsters ambush you half way up a flag, and things come down on the way between the camps. Pop King Grumble on its last stage and everyone there gets the 🎫 Rainbow Ticket, to keep — the only way into the second episode, 🌈 The Rainbow of Adventure Isle, which begins there and then: his big sister Queen Grizzle caught the rainbow in her great grey umbrella and hid its seven colours in the Rainbow Lands — the Tulip Fields, Maple Ridge, the Honeycomb Hills, Tangle Jungle, Bubble Lagoon, Moonbeam Moor and Violet Vale — each with a boss of its own, and every one you pop brings a colour back. Pop Queen Grizzle at its end and everyone there gets the 🧭 Wild Isle Compass, the only way into the third episode, 🏞️ The Wild Isle: an island far out to sea that is not made of bricks at all — real rocks, real trees, real waves and real animals — where Old Murk, the Fog Wolf, has stolen its five Sunstones and given them to the biggest creatures there: Driftwood Bay, Deepwood Forest, Thunder Falls, Snowcap Ridge, and Murk Fen, where he waits in his tower. Pop Old Murk and everyone there gets the 🪶 Magpie Feather, the only way into the fourth episode, 🔔 The Golden Bells, which is another kind of adventure altogether: no camps, no gates, no monsters at all. Jinx the Magpie has carried off the isle’s five Golden Bells and locked each in a cage on one of his Puzzle Isles — Bellbuoy Bay, Henhouse Hills, Topsy Gardens, Kite Cliffs and his own Magpie’s Nest — with a lock for each of his challenges there, to beat in any order you like: find the shinies he dropped (they glint!), climb to a golden key at the top of something tall, catch a cheeky monkey (it runs out of puff), lead lost chicks or sheep home, light every bonfire at once, sing back the Singing Stones’ tune, and at the very last, dazzle Jinx with his own beacons and catch him. Catch Jinx and everyone there gets the 🗺️ Toon Isle Map, the only way into the fifth episode, ☁️ Toon Isle: the biggest islands of all, drawn as a cartoon and hidden under Baron Bluster’s Cloud Blanket until somebody gets there — then the clouds roll back for everyone. His Storm Gang fights in battles, not camps: ambushes that shut you in a ring of thorns, wave after wave; beacons to keep alight while they storm them; Storm Nests to burst; Big Bads to hunt across the island (follow them when they run off to rest); and gangs roaming the paths. Win every battle to light each island’s Sky Lantern — Lollipop Bay, Toadstool Woods, Rumble Canyon, Snowball Peaks, and Thunder Top, where you zap the Baron down off his cloud with his own lightning rods. Pop Baron Bluster and everyone there gets the 🛏️ Cloud Pillow, the only way into the sixth episode, 🌙 The Land of Nod, which has no island in it at all, and not one block: every dream is a sky of little worlds of any shape, and each has a down of its own, so you can walk right round every one of them; step on a spring and it flings you to the next. The Night Mare has trampled five dreams into nightmares — Pillow Moons, Pumpkin Skies, the Music Box, Tick-Tock Skies and the Dark Side — and here it is not how strong your weapon is that counts: her frights guard themselves, and each has a way in. Roll (Shift, or 💨) just as a blow lands, bop back what is thrown or what flashes, jump and bop to slam down, trick them into things — then bop while they are dizzy, and once your five ★ are full, let a ✨ Brave Burst out (', h('kbd', {}, 'V'), ')! Every nightmare over lights a lamp round the dream’s night-light; light them all, and its golden spring flings you up to the boss. Calm the Night Mare and everyone there gets the 📕 Bedtime Storybook, the only way into the seventh episode, 📖 The Storybook: open it and you fall in, on to the page, where everything is flat — only left and right, and up and down — drawn as paper cut-outs, you too. Run, jump (hold it to go higher) and drop through planks; land on Count Inkblot’s foes to pop them (never on a prickly one: bop those), ride what floats and flies, bounce on springs, pick up ⭐ stars and light every 🔖 bookmark to keep everyone’s place, and at the end of each story land on its boss while it is weak — Hopscotch Meadow, Paper Boat Harbor, Once-upon Castle, Twinkle Sky and Inkwell Keep, where the Count himself waits. Only popping Count Inkblot on the very last stage starts the story over, on a new journey — but you can start a new game any time, from stage 1 or, with your ticket, straight from a later episode (🆕 New game in the island’s card, or from 🌟 Adventure Isle on the title), and the other games keep going, each at its own stage. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there. And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
           card('🍎', 'Treasures', ['Tap fruit, seashells, pearls and star pieces to put them in your basket. Plant fruit to grow a tree! And tap a giant clam in the sandy shallows: sometimes there is a pearl in there for you, sometimes nothing but bubbles.']),
           card('🌾', 'Farming', ['Plant vegetables from your basket on farmland or grass — the 🛒 shop has some to start you off. Water them with the watering can from the toy box’s 🌾 Farm tab (the rain waters them too, and so does water close by) and they grow twice as fast. Tap a ripe one to pick it: each gives you two, to sell, to plant again or to give to an animal!']),
@@ -4779,6 +4813,7 @@ export class UI {
         const adv = g.adventure;
         if (adv?.duel) root.append(...duelCard(this, g));
         else if (g.nod) root.append(...this.dreamCard(g, adv));
+        else if (g.book) root.append(...this.bookCard(g, adv));
         else if (adv?.battles) root.append(...this.battleCard(g, adv));
         else if (adv?.quests) root.append(...this.questCard(g, adv));
         else if (adv) {
@@ -5197,8 +5232,9 @@ export class UI {
 
   // The little map, unless it was switched off in Settings.
   renderMap() {
-    // (No map of the Land of Nod: it has no top to look down on it from.)
-    const off = !this.profile.settings.map || Boolean(this.game?.nod);
+    // (No map of the Land of Nod: it has no top to look down on it from; nor
+    // of a page of the Storybook, which is all there is to see.)
+    const off = !this.profile.settings.map || Boolean(this.game?.nod) || Boolean(this.game?.book);
     $('minimap').hidden = off;
     this.minimap.hidden = off;
     this.minimap.relayout();
@@ -5262,16 +5298,19 @@ export class UI {
     // (In the Land of Nod, its nightmares over, how brave you are feeling and
     // the winks found.)
     const nod = adv && g.nod ? g.nod : null;
-    const camps = nod ? [...nod.nightmares.values()].map((n) => ({ freed: n.done })) : adv ? (adv.battles ? [...adv.battles.values()].map((b) => ({ freed: b.done })) : [...adv.camps.values()].filter((c) => c.kind === 'camp')) : [];
+    // (In a story of the Storybook, its pages done, and the stars you have.)
+    const book = adv && g.book ? g.book : null;
+    const camps = book ? Array.from({ length: book.pagesAll }, (_, i) => ({ freed: i < book.pagesDone })) : nod ? [...nod.nightmares.values()].map((n) => ({ freed: n.done })) : adv ? (adv.battles ? [...adv.battles.values()].map((b) => ({ freed: b.done })) : [...adv.camps.values()].filter((c) => c.kind === 'camp')) : [];
     const freed = camps.filter((c) => c.freed).length;
-    el.setAttribute('aria-label', `${hp} of ${maxHp} HP${dragon ? `, dragon ${dragon.hp} of ${dragon.max}` : ''}${adv ? `, ${freed} of ${camps.length} ${nod ? 'nightmares over' : adv.battles ? 'battles won' : 'camps free'}` : ''}`);
+    el.setAttribute('aria-label', `${hp} of ${maxHp} HP${dragon ? `, dragon ${dragon.hp} of ${dragon.max}` : ''}${adv ? `, ${freed} of ${camps.length} ${nod ? 'nightmares over' : book ? 'pages done' : adv.battles ? 'battles won' : 'camps free'}` : ''}`);
     el.replaceChildren(
       h('span', { class: 'hp-label' }, '❤️ HP'),
       h('span', { class: `hp-bar${share <= 0.25 ? ' low' : share <= 0.5 ? ' half' : ''}` }, h('span', { style: `width: ${(share * 100).toFixed(1)}%` })),
       h('span', { class: 'hp-num' }, `${hp}/${maxHp}`),
       dragon ? h('span', { class: 'hp-label' }, '🐲') : '',
       dragonBar,
-      adv && !adv.duel ? h('span', { class: 'camps' }, `${nod ? '🌟' : adv.battles ? '🏮' : '🚩'} ${freed}/${camps.length}`) : '',
+      adv && !adv.duel ? h('span', { class: 'camps' }, `${nod ? '🌟' : book ? '🔖' : adv.battles ? '🏮' : '🚩'} ${freed}/${camps.length}`) : '',
+      book ? h('span', { class: 'camps', title: 'Stars picked up' }, `⭐ ${book.got.size}/${book.starsAll}`) : '',
       nod && !adv.duel ? h('span', { class: 'camps', title: 'Winks found' }, `😉 ${nod.winks.size}/${nod.world.winks.length}`) : '',
       nod ? h('span', { class: `courage${nod.fight.courage >= COURAGE ? ' full' : ''}`, 'aria-label': `Courage ${Math.floor(nod.fight.courage)} of ${COURAGE}` }, ...Array.from({ length: COURAGE }, (_, i) => h('i', { class: nod.fight.courage >= i + 1 ? 'on' : nod.fight.courage > i ? 'half' : '' }, '★'))) : '',
     );
@@ -7713,6 +7752,8 @@ export class UI {
     // (So does the Land of Nod: shared/nod/dream.js, by way of room.js.)
     const battles = Boolean(g.adventure?.battles);
     const nod = Boolean(g.nod);
+    // (And a story of the Storybook: shared/book/tale.js.)
+    const book = Boolean(g.book);
     const deed = (icon, n, what) => (n ? h('span', { class: 'deed', title: what }, icon, ' ', String(n)) : null);
     const row = (r) =>
       h(
@@ -7723,7 +7764,7 @@ export class UI {
           'span',
           { class: 'who' },
           h('b', { lang: langOf(r.name) || undefined }, r.name, r.id === g.pid ? h('span', { class: 'muted' }, ' (you)') : r.here ? null : h('span', { class: 'muted' }, ' (left)')),
-          h('span', { class: 'deeds' }, deed('👾', r.pops, nod ? 'Points for frights popped' : 'Monsters popped'), deed('👑', r.boss, nod ? 'Points for hearts off the boss' : 'Bops on the boss'), deed('🚩', r.flag ? `${r.flag}s` : 0, 'Seconds raising flags'), deed('🤝', r.helps, 'Friends helped up'), nod ? deed('✨', r.play, 'Points for nightmares over, winks found and things bopped right back') : battles ? deed('⚔️', r.play, 'Points for battles won') : deed('🧩', r.play, 'Points at Jinx’s challenges'), r.score ? null : h('span', { class: 'muted' }, 'Came to cheer!')),
+          h('span', { class: 'deeds' }, deed('👾', r.pops, nod ? 'Points for frights popped' : 'Monsters popped'), deed('👑', r.boss, nod ? 'Points for hearts off the boss' : 'Bops on the boss'), deed('🚩', r.flag ? `${r.flag}s` : 0, 'Seconds raising flags'), deed('🤝', r.helps, 'Friends helped up'), book ? deed('✨', r.play, 'Points for bookmarks got to, stars picked up and the boss popped') : nod ? deed('✨', r.play, 'Points for nightmares over, winks found and things bopped right back') : battles ? deed('⚔️', r.play, 'Points for battles won') : deed('🧩', r.play, 'Points at Jinx’s challenges'), r.score ? null : h('span', { class: 'muted' }, 'Came to cheer!')),
         ),
         h('span', { class: 'score' }, `⭐ ${r.score.toLocaleString()}`),
         h('span', { class: 'prize' }, r.here ? [`🪙 ${r.coins}`, r.gems ? ` 💎 ${r.gems}` : ''] : ''),
@@ -7735,7 +7776,7 @@ export class UI {
           h('div', { class: 'dialog-head' }, h('h2', {}, '🏆 ', res.name ? `${res.name} won!` : 'Stage won!')),
           you ? h('p', { class: 'results-you' }, you.place === 1 && res.rows.length > 1 ? '🏅 You helped the most! ' : 'Thank you for helping! ', `You got 🪙 ${you.coins} coins${you.gems ? ` and 💎 ${you.gems} diamond${you.gems > 1 ? 's' : ''}` : ''}.`) : null,
           h('ol', { class: 'ranking results' }, res.rows.map(row)),
-          h('p', { class: 'muted' }, nod ? `Points: 👾 a fright popped ${3 * DEEDS.pops} (one with no guard ${DEEDS.pops}), 👑 a heart off the boss ${5 * DEEDS.boss}, 🤝 a friend helped up ${DEEDS.helps}, ✨ being there as a nightmare is over, a wink found, something bopped right back. The more points, the more coins; a 💎 for everyone who helped, and one more for whoever helped the most.` : battles ? `Points: 👾 a monster popped ${DEEDS.pops}, 👑 a bop on Baron Bluster ${DEEDS.boss}, 🔥 a second lighting a beacon or charging a lightning rod ${DEEDS.flag}, 🤝 a friend helped up ${DEEDS.helps}, ⚔️ being there as a battle is won. The more points, the more coins; a 💎 for everyone who helped, and one more for whoever helped the most.` : res.rows.some((r) => r.play) ? 'Points: 🧩 for each thing done at Jinx’s challenges — a shiny found, a key reached, a catch, an animal home, a bonfire lit, a note sung. The more points, the more coins; a 💎 for everyone who helped, and one more for whoever helped the most.' : `Points: 👾 a monster popped ${DEEDS.pops}, 👑 a bop on the boss ${DEEDS.boss}, 🚩 a second raising a flag ${DEEDS.flag}, 🤝 a friend helped up ${DEEDS.helps}. The more points, the more coins; a 💎 for everyone who helped, and one more for whoever helped the most.`),
+          h('p', { class: 'muted' }, book ? `Points: 👾 a foe popped ${DEEDS.pops}, 👑 a heart off the boss ${5 * DEEDS.boss}, 🤝 a friend helped up ${DEEDS.helps}, ✨ getting to a bookmark first ${10 * DEEDS.play}, a star picked up ${DEEDS.play}, being there as the boss goes pop ${20 * DEEDS.play}. The more points, the more coins; a 💎 for everyone who helped, and one more for whoever helped the most.` : nod ? `Points: 👾 a fright popped ${3 * DEEDS.pops} (one with no guard ${DEEDS.pops}), 👑 a heart off the boss ${5 * DEEDS.boss}, 🤝 a friend helped up ${DEEDS.helps}, ✨ being there as a nightmare is over, a wink found, something bopped right back. The more points, the more coins; a 💎 for everyone who helped, and one more for whoever helped the most.` : battles ? `Points: 👾 a monster popped ${DEEDS.pops}, 👑 a bop on Baron Bluster ${DEEDS.boss}, 🔥 a second lighting a beacon or charging a lightning rod ${DEEDS.flag}, 🤝 a friend helped up ${DEEDS.helps}, ⚔️ being there as a battle is won. The more points, the more coins; a 💎 for everyone who helped, and one more for whoever helped the most.` : res.rows.some((r) => r.play) ? 'Points: 🧩 for each thing done at Jinx’s challenges — a shiny found, a key reached, a catch, an animal home, a bonfire lit, a note sung. The more points, the more coins; a 💎 for everyone who helped, and one more for whoever helped the most.' : `Points: 👾 a monster popped ${DEEDS.pops}, 👑 a bop on the boss ${DEEDS.boss}, 🚩 a second raising a flag ${DEEDS.flag}, 🤝 a friend helped up ${DEEDS.helps}. The more points, the more coins; a 💎 for everyone who helped, and one more for whoever helped the most.`),
           h('button', { class: 'big green', type: 'button', onclick: () => this.closeModal() }, 'Done'),
         );
       },
@@ -8595,6 +8636,7 @@ export class UI {
   keyWords() {
     const g = this.game;
     if (g?.nod) return { how: 'Be there as a nightmare is over', did: 'A nightmare is over, and you were there!', again: 'See off another nightmare' };
+    if (g?.book) return { how: 'Be there as a bookmark lights up', did: 'A page of the story is done, and you were there!', again: 'Get to the next bookmark' };
     if (g?.adventure?.battles) return { how: 'Help win a battle', did: 'You helped win a battle!', again: 'Win another battle' };
     if (g?.adventure?.quests) return { how: 'Help beat a challenge', did: 'You helped beat a challenge!', again: 'Beat another challenge' };
     return { how: 'Help free a camp', did: 'You helped free a camp!', again: 'Free another camp' };
@@ -8889,6 +8931,10 @@ export class UI {
     if (g.nod && adv && !adv.won) {
       for (const t of g.nod.tags()) tag(t.key, t.x, t.y, t.z, `${t.label}|${t.share === null ? '' : Math.round(t.share * 24)}|${t.kind}`, () => [h('div', { class: `label ${t.kind}` }, t.label), t.share === null ? '' : bar(t.share, 'king')], t.kind === 'quest' ? 'quest' : 'fright');
     }
+    // A story of the Storybook's boss (the seventh episode): its name and hearts.
+    if (g.book && adv && !adv.won) {
+      for (const t of g.book.tags()) tag(t.key, t.x, t.y, t.z, `${t.label}|${Math.round(t.share * 24)}`, () => [h('div', { class: 'label boss' }, t.label), bar(t.share, 'king')], 'fright');
+    }
     // Over a wild dragon near you (dragon.js), its name and the hearts it has left.
     if (me) {
       for (const c of g.critters.values()) {
@@ -8945,7 +8991,7 @@ export class UI {
     const wildNear = Boolean(me) && !g.riding && [...g.critters.values()].some((c) => c.type === 'dragon' && c.fight && c.fight.mood !== 'tame' && close(c.model.group.position, ATTACK_SHOW + 6));
     // So does a door just ahead, on foot, for a swing to open or shut it.
     const doorNear = Boolean(me) && !g.riding && !g.aboard && !g.seat && Boolean(g.doorAhead());
-    const near = monsterNear || wildNear || doorNear || Boolean(g.nod);
+    const near = monsterNear || wildNear || doorNear || Boolean(g.nod) || Boolean(g.book);
     if (el.hidden === near) el.hidden = !near;
     // (In the Land of Nod, down is a roll.)
     const down = $('btn-down');

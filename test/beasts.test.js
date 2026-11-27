@@ -494,7 +494,7 @@ test('every chapter of the story has champions of its own in its later camps, ex
   const champs = new Set();
   // (The fourth episode's chapters have no camps: Jinx's challenges instead;
   // nor the fifth's: its battles.)
-  for (const ch of CHAPTERS.filter((c) => !c.quests && !c.battles && !c.nightmares)) {
+  for (const ch of CHAPTERS.filter((c) => !c.quests && !c.battles && !c.nightmares && !c.pages)) {
     assert.equal(ch.champions.length, ch.camps.length - 1, `${ch.key}: one for each camp from the second`);
     for (const k of ch.champions) {
       assert.ok(isBeast(k), `${ch.key}: ${k}`);

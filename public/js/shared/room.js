@@ -55,6 +55,7 @@ import { cleanPiece } from './song.js';
 import { canWatch } from './watch.js';
 import { hasPower, METEOR_FALL_MS, ROD_LOB_MS, weaponOf } from './shop.js';
 import { duelWorld, SoulDuel } from './nod/duel.js';
+import { packBoss } from './book/bosses.js';
 import { soulOf, soulWeapon } from './souls.js';
 import { cleanChat, cleanIslandName, cleanLook, cleanName, EMOTE_KEYS, isValidName, lookHair, lookTall, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
 
@@ -770,6 +771,9 @@ export class Room {
       case 'nod':
         this.nodOp(conn, p, msg);
         break;
+      case 'book':
+        this.bookOp(conn, p, msg);
+        break;
       case 'leave':
         this.clients.delete(conn);
         this.leave(pid);
@@ -1020,7 +1024,7 @@ export class Room {
       // The eruption going as they came in, if one is (shared/volcano.js).
       volcano: this.volcano?.pack(this.now()) ?? null,
       chat: this.chat,
-      adventure: this.adventure?.describe() ?? null,
+      adventure: this.adventureFor(me),
       defense: this.defense?.describe(this.monsters) ?? null,
       arcade: this.arcade.pack(this.now()),
       hideseek: this.hideseek.pack(this.now()),
@@ -1046,6 +1050,15 @@ export class Room {
     const w = this.world;
     // (The Land of Nod goes every way from its middle: nod/shape.js Space.)
     const sky = this.adventure?.dream?.space;
+    // (A story of the Storybook is as flat as its page: book/level.js.)
+    const tale = this.adventure?.tale;
+    if (tale) {
+      const L = tale.level;
+      const state = [+Math.min(L.w, Math.max(0, s[0])).toFixed(2), +Math.min(L.h + 8, Math.max(-6, s[1])).toFixed(2), 0, +(s[3] % (Math.PI * 2)).toFixed(2), Math.max(0, Math.min(17, s[4] | 0)), s[5] & 0xff];
+      p.s = state;
+      this.broadcast({ t: 'm', p: p.id, s: state }, conn);
+      return;
+    }
     const far = sky ? sky.reach + 60 : 0;
     const within = (v, c, hi) => (sky ? Math.min(c + far, Math.max(c - far, v)) : Math.min(hi, Math.max(0, v)));
     const x = within(s[0], sky?.c.x, w.W);
@@ -1682,17 +1695,19 @@ export class Room {
     // A wave with nobody left to see it goes home, to come again on Start.
     if (this.defense?.marching && this.online === 0) this.popAll(this.defense.stop(this.monsters));
     const dream = this.adventure?.dream;
+    const tale = this.adventure?.tale;
     if (dream) this.stepDream(dream, dt, now, where);
+    else if (tale) this.stepTale(tale, now, where);
     else if (this.settings.monsters || this.adventure?.active || this.defense?.marching) this.stepMonsters(dt, now, where);
     this.stepDragons(now, where);
     this.stepLoot(now);
     // The Monster Gashapon only ever turns up on the shared isle, Adventure Isle.
-    if (this.adventure && this.shared && !dream) for (const news of this.adventure.stepGasha(this.world, now, [...where].map(([id, w]) => ({ id, ...w })))) this.gashaNews(news);
+    if (this.adventure && this.shared && !dream && !tale) for (const news of this.adventure.stepGasha(this.world, now, [...where].map(([id, w]) => ({ id, ...w })))) this.gashaNews(news);
     // Jinx on his bell's cage, on a chapter told in challenges: watching
     // everyone, and off he flies once it is won.
     if (this.adventure?.perched) this.adventure.stepPerch(this.world, now, [...where].map(([id, w]) => ({ id, ...w })));
     // So do its treasure chests: put down, and gone a while after they open.
-    if (this.adventure && this.shared && !dream) {
+    if (this.adventure && this.shared && !dream && !tale) {
       const cells = this.adventure.stepChests(this.world, now).flat();
       if (cells.length) {
         this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'nature', cells });
@@ -2372,7 +2387,7 @@ export class Room {
   // Back to the nearest safe place (the start, or a camp freed), safe, with
   // all their HP again. Returns where, as [x, y, z].
   goHome(p, now) {
-    const at = this.adventure?.dream ? this.adventure.dream.homeFor(p.id) : this.adventure ? this.adventure.homeFor(this.world, p.s[0], p.s[2]) : this.world.spawn;
+    const at = this.adventure?.dream ? this.adventure.dream.homeFor(p.id) : this.adventure?.tale ? this.adventure.tale.homeFor() : this.adventure ? this.adventure.homeFor(this.world, p.s[0], p.s[2]) : this.world.spawn;
     p.hp = p.maxHp;
     p.dizzyUntil = 0;
     p.healAt = now;
@@ -3133,6 +3148,107 @@ export class Room {
     const any = dream.frights.list.length > 0;
     if ((any || this.frightsSent) && this.online > 0) this.broadcast({ t: 'nf', f: dream.frights.pack() });
     this.frightsSent = any;
+  }
+
+  // How the adventure is going, for someone (me) arriving: in a story of the
+  // Storybook, with the stars they have picked up in it already.
+  adventureFor(me) {
+    const a = this.adventure?.describe() ?? null;
+    if (a?.book && me) a.book.stars = this.adventure.tale.starsOf(me.id);
+    return a;
+  }
+
+  // A story of the Storybook moved on (book/tale.js): its bookmarks lit as
+  // anyone gets to them, its foes back, its boss's moves — and the story's
+  // clock, twice a second, for every page to keep in step with.
+  stepTale(tale, now, where) {
+    for (const p of this.players.values()) {
+      if (p.online && p.dizzyUntil && now >= p.dizzyUntil) this.sendHome(p, now);
+    }
+    const people = [];
+    for (const [id, w] of where) {
+      const p = this.players.get(id);
+      people.push({ id, x: w.x, y: w.y, dizzy: (p.dizzyUntil ?? 0) > now });
+    }
+    const out = tale.step(now, people);
+    for (const fx of out.fx) this.broadcast({ t: 'bx', ...fx });
+    for (const { id, by } of out.lit) this.pageTurned(id, by);
+    if (out.won) this.bookWon(tale);
+    if (this.online > 0 && now - (this.taleSentAt ?? 0) >= 500) {
+      this.taleSentAt = now;
+      this.broadcast({ t: 'bt', c: Math.round(tale.clock) });
+    }
+  }
+
+  // A bookmark lit (a page of the story done): everyone told who got to it.
+  pageTurned(id, by) {
+    const adv = this.adventure;
+    adv.credit(by, 'play', 10);
+    this.broadcast({ t: 'bookmark', id, by });
+    this.changed();
+  }
+
+  // A story's boss gone pop: the stage is won.
+  bookWon(tale) {
+    const adv = this.adventure;
+    for (const id of tale.bossBy) adv.credit(id, 'play', 20);
+    const b = tale.level.boss;
+    this.broadcast({ t: 'bookmark', id: tale.bossId, by: [...tale.bossBy][0] ?? 0, won: true });
+    adv.win(this.monsters);
+    this.broadcast({ t: 'won', by: this.onlinePlayers().map((q) => q.id), x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: 0, board: this.stageBoard() });
+    this.allWell();
+    this.changed();
+  }
+
+  // What someone does in a story of the Storybook, as their page says, with
+  // when on the story's clock (t): a foe landed on (stomp) or bopped, a crate
+  // bopped to bits, a star picked up (or a crate's), the boss landed on while
+  // it was weak, what hurt them (a foe, what one spat, the boss, thorns) or a
+  // fall off the page. (When, as `at`.)
+  bookOp(conn, p, msg) {
+    const tale = this.adventure?.tale;
+    if (!tale || this.adventure.won && msg.op !== 'star') return;
+    const now = this.now();
+    if ((p.dizzyUntil ?? 0) > now) return;
+    const at = { id: p.id, x: p.s[0], y: p.s[1] };
+    const t = Number.isFinite(msg.at) ? msg.at : null;
+    switch (msg.op) {
+      case 'stomp':
+      case 'bop': {
+        const ids = msg.op === 'bop' && Array.isArray(msg.ids) ? msg.ids.filter(Number.isInteger).slice(0, 8) : Number.isInteger(msg.f) ? [msg.f] : [];
+        for (const id of ids) {
+          const f = tale.pop(at, id, t, msg.op === 'bop');
+          if (!f) continue;
+          this.adventure.credit(p.id, 'pops', 1);
+          this.broadcast({ t: 'bx', k: 'pop', f: id, pid: p.id, how: msg.op });
+        }
+        break;
+      }
+      case 'crate': {
+        const c = Number.isInteger(msg.i) ? tale.crate(at, msg.i) : null;
+        if (c) this.broadcast({ t: 'bx', k: 'crate', i: c.i, pid: p.id, ...(c.star ? { star: true } : {}) });
+        break;
+      }
+      case 'star':
+        if (Number.isInteger(msg.i) && (msg.i >= 1000 ? tale.crateStar(at, msg.i - 1000) : tale.star(at, msg.i))) this.adventure.credit(p.id, 'play', 1);
+        break;
+      case 'boss':
+        if (tale.stompBoss(at, t)) {
+          this.adventure.credit(p.id, 'boss', 5);
+          this.broadcast({ t: 'bx', k: 'boss', b: packBoss(tale.boss), hit: p.id });
+          this.changed();
+        }
+        break;
+      case 'hurt':
+      case 'fall': {
+        if (now < (p.safeUntil ?? 0)) break;
+        const n = (1 + Math.max(0, tale.difficulty - 16) * 0.06) * (hasPower(p.look, 'armor') ? 0.5 : 1);
+        this.knock(p, now, Math.round(hpAfterBump(p.hp, n)), { t: 'bump', pid: p.id, book: msg.op });
+        break;
+      }
+      default:
+        break;
+    }
   }
 
   // A nightmare over (or the boss popped, and with it the stage won): its lamp

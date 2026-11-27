@@ -271,7 +271,7 @@ test('nothing starts the stages over but the last stage won: then a new journey 
   assert.equal(one.room.adventure.story.last, true, 'of the last episode');
   assert.equal(one.room.adventure.describe().final, true, 'and the pages are told so');
   const last = one.room;
-  const b = join(last, 'Brave Fox', { tickets: [2, 3, 4, 5, 6] });
+  const b = join(last, 'Brave Fox', { tickets: [2, 3, 4, 5, 6, 7] });
   last.adventure.win(last.monsters);
   one.tick(time.now());
   assert.deepEqual([one.stage, one.journey], [1, 2], 'a new journey');

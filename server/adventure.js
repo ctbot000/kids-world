@@ -240,7 +240,7 @@ export class PublicAdventure {
     // (Its pages are told which game it is: its intro plays at each game's start, ui.js.)
     room.adventure.run = run.id;
     room.onIsleNew = (name, episode = 1) => this.newRun(name, this.now(), episode);
-    for (const id of room.adventure.quests || room.adventure.battles || room.adventure.dream ? [] : freed) {
+    for (const id of room.adventure.quests || room.adventure.battles || room.adventure.dream || room.adventure.tale ? [] : freed) {
       const camp = room.adventure.campById(id);
       if (camp?.kind === 'camp' && !camp.freed) room.campFreed(room.adventure.free(camp, [], room.monsters));
     }
@@ -250,6 +250,8 @@ export class PublicAdventure {
     if (room.adventure.battles) room.restoreBattles(freed, fog);
     // (Or the nightmares over in it already, and the winks found.)
     if (room.adventure.dream) room.adventure.dream.restore(freed, false);
+    // (Or the bookmarks lit in a story of the Storybook already.)
+    if (room.adventure.tale) room.adventure.tale.restore(freed.filter((id) => id !== room.adventure.tale.bossId));
     run.seen = room.adventure.battles?.fog.count ?? 0;
     run.entry = { code, room, emptySince: 0, public: true };
     run.freed = room.adventure.doneIds().length;
@@ -324,6 +326,7 @@ export class PublicAdventure {
         freed: tally?.freed ?? 0,
         ...(tally?.quests ? { quests: true } : {}),
         ...(tally?.nod ? { nod: true } : {}),
+        ...(tally?.book ? { book: true } : {}),
       };
     });
   }

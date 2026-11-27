@@ -29,6 +29,7 @@ import { WILD_MAPS } from './isle-wild.js';
 import { BELL_MAPS, mirrorQuests } from './isle-bells.js';
 import { mirrorBattles, TOON_MAPS } from './isle-toon.js';
 import { nodTheme, nodWorld } from './nod/worlds/index.js';
+import { bookLevel, bookTheme } from './book/stories/index.js';
 
 export const ISLE_SIDE = 128;
 const SEA = 20;
@@ -3441,9 +3442,21 @@ function dream(ch, seed) {
   return { world, critters: [], fruit: B.FRUIT_ITEMS[0], mines: [], camps: [], defense: null, gates: [], chestSpots: [], quests: null, hub: null, battles: null, roads: null, debug: { routes: [], spots: [] } };
 }
 
+// A chapter of the seventh episode is a page of a storybook (book/), as flat
+// as paper: its world too is only a box of air, as long as the story and one
+// block deep (as shallow as an island can be), which is what the rest of
+// the game has of it.
+function storybook(ch, seed) {
+  const level = bookLevel(ch.key);
+  const world = new World({ W: Math.min(512, level.w + 2), H: Math.max(16, level.h + 10), D: 16, sea: 1, theme: bookTheme(ch.key), seed: seed >>> 0 || 1 });
+  world.spawn = { x: level.start.x, y: level.start.y, z: 0 };
+  return { world, critters: [], fruit: B.FRUIT_ITEMS[0], mines: [], camps: [], defense: null, gates: [], chestSpots: [], quests: null, hub: null, battles: null, roads: null, debug: { routes: [], spots: [] } };
+}
+
 export function buildIsle({ stage = 1, seed = 1, journey = 1 } = {}) {
   const ch = chapterOf(stage);
   if (ch.nightmares) return dream(ch, seed);
+  if (ch.pages) return storybook(ch, seed);
   const make = CHAPTER_MAPS[ch.key] ?? shore;
   const m = new Maker(ch, seed >>> 0 || 1);
   const made = make(m) ?? {};

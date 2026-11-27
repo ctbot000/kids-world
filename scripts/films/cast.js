@@ -64,6 +64,13 @@ export const CAST = {
   munch: { name: 'Old Munch', icon: '🐛', color: '#9be36a', voice: 'bm_daniel', pitch: 0.9, speed: 0.9 },
   maestro: { name: 'Maestro Crescendo', icon: '🎼', color: '#ffd77a', voice: 'bm_lewis', pitch: 1.06, speed: 1.02 },
   tock: { name: 'Old Tock', icon: '🕰️', color: '#e8c890', voice: 'bm_george', pitch: 0.8, speed: 0.86, fx: 'echo' },
+
+  // Episode 7: Count Inkblot and the bosses of the Storybook's stories.
+  inkblot: { name: 'Count Inkblot', icon: '🎩', color: '#b98ae6', voice: 'bm_fable', pitch: 0.86, speed: 0.92 },
+  grumbleweed: { name: 'Grumbleweed', icon: '🌻', color: '#b47ae8', voice: 'bm_daniel', pitch: 0.86, speed: 0.95 },
+  crumple: { name: 'Captain Crumple', icon: '🦀', color: '#ff7a6a', voice: 'am_michael', pitch: 0.92, speed: 1.02 },
+  paperdragon: { name: 'The Paper Dragon', icon: '🐉', color: '#ff9a6b', voice: 'am_fenrir', pitch: 0.86, speed: 0.95 },
+  nibbles: { name: 'King Nibbles', icon: '🐭', color: '#c9c2df', voice: 'am_puck', pitch: 1.3, speed: 1.06 },
 };
 
 // What a line is called, wherever it is asked for: who says it, its words,

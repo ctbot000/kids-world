@@ -73,5 +73,16 @@
  "tock-before": "9f646974b87f1fb5",
  "tock-after": "b3bffe340ec3a0db",
  "mare-before": "1ebee7b365c633f7",
- "mare-after": "d3ed9ea2319003f1"
+ "mare-after": "d3ed9ea2319003f1",
+ "grumbleweed-before": "19ec32c6cb06afb2",
+ "grumbleweed-after": "923fc1bcd30bb639",
+ "crumple-before": "727f71903cc3af3a",
+ "crumple-after": "5bc38b614e8e3218",
+ "paperdragon-before": "5a7c1dbcd3bc1a88",
+ "paperdragon-after": "f46a95e02f80d658",
+ "nibbles-before": "5c38b0777596699f",
+ "nibbles-after": "c9f060aef56edc55",
+ "inkblot-before": "cdf87df3f247029d",
+ "inkblot-again": "d43c74d9830de033",
+ "inkblot-after": "52f0632f96e7a821"
 }

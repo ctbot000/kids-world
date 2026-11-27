@@ -18,7 +18,7 @@ import { flightAt } from '../public/js/shared/nod/maker.js';
 import { add, Band, Block, Body, Can, Chain, Crate, carry, dist3, dot, Dot, Drum, flatUnit, headingOf, len, Loop, Plate, Post, Space, sub, turn, unit, v3, yawOf } from '../public/js/shared/nod/shape.js';
 import { makeWalker, standAt, stepWalker, STRIDE } from '../public/js/shared/nod/walker.js';
 import { isNodKey, nodKey, nodWorld, NOD_KEYS } from '../public/js/shared/nod/worlds/index.js';
-import { CHAPTERS, chapterOf, firstStage, STAGES } from '../public/js/shared/isle-story.js';
+import { CHAPTERS, chapterOf, firstStage } from '../public/js/shared/isle-story.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { WEAPONS } from '../public/js/shared/shop.js';
 import { CHEST_AGAIN_MS, CHEST_OPEN_MS } from '../public/js/shared/treasure.js';
@@ -969,7 +969,7 @@ test('a blow takes HP once, in a fair moment after another; out of HP, you come 
 
 test('blows hit harder the later the dream, and HP comes back more slowly in the thick of a fight', () => {
   const lost = [];
-  for (const stage of [FIRST, STAGES]) {
+  for (const stage of [FIRST, firstStage(7) - 1]) {
     const time = { t: 1_000_000 };
     const room = dreamRoom(stage, time);
     const a = join(room);
@@ -1171,8 +1171,8 @@ test('the nightmares over and the winks found are kept over a restart, and the b
   }
 });
 
-test('the story goes on into the dreams, and from the last of them a new journey begins', () => {
-  assert.equal(STAGES, FIRST + 4);
+test('the story goes on into the dreams, and from the last of them into the Storybook', () => {
+  assert.equal(firstStage(7), FIRST + 5);
   const time = { t: 1_000_000 };
   const one = new PublicAdventure({ rooms: new Map(), now: () => time.t, log: () => {} }).start();
   const { code } = one.newRun('Brave Fox', time.t, 5);
@@ -1190,5 +1190,6 @@ test('the story goes on into the dreams, and from the last of them a new journey
     time.t += 1000;
     one.tick(time.t);
   }
-  assert.deepEqual([run.stage, run.journey], [1, 2]);
+  assert.deepEqual([run.stage, run.journey], [firstStage(7), 1]);
+  assert.ok(run.entry.room.adventure.tale, 'out of the dreams, into the first story');
 });

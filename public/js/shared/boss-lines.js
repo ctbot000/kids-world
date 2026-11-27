@@ -57,6 +57,14 @@ export const BOSS_LINES = {
   maestro: { name: 'Maestro Crescendo', icon: '🎼', color: '#ffd77a', before: 'Louder! Louder! Fortissimo!', after: 'Bravo… bravo. You win.' },
   tock: { name: 'Old Tock', icon: '🕰️', color: '#e8c890', before: 'Bong! Bong! Time to fight!', after: 'Tick… tock… sleepy time.' },
   mare: { name: 'The Night Mare', icon: '🐴', color: '#d0a8ff', before: 'Stay away! Please, stay away!', after: 'I’m not scared any more. Thank you.' },
+
+  // Episode 7: the bosses at the ends of the stories of the Storybook, and
+  // Count Inkblot (book/bosses.js).
+  grumbleweed: { name: 'Grumbleweed', icon: '🌻', color: '#b47ae8', before: 'Grrr! Keep off my garden!', after: 'Oh… I feel all sunny now.' },
+  crumple: { name: 'Captain Crumple', icon: '🦀', color: '#ff7a6a', before: 'Arr! Nobody crumples my hat!', after: 'Arr… I fold. You win.' },
+  paperdragon: { name: 'The Paper Dragon', icon: '🐉', color: '#ff9a6b', before: 'Roar! Feel my paper fire!', after: 'Oh… I’m only a kite now.' },
+  nibbles: { name: 'King Nibbles', icon: '🐭', color: '#c9c2df', before: 'Squeak! This moon is mine, all mine!', after: 'Squeak… sorry about the cheese.' },
+  inkblot: { name: 'Count Inkblot', icon: '🎩', color: '#b98ae6', before: 'Happy endings? Not in my book! Ha!', again: 'Ha! Now for a flood of ink!', after: 'Splosh! The end… of me.' },
 };
 
 // The moments a boss says something.

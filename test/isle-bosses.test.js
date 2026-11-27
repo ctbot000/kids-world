@@ -94,7 +94,8 @@ test('every chapter has a boss of its own, on the end of the kinds, in the colle
   assert.deepEqual(MONSTER_STATES.slice(9, 13), ['rear', 'charge', 'hurl', 'leap']);
   // (The fourth episode's chapters have no boss: Jinx's challenges instead;
   // the fifth's battles end with Baron Bluster at the last of them.)
-  assert.deepEqual(CHAPTERS.filter((c) => !c.quests && !c.battles && !c.nightmares).map((c) => c.boss), ['clawbeard', 'puffcap', 'frostfang', 'gumbo', 'scarabold', 'bogmaw', 'glimmershell', 'baronboo', 'moltok', 'sprocket', 'nimbus', 'king', ...RAINBOW, ...WILD]);
+  // (The seventh's are stories, their bosses of their own: test/book.test.js.)
+  assert.deepEqual(CHAPTERS.filter((c) => !c.quests && !c.battles && !c.nightmares && !c.pages).map((c) => c.boss), ['clawbeard', 'puffcap', 'frostfang', 'gumbo', 'scarabold', 'bogmaw', 'glimmershell', 'baronboo', 'moltok', 'sprocket', 'nimbus', 'king', ...RAINBOW, ...WILD]);
   assert.ok(CHAPTERS.filter((c) => c.quests).every((c) => !c.boss));
   assert.deepEqual(CHAPTERS.filter((c) => c.battles).map((c) => c.boss ?? null), [null, null, null, null, 'bluster']);
   assert.ok(isBoss('bluster') && MONSTER_KINDS.indexOf('bluster') > MONSTER_KINDS.indexOf(WILD.at(-1)), 'the Baron after the third episode’s');

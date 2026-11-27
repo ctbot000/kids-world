@@ -37,8 +37,9 @@ const dice = (seed) => {
 
 // ---------------------------------------------------------------- the weapons
 
-test('six of them, one for each episode, none of them in any shop, each of parts all its own', () => {
-  assert.deepEqual(S.SOULS.map((w) => w.episode), EPISODES.map((e) => e.n));
+test('six of them, one for each episode with treasure chests (not the Storybook), none of them in any shop, each of parts all its own', () => {
+  assert.deepEqual(S.SOULS.map((w) => w.episode), EPISODES.filter((e) => !e.book).map((e) => e.n));
+  assert.equal(S.soulOfEpisode(7), null);
   assert.equal(new Set(S.SOULS.map((w) => w.name)).size, 6);
   const names = S.SOULS.flatMap((w) => w.parts.map((p) => p.name));
   assert.equal(new Set(names).size, names.length, 'no two parts alike, of any of them');
