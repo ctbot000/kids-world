@@ -2168,6 +2168,56 @@ PAINT.bomb = (ctx) => {
   ctx.fill();
 };
 
+// The firework: a paper rocket on a stick, its cone striped and its fuse
+// fizzing at the side, as it waits to be lit and as the toy box shows it.
+PAINT.firework = (ctx) => {
+  // The stick it stands on, planted in a little mound of dirt.
+  ctx.fillStyle = '#a5714a';
+  ctx.fillRect(29, 38, 6, 18);
+  ctx.fillStyle = '#8a5a34';
+  ctx.fillRect(31, 38, 2, 18);
+  ctx.fillStyle = '#c98a52';
+  ellipse(ctx, 32, 56, 9, 4, 0);
+  ctx.fill();
+  // The rocket's body, striped candy-bright, with a shine on one side.
+  const stripes = ['#e8453c', '#ffffff', '#e8453c', '#ffffff', '#e8453c'];
+  for (let i = 0; i < stripes.length; i++) {
+    const y = 30 - i * 5;
+    const wide = 11 - i * 1.5;
+    ctx.fillStyle = stripes[i];
+    ctx.beginPath();
+    ctx.moveTo(32 - wide, y - 5);
+    ctx.lineTo(32 + wide, y - 5);
+    ctx.lineTo(32 + wide - 1.5, y);
+    ctx.lineTo(32 - wide + 1.5, y);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // The cone on top, gold and pointed.
+  ctx.fillStyle = '#ffd23a';
+  ctx.beginPath();
+  ctx.moveTo(32, 2);
+  ctx.lineTo(39, 12);
+  ctx.lineTo(25, 12);
+  ctx.closePath();
+  ctx.fill();
+  outline(ctx, 'rgba(0,0,0,0.45)', 2);
+  // The fuse curling out of the side, with its spark.
+  ctx.strokeStyle = '#8a9099';
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(40, 22);
+  ctx.quadraticCurveTo(48, 18, 50, 12);
+  ctx.stroke();
+  star(ctx, 51, 10, 5, 2, 4);
+  ctx.fillStyle = '#ffdf5a';
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  star(ctx, 51, 10, 2, 0.8, 4);
+  ctx.fill();
+};
+
 // Rails, seen from above: two steel rails on wooden sleepers, running down
 // the tile; and round a corner, from the middle of its bottom edge to the
 // middle of its right one (render/mesher.js turns them to fit).

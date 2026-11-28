@@ -116,6 +116,12 @@ const CHAT_KEEP = 30;
 const BOMB_FUSE_MS = [2200, 2800];
 // How often a waiting bomb throws its fizzing spark (stepBombs).
 const BOMB_SPARK_MS = 400;
+// A firework (blocks.js FIREWORK), once lit: this long a fuse, fizzing, before
+// it launches (stepFireworks), then this long in the air whistling up.
+const FIREWORK_FUSE_MS = [1200, 1800];
+const FIREWORK_FLIGHT_MS = 1400;
+// How high it climbs before it bursts, in blocks.
+const FIREWORK_HEIGHT = 22;
 // A Bomb Rod (shop.js bombrod) throws its little bomb this far at most, and
 // its pop reaches this far round where it lands (rodBlast).
 const ROD_RANGE = 5;
@@ -374,6 +380,10 @@ export class Room {
     // Mining bombs placed, by the cell they sit in: the cell, who placed one
     // there, and when it pops (stepBombs).
     this.bombs = new Map();
+    // Fireworks put down (blocks.js FIREWORK): unlit ones sit where they are
+    // until someone lights them by a tap (lightFirework), and lit ones fly
+    // from their fuse to their burst (stepFireworks).
+    this.fireworks = new Map();
     // The volcano island's eruptions (shared/volcano.js): never saved, so an
     // island opened again starts quietly, and the bombs in the air now.
     // Not on Adventure Isle, though its Ember Mountain is a volcano: its
@@ -440,6 +450,11 @@ export class Room {
       // or built over) stops it.
       if (after === B.BOMB) this.bombs.set(k, { x, y, z, by: this.bombPlacer ?? 0, at: this.now() + this.between(BOMB_FUSE_MS), next: this.now() });
       else if (before === B.BOMB) this.bombs.delete(k);
+      // A firework put down (blocks.js FIREWORK) waits unlit until someone
+      // lights it (lightFirework); one taken away goes with its block, so undo
+      // of an unlit one leaves nothing to rise. Once launched, the entry is
+      // gone before the block is, and its flight carries on to its burst.
+      if (after === B.FIREWORK) this.fireworks.delete(k);
       // Water or ice put down on a volcano island is not there to stay.
       if (volcano) {
         if (after === B.WATER) this.melts.set(k, { x, y, z, at: this.now() + this.between(BOIL_MS), to: B.AIR });

@@ -433,6 +433,13 @@ export const DIAMOND_ROCK = GEM_ROCKS[4];
 // into the blaster's basket (shared/tools.js blastEdit, shared/room.js).
 export const BOMB = def(270, 'bomb', { name: 'Mining Bomb', category: 'building', after: 90, tiles: 'bomb', sound: 'stone' });
 
+// A firework: a paper rocket on a stick. Put it down and tap it to light its
+// fuse, and it whistles straight up and bursts high over the island in a ball
+// of coloured sparks for everyone (shared/room.js stepFireworks). It digs
+// nothing and breaks nothing, not even a player's hair: it is all show. Undo
+// takes one away that has not been lit; once it has gone up, it is gone.
+export const FIREWORK = def(493, 'firework', { name: 'Firework', category: 'building', after: 270, tiles: 'firework', sound: 'wood' });
+
 // ---------------------------------------------------------------- farm
 // Farmland: soil turned over in furrows, for crops to grow in. Watered — by
 // the watering can, the rain, or water close by — it turns dark, and what
