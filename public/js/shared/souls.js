@@ -1,4 +1,4 @@
-// The soul weapons of Adventure Isle: six weapons no shop sells, one for each
+// The soul weapons of Adventure Isle: seven weapons no shop sells, one for each
 // episode of the isle's story (isle-story.js), each with a soul of its own.
 //
 // A soul weapon lies in pieces, all of them different, in the golden chests of
@@ -12,7 +12,7 @@
 //
 // Two soul weapons that are yours can be combined at the forge into one of both
 // souls, mightier than either (fuse) — and that with a third, and so on until all
-// six are one. It keeps the form of the first and strikes with every soul in it.
+// seven are one. It keeps the form of the first and strikes with every soul in it.
 // Nothing is lost by it: any can be taken apart again (split).
 //
 // What someone has of all this is in the isle's own gear of theirs (shop.js
@@ -42,7 +42,9 @@ const GOT_MAX = 60;
 // sweep, how much further than an arm it reaches in front of you, as far round as
 // arc (the cosine of it); line, through everything in a line that far in front;
 // round, all the way round you that far; chain, how many more it leaps on to;
-// daze, how long (ms) whoever it bops sits dizzy, if not popped.
+// daze, how long (ms) whoever it bops sits dizzy, if not popped; end, a monster
+// it leaves with no more hearts than one more blow would take is popped there and
+// then (not a boss).
 export const SOULS = [
   {
     key: 'star',
@@ -182,6 +184,29 @@ export const SOULS = [
     round: 3,
     daze: 2200,
   },
+  {
+    key: 'book',
+    episode: 7,
+    icon: '✒️',
+    name: 'Fable',
+    title: 'the Story Quill',
+    form: 'quill',
+    color: '#4f7dff',
+    glow: '#ffe9b0',
+    parts: [
+      { icon: '🎀', name: 'Meadow Ribbon' },
+      { icon: '📜', name: 'Harbor Map Grip' },
+      { icon: '📖', name: 'Turret Storybook Guard' },
+      { icon: '💧', name: 'Starry Ink Drop' },
+      { icon: '🪶', name: 'Paper Dragon Plume' },
+      { icon: '✒️', name: 'Inkwell Nib' },
+    ],
+    soul: { name: 'Folio', title: 'the Paper Phoenix', lines: ['Who opened my book? Then come — let us write a story!', 'Turn the page! This story is not over yet!', 'The last chapter now — with every word I know!'], yields: 'What a story you write! Let me be your quill, and we shall write the rest together.' },
+    does: 'Every stroke writes in golden ink, and a monster it leaves nearly beaten gets THE END written on it, there and then!',
+    sweep: 3,
+    arc: -0.3,
+    end: true,
+  },
 ];
 
 export const SOUL_KEYS = SOULS.map((w) => w.key);
@@ -204,7 +229,7 @@ export function soulsIn(id) {
 export const idOf = (souls) => soulsIn(souls.join('+'))?.join('+') ?? '';
 
 // What two weapons are called as one; with three souls or more it goes by how
-// many, and with all six it has a name of its own.
+// many, and with all seven it has a name of its own.
 const PAIRS = {
   'star+rainbow': 'Starbow',
   'star+wild': 'Wildstar',
@@ -221,14 +246,20 @@ const PAIRS = {
   'bells+toon': 'Dingdoodle',
   'bells+nod': 'Nightchime',
   'toon+nod': 'Daydream',
+  'star+book': 'Starquill',
+  'rainbow+book': 'Rainquill',
+  'wild+book': 'Wolftale',
+  'bells+book': 'Chimetale',
+  'toon+book': 'Inkdoodle',
+  'nod+book': 'Bedtime Story',
 };
 export const EVERHEART = 'Everheart';
-const HOW_MANY = { 3: 'Three-Soul', 4: 'Four-Soul', 5: 'Five-Soul' };
+const HOW_MANY = { 3: 'Three-Soul', 4: 'Four-Soul', 5: 'Five-Soul', 6: 'Six-Soul' };
 
 // Hearts off a monster with each blow, and how many times over a boss feels
 // it, by how many souls are in it.
-export const SOUL_POWER = [13, 16, 19, 22, 25, 30];
-export const SOUL_KING = [9, 10, 11, 12, 13, 15];
+export const SOUL_POWER = [13, 16, 19, 22, 25, 30, 35];
+export const SOUL_KING = [9, 10, 11, 12, 13, 15, 17];
 // Each more soul in it carries every strike this much further, and leaps on to
 // one monster more.
 const FURTHER = 0.25;
@@ -237,8 +268,8 @@ const specs = new Map();
 
 // A soul weapon as what is in hand (shop.js weaponOf), by its key in a look
 // ('soul:star+wild'), or null: { key, id, souls, name, title, icon, does, power,
-// king, push, reach, sweep, arc, line, wide, round, chain, daze }, reach being
-// the furthest it strikes.
+// king, push, reach, sweep, arc, line, wide, round, chain, daze, end }, reach
+// being the furthest it strikes.
 export function soulWeapon(key) {
   if (typeof key !== 'string' || !key.startsWith(SOUL_KEY)) return null;
   if (specs.has(key)) return specs.get(key);
@@ -265,7 +296,7 @@ function makeSpec(souls) {
   const chain = all.some((w) => w.chain) ? Math.max(...all.map((w) => w.chain ?? 0)) + n - 1 : 0;
   const daze = Math.max(0, ...all.map((w) => w.daze ?? 0));
   const name = n === 1 ? base.name : n === SOUL_KEYS.length ? EVERHEART : n === 2 ? PAIRS[sorted.join('+')] : `${HOW_MANY[n]} ${base.name}`;
-  const title = n === 1 ? base.title : n === SOUL_KEYS.length ? 'all six souls in one' : `${base.title} with the ${n === 2 ? 'soul' : 'souls'} of ${listed(all.slice(1).map((w) => w.name))}`;
+  const title = n === 1 ? base.title : n === SOUL_KEYS.length ? 'all seven souls in one' : `${base.title} with the ${n === 2 ? 'soul' : 'souls'} of ${listed(all.slice(1).map((w) => w.name))}`;
   return Object.freeze({
     key: `${SOUL_KEY}${souls.join('+')}`,
     id: souls.join('+'),
@@ -288,6 +319,7 @@ function makeSpec(souls) {
     ...(round ? { round } : {}),
     ...(chain ? { chain } : {}),
     ...(daze ? { daze } : {}),
+    ...(all.some((w) => w.end) ? { end: true } : {}),
   });
 }
 
@@ -299,6 +331,7 @@ const SHORT = {
   bells: 'a din that leaves them dizzy',
   toon: 'a huge stroke of paint',
   nod: 'a moon that sends them to sleep',
+  book: 'THE END for whatever it leaves nearly beaten',
 };
 
 // "a", "a and b", "a, b and c".

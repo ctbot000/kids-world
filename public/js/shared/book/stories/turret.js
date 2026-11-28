@@ -96,5 +96,7 @@ export function turret() {
   m.scatter(['grass', 'daisy', 'bush'], 0, 62, { gap: 3 });
   m.scatter(['banner', 'window'], 62, m.L.arena.x0, { gap: 9, back: true });
   m.scatter(['flag'], m.L.arena.x0 + 1, m.L.arena.x1 - 1, { gap: 8, back: true });
+  // Where its treasure chests may stand (tale.js): each [column, ground].
+  for (const [x, y] of [[26, 4], [41, 6], [80, 7], [105, 4], [124, 12], [134, 10], [141, 15], [181, 18], [190, 16]]) m.chest(x, y);
   return m.done(3);
 }

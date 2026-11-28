@@ -98,5 +98,7 @@ export function meadow() {
   m.scatter(['tulip', 'daisy', 'grass', 'bush'], 0, m.L.arena.x0, { gap: 2.6 });
   m.scatter(['tree', 'tree', 'fence'], 0, m.L.arena.x0, { gap: 11, back: true, s: [0.9, 1.4] });
   m.scatter(['tulip', 'daisy', 'grass'], m.L.arena.x0 + 1, m.L.arena.x1 - 1, { gap: 3 });
+  // Where its treasure chests may stand (tale.js): each [column, ground].
+  for (const [x, y] of [[21, 5], [44, 6], [76, 6], [104, 4], [121, 11], [159, 8], [167, 7], [215, 4], [254, 7]]) m.chest(x, y);
   return m.done(3);
 }

@@ -293,6 +293,20 @@ export const SOUL_SWINGS = {
       { at: 1, w: 0, wL: 0 },
     ],
   },
+  // Fable: up and back over the shoulder in one hand, as a pen is before it
+  // signs its name, a great stroke down and across, and the nib flicked up at
+  // the end of it: a flourish.
+  quill: {
+    secs: 0.56,
+    strike: 0.44,
+    keys: [
+      { at: 0, w: 0, wL: 0 },
+      { at: 0.26, w: 1, wL: 0.7, fwd: -2.7, raise: 0.85, elbow: 1.1, wrist: 0.3, fwdL: -0.7, raiseL: -0.55, elbowL: 0.9, twist: 0.55, lean: -0.1, nod: -0.1 },
+      { at: 0.44, w: 1, wL: 0.7, fwd: -1.25, raise: -0.5, elbow: 0.12, wrist: 1.25, fwdL: -0.45, raiseL: -0.6, elbowL: 0.7, twist: -0.6, lean: 0.22, step: 0.45, dip: -0.05, nod: 0.12 },
+      { at: 0.64, w: 1, wL: 0.7, fwd: -1.85, raise: 0.35, elbow: 0.35, wrist: 0.9, fwdL: -0.45, raiseL: -0.6, elbowL: 0.7, twist: -0.42, lean: 0.12, step: 0.45, dip: -0.03, nod: 0.02 },
+      { at: 1, w: 0, wL: 0 },
+    ],
+  },
 };
 // The swing of whatever is in hand, by its key in a look (none: a fist).
 export const swingOf = (kind) => SWINGS[kind] ?? SOUL_SWINGS[soulWeapon(kind)?.form] ?? SWINGS.punch;

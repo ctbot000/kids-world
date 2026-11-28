@@ -13,7 +13,7 @@ import { frightOf } from './foes.js';
 import { nodTheme, nodWorld } from './worlds/index.js';
 
 // How hard each is, as a chapter of the isle's story has a level (foes.js haste).
-export const DUEL_LEVEL = { star: 15, rainbow: 15, wild: 16, bells: 16, toon: 17, nod: 18 };
+export const DUEL_LEVEL = { star: 15, rainbow: 15, wild: 16, bells: 16, toon: 17, nod: 18, book: 19 };
 
 // What is told of it, as a chapter's story is (isle-story.js).
 export function duelStory(key) {

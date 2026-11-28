@@ -60,4 +60,10 @@ export const MOODS = {
     light: { key: '#e6dcff', sky: '#9f8fe0', earth: '#4a3f8a', rim: '#d8c4ff', rimK: 0.6, haze: '#1f1550', hazeK: 0.0036, sun: 1.25, hemi: 0.75 },
     motes: ['#d8c4ff', '#ffe9a8'],
   },
+  // A bedtime sky, a reading lamp glowing low in it.
+  soulbook: {
+    sky: { top: '#060d2e', mid: '#1f3388', low: '#e8995a', foldA: '#3d6bff', foldB: '#ffd98a', fold: 0.6, stars: 1.5, puffs: 0.25, puffLit: '#ffe9c4', puffShade: '#5a62a8', orb: { dir: [0.35, 0.3, -0.88], color: '#ffe2a8', size: 0.16, kind: 2 } },
+    light: { key: '#fff0d4', sky: '#a9b8f0', earth: '#7a6a5a', rim: '#ffe2a8', rimK: 0.5, haze: '#25307a', hazeK: 0.003, sun: 1.4, hemi: 0.85 },
+    motes: ['#ffe9b0', '#9fb8ff'],
+  },
 };

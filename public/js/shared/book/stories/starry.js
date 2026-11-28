@@ -100,5 +100,7 @@ export function starry() {
 
   m.scatter(['crater', 'twinkle', 'twinkle'], 0, m.L.arena.x0, { gap: 4 });
   m.scatter(['crater'], m.L.arena.x0 + 1, m.L.arena.x1 - 1, { gap: 5 });
+  // Where its treasure chests may stand (tale.js): each [column, ground].
+  for (const [x, y] of [[20, 6], [62, 8], [109, 5], [113, 5], [177, 8], [205, 4], [233, 5], [258, 4], [266, 5]]) m.chest(x, y);
   return m.done(3);
 }

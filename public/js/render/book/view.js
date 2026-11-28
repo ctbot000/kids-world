@@ -2,17 +2,18 @@
 // the ground (terrain.js), its sky and the scenery behind it (backdrop.js),
 // and all that stands on it, as paper cut-outs (sprites.js): foes where the
 // story's clock says they are, stars, bookmarks, platforms that move, springs,
-// crates, the things stood about for show, what is spat and thrown, and the
-// boss (puppets.js). Everyone playing is drawn by the game as anywhere, stood
+// crates, treasure chests, the things stood about for show, what is spat and
+// thrown, and the boss (puppets.js). Everyone playing is drawn by the game as anywhere, stood
 // on the page facing along it (book/book-game.js).
 import * as THREE from '../../../vendor/three.module.js';
 import { bossAt } from '../../shared/book/bosses.js';
 import { foeAt, foeSpec, moverAt, shotsOf } from '../../shared/book/foes.js';
 import { TILE } from '../../shared/book/level.js';
+import { CHEST_RATTLE_MS } from '../chest-model.js';
 import { Backdrop } from './backdrop.js';
 import { cutout, ellipse, INK, Sheet, starPath } from './paint.js';
 import { Puppet, setUv } from './puppets.js';
-import { DECOR, FRAMES, paintCrate, paintMark, paintMover, paintShot, paintSkin, paintSpring, paintStar, SHOT_KINDS } from './sprites.js';
+import { DECOR, FRAMES, paintChest, paintCrate, paintMark, paintMover, paintShot, paintSkin, paintSpring, paintStar, SHOT_KINDS } from './sprites.js';
 import { terrainMeshes } from './terrain.js';
 import { themeOf } from './themes.js';
 
@@ -21,6 +22,9 @@ import { themeOf } from './themes.js';
 // boss, everyone (at 0), what is thrown, and the water in front.
 const Z = { back: -0.8, mover: -0.42, mark: -0.4, front: -0.36, foe: -0.3, star: -0.3, boss: -0.25, shot: 0.35, fx: 0.5 };
 const WORDS = ['POP!', 'BOP!', 'BONK!'];
+// How big a treasure chest is drawn (its picture's square, a metre or so of it
+// the chest).
+const CHEST_SIZE = 1.45;
 
 export class BookView {
   constructor(scene, level, { quality = 'high' } = {}) {
@@ -44,6 +48,7 @@ export class BookView {
     this.makeMovers();
     this.makeSprings();
     this.makeCrates();
+    this.chestsAt = new Map();
     this.makeStars();
     this.makeFoes();
     this.shots = [];
@@ -91,6 +96,7 @@ export class BookView {
     sheet.add('spring/rest', (c, W) => paintSpring(c, L.key, W, false));
     sheet.add('spring/squash', (c, W) => paintSpring(c, L.key, W, true));
     sheet.add('crate', (c, W) => paintCrate(c, L.key, W));
+    for (const kind of ['wood', 'gold']) for (const open of [false, true]) sheet.add(`chest/${kind}/${open ? 'open' : 'shut'}`, (c, W) => paintChest(c, W, kind === 'gold', open));
     sheet.add('puff', (c, W) => cutout(c, (p) => {
       for (const [x, y, r] of [
         [0.35, 0.55, 0.22],
@@ -246,6 +252,46 @@ export class BookView {
     }
   }
 
+  // The treasure chests out on the page, as the island says (tale.js chests):
+  // rows [spot, golden, open] each. quiet: as you arrive.
+  chests(rows, quiet = false) {
+    const seen = new Set();
+    for (const [i, gold, open] of rows) {
+      const spot = this.level.chests[i];
+      if (!spot) continue;
+      seen.add(i);
+      const was = this.chestsAt.get(i);
+      if (was && was.gold === (gold === 1) && (was.open || open !== 1)) continue;
+      if (was) was.m.removeFromParent();
+      const m = this.sprite(`chest/${gold === 1 ? 'gold' : 'wood'}/${open === 1 ? 'open' : 'shut'}`, CHEST_SIZE, CHEST_SIZE, Z.front + 0.02, { order: 7 });
+      m.position.set(spot.x, spot.y - 0.05, m.position.z);
+      this.chestsAt.set(i, { i, spot, gold: gold === 1, open: open === 1, m, opening: -9 });
+      if (!quiet && !was) this.sparks(spot.x, spot.y + 0.6, 8, 3);
+    }
+    for (const [i, e] of this.chestsAt) {
+      if (seen.has(i)) continue;
+      this.sparks(e.spot.x, e.spot.y + 0.5, 6, 2.5);
+      e.m.removeFromParent();
+      this.chestsAt.delete(i);
+    }
+  }
+
+  // One opened: it rattles, and up flies its lid (as a chest on an island does:
+  // render/chest-model.js), and its gold shines out.
+  openChest(i) {
+    const e = this.chestsAt.get(i);
+    if (!e || e.open) return;
+    e.open = true;
+    e.opening = this.time;
+  }
+
+  sparks(x, y, n, speed) {
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2 + 0.3;
+      this.fx.push({ m: this.sprite('spark', 0.45, 0.45, Z.fx, { centre: true, order: 40 }), t: 0, life: 0.7, x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed + 1, kind: 'fly' });
+    }
+  }
+
   starGot(i, x, y) {
     const e = i >= 1000 ? [...this.crates.values()].find((c) => c.k === i - 1000)?.star : this.stars[i]?.m;
     if (e) e.visible = false;
@@ -317,10 +363,36 @@ export class BookView {
     for (const e of this.crates.values()) if (e.star && e.star.visible) e.star.scale.x = 0.9 * Math.max(0.15, Math.abs(Math.cos(this.time * 2.4)));
     // Bookmarks, waving once lit.
     for (const k of this.marks.values()) k.m.rotation.z = k.lit ? Math.sin(this.time * 3) * 0.03 : 0;
+    this.frameChests(dt);
     this.frameFoes(secs, state);
     this.frameBoss(t, state);
     this.frameShots(secs, t, state);
     this.frameFx(dt);
+  }
+
+  // Treasure chests: one being opened rattles, then its lid flies up; a shut
+  // one glints now and then.
+  frameChests(dt) {
+    for (const e of this.chestsAt.values()) {
+      const k = (this.time - e.opening) * 1000;
+      const { m } = e;
+      m.rotation.z = 0;
+      m.scale.set(CHEST_SIZE, CHEST_SIZE, 1);
+      if (k >= 0 && k < CHEST_RATTLE_MS) {
+        m.rotation.z = Math.sin(k * 0.06) * 0.07 * (k / CHEST_RATTLE_MS);
+        m.scale.y = CHEST_SIZE * (1 - 0.06 * Math.sin((k / CHEST_RATTLE_MS) * Math.PI));
+      } else if (k >= CHEST_RATTLE_MS && k < CHEST_RATTLE_MS + 500) {
+        const u = (k - CHEST_RATTLE_MS) / 500;
+        if (m.userData.key.endsWith('shut')) {
+          this.show(m, `chest/${e.gold ? 'gold' : 'wood'}/open`);
+          this.sparks(e.spot.x, e.spot.y + 0.9, e.gold ? 12 : 8, 4);
+          this.puff(e.spot.x, e.spot.y + 0.8, 1.2);
+        }
+        m.scale.y = CHEST_SIZE * (1 + 0.16 * Math.sin(u * Math.PI) * (1 - u));
+        m.scale.x = CHEST_SIZE * (1 - 0.06 * Math.sin(u * Math.PI) * (1 - u));
+      }
+      if (!e.open && Math.random() < dt * (e.gold ? 1.6 : 0.8)) this.fx.push({ m: this.sprite('spark', 0.3, 0.3, Z.fx, { centre: true, order: 40 }), t: 0, life: 0.6, x: e.spot.x + (Math.random() - 0.5) * 1.1, y: e.spot.y + 0.3 + Math.random() * 0.8, vx: 0, vy: 0.6, kind: 'fly' });
+    }
   }
 
   frameFoes(secs, state) {

@@ -1,4 +1,4 @@
-// The soul weapons of Adventure Isle (shared/souls.js): six no shop sells, one for
+// The soul weapons of Adventure Isle (shared/souls.js): seven no shop sells, one for
 // each episode of its story, in pieces in the golden chests of its stages. Which
 // part a chest holds, and never a whole weapon out of one game; putting one together
 // and beating its soul, alone, on a world of its own (nod/duel.js); combining them
@@ -37,10 +37,11 @@ const dice = (seed) => {
 
 // ---------------------------------------------------------------- the weapons
 
-test('six of them, one for each episode with treasure chests (not the Storybook), none of them in any shop, each of parts all its own', () => {
-  assert.deepEqual(S.SOULS.map((w) => w.episode), EPISODES.filter((e) => !e.book).map((e) => e.n));
-  assert.equal(S.soulOfEpisode(7), null);
-  assert.equal(new Set(S.SOULS.map((w) => w.name)).size, 6);
+test('seven of them, one for each episode, none of them in any shop, each of parts all its own', () => {
+  assert.deepEqual(S.SOULS.map((w) => w.episode), EPISODES.map((e) => e.n));
+  assert.equal(S.soulOfEpisode(7).name, 'Fable', 'the Storybook’s too');
+  assert.equal(S.soulOfEpisode(8), null);
+  assert.equal(new Set(S.SOULS.map((w) => w.name)).size, 7);
   const names = S.SOULS.flatMap((w) => w.parts.map((p) => p.name));
   assert.equal(new Set(names).size, names.length, 'no two parts alike, of any of them');
   for (const w of S.SOULS) {
@@ -65,7 +66,7 @@ test('six of them, one for each episode with treasure chests (not the Storybook)
   }
 });
 
-test('combined, each more soul is mightier; every two have a name of their own, and all six are Everheart', () => {
+test('combined, each more soul is mightier; every two have a name of their own, and all seven are Everheart', () => {
   const names = new Set();
   for (const a of S.SOUL_KEYS) {
     for (const b of S.SOUL_KEYS) {
@@ -78,7 +79,7 @@ test('combined, each more soul is mightier; every two have a name of their own, 
       assert.ok(spec.reach >= Math.max(S.soulWeapon(key(a)).reach, S.soulWeapon(key(b)).reach));
     }
   }
-  assert.equal(names.size, 15);
+  assert.equal(names.size, 21);
   let ids = [];
   let power = 0;
   for (const k of S.SOUL_KEYS) {
@@ -90,7 +91,12 @@ test('combined, each more soul is mightier; every two have a name of their own, 
   }
   const all = S.soulWeapon(key(S.idOf(S.SOUL_KEYS)));
   assert.equal(all.name, S.EVERHEART);
-  assert.ok(all.line && all.round && all.chain && all.daze && all.sweep, 'it strikes every way there is');
+  assert.equal(all.title, 'all seven souls in one');
+  assert.ok(all.line && all.round && all.chain && all.daze && all.sweep && all.end, 'it strikes every way there is');
+  // Six of them are not all of them any more, and lose nothing by it.
+  const six = S.soulWeapon(key(S.idOf(S.SOUL_KEYS.slice(0, 6))));
+  assert.equal(six.name, 'Six-Soul Starfall');
+  assert.equal(six.power, 30, 'as mighty as when six were all there were');
   // Said one way only: anything else is no weapon.
   for (const bad of ['', 'star', 'soul:', 'soul:moon', 'soul:star+star', 'soul:star+nod+wild', 'soul:constructor', `soul:${'star+'.repeat(20)}`, 7, null]) assert.equal(S.soulWeapon(bad), null, String(bad));
   assert.equal(S.soulWeapon('soul:nod+star+wild').name, 'Three-Soul Lullaby');
@@ -215,7 +221,7 @@ test('two combined keep the form of the first and lose nothing: taken apart agai
   assert.deepEqual(S.split(souls, 'wild+star+nod'), ['wild', 'star', 'nod']);
   assert.deepEqual(souls.held, ['wild', 'star', 'nod']);
   assert.equal(S.pickedSoul(souls).name, 'Wildheart');
-  // All six, one after another.
+  // All seven, one after another.
   const all = S.emptySouls();
   all.held = [...S.SOUL_KEYS];
   let id = 'toon';
@@ -308,7 +314,8 @@ test('yours, on the isle: found, put together, won, combined, held and melted, e
     assert.deepEqual([stats.forged, stats.souls, stats.fused, stats.soulmax], [2, 2, 1, 2]);
     for (const k of ['parts', 'forged', 'souls', 'fused', 'soulmax']) assert.ok(STAT_KEYS.includes(k), k);
     for (const k of ['parts', 'forged', 'souls', 'fused', 'soulmax']) assert.ok(XP_FOR[k].xp > 0, `${k} earns XP`);
-    for (const s of ['soul-part', 'soul-smith', 'soul-keeper', 'soul-fusion', 'everheart']) assert.ok(STICKERS.some((x) => x.key === s), s);
+    for (const s of ['soul-part', 'soul-smith', 'soul-keeper', 'soul-fusion', 'six-souls', 'everheart']) assert.ok(STICKERS.some((x) => x.key === s), s);
+    assert.ok(STICKERS.find((x) => x.key === 'everheart').test({ soulmax: 7 }) && !STICKERS.find((x) => x.key === 'everheart').test({ soulmax: 6 }), 'Everheart is all seven');
     assert.deepEqual(new Profile().data.gear.souls.held, ['star', 'rainbow'], 'kept');
   } finally {
     delete globalThis.localStorage;
@@ -388,6 +395,32 @@ test('Wildheart’s wolf leaps on from one to the next, once a swing; Clarion’
   const m = star.monster(0, 2.2);
   star.room.receive(star.c, { t: 'bop', id: m.id });
   assert.ok(!(m.dazed > star.time.t), 'Starfall’s does not');
+});
+
+test('Fable writes THE END on a monster it leaves with no more hearts than one more blow would take, and pops it there and then', () => {
+  const { room, time, c, monster, pid } = meadow('soul:book');
+  const spec = S.soulWeapon('soul:book');
+  assert.ok(spec.end);
+  const tough = monster(0, 2.2, spec.power * 2 + 5);
+  const weak = monster(1.5, 2.2, spec.power * 2 - 2);
+  room.receive(c, { t: 'bop', id: tough.id });
+  assert.equal(tough.hearts, spec.power + 5, 'a blow off, and plenty left');
+  room.receive(c, { t: 'bop', id: weak.id });
+  const pops = c.all('pop');
+  assert.deepEqual(pops.map((m) => [m.id, m.by, m.end]), [[weak.id, pid, true]], 'THE END, for everyone to see');
+  assert.ok(!room.monsters.get(weak.id));
+  // And the next blow on the tough one finishes it too.
+  time.t += 1000;
+  room.receive(c, { t: 'bop', id: tough.id });
+  assert.deepEqual(c.all('pop').map((m) => [m.id, m.end]), [[weak.id, true], [tough.id, true]]);
+  // Another weapon pops nothing before its last heart is gone.
+  const star = meadow('soul:star');
+  const m = star.monster(0, 2.2, 15);
+  star.room.receive(star.c, { t: 'bop', id: m.id });
+  assert.equal(m.hearts, 2);
+  assert.equal(star.c.all('pop').length, 0);
+  // Combined with it, any weapon writes it.
+  assert.ok(S.soulWeapon(key(S.idOf(['star', 'book']))).end);
 });
 
 test('a part out of a golden chest is for whoever opened it, for everyone there to see; nothing touches them as they look', () => {
@@ -626,7 +659,7 @@ test('each is swung its own way, and is there in the hand of whoever holds it', 
     assert.deepEqual([swing.keys[0].w ?? 0, swing.keys.at(-1).w ?? 0], [0, 0], `${w.name}: from how the hand hangs, and back to it`);
     for (let k = 0; k <= 1; k += 0.02) for (const v of Object.values(swingPose(swing, k))) assert.ok(Number.isFinite(v), w.name);
   }
-  assert.equal(forms.size, 6);
+  assert.equal(forms.size, 7);
   assert.equal(swingOf('soul:moon'), swingOf('punch'));
   const a = new Avatar({ ...LOOK, weapon: 'soul:wild+star' });
   assert.equal(a.weaponKind, 'soul:wild+star');

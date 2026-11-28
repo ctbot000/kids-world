@@ -43,6 +43,13 @@ const SWINGS = {
     for (const [i, n] of [88, 84, 81, 76, 72].entries()) s.tone(NOTE(n), { at: 0.04 + i * 0.1, decay: 0.5, gain: 0.05 * g });
     s.tone(98, { decay: 0.6, gain: 0.14 * g, slide: 74 });
   },
+  // A nib scratching a great flourish across a page, and pages fluttering after it.
+  book: (s, g) => {
+    for (let i = 0; i < 3; i++) s.noise(0.09, { at: i * 0.07, type: 'bandpass', freq: 3800 - i * 300, sweep: 1600, q: 2.2, gain: 0.2 * g });
+    s.noise(0.3, { at: 0.05, type: 'highpass', freq: 2400, sweep: 600, gain: 0.08 * g });
+    for (let i = 0; i < 4; i++) s.noise(0.05, { at: 0.24 + i * 0.05, type: 'bandpass', freq: 1500 + i * 220, q: 1.2, gain: 0.12 * g });
+    for (const [i, n] of [79, 83, 86].entries()) s.tone(NOTE(n) * r(), { at: 0.06 + i * 0.06, decay: 0.3, gain: 0.04 * g, type: 'triangle' });
+  },
 };
 
 // A chord of a choir: notes, for long, how loud.
@@ -182,6 +189,13 @@ export const SOUL_SOUNDS = {
     for (let i = 0; i < 6; i++) s.tone(2400 + Math.random() * 1600, { at: 0.2 + i * 0.05, decay: 0.09, gain: 0.05, type: 'square' });
   },
   // A soul, far off, as you come to its world; and as it is beaten.
+  // THE END, written on a monster finished off by Fable: a stroke of the pen and
+  // a little fanfare, the last notes of a story.
+  'soul-end': (s) => {
+    s.noise(0.16, { type: 'bandpass', freq: 3600, sweep: 1800, q: 2, gain: 0.16 });
+    for (const [i, n] of [72, 76, 79, 84].entries()) s.tone(NOTE(n), { at: 0.08 + i * 0.07, decay: i === 3 ? 0.7 : 0.18, gain: i === 3 ? 0.07 : 0.05, type: 'triangle' });
+    s.tone(NOTE(60), { at: 0.29, decay: 0.6, gain: 0.08 });
+  },
   'soul-gone': (s) => {
     s.tone(520, { attack: 0.1, decay: 1.6, gain: 0.12, slide: 1040, slideTime: 1.5, vibrato: 12 });
     s.noise(1.4, { type: 'bandpass', freq: 900, sweep: 4200, q: 1, gain: 0.18, attack: 0.2 });
@@ -198,6 +212,7 @@ const DUELS = {
   bells: { root: 50, tempo: 132 },
   toon: { root: 60, tempo: 166 },
   nod: { root: 54, tempo: 138 },
+  book: { root: 55, tempo: 150 },
 };
 const CHORDS = [[0, 3, 7], [-4, 0, 3], [3, 7, 10], [-2, 2, 5]];
 const TUNES = [
@@ -228,4 +243,4 @@ export function duelBeat(s, beat, at, { soul, rage = 0 }) {
 
 // What a blow of a soul weapon's sounds like, as one of the toy weapons' does
 // (sound.js whack), by the soul its form is of.
-export const SOUL_WHACKS = { star: 'galaxyblade', rainbow: 'rainbowray', wild: 'lavablade', bells: 'hammer', toon: 'punchglove', nod: 'galaxyblade' };
+export const SOUL_WHACKS = { star: 'galaxyblade', rainbow: 'rainbowray', wild: 'lavablade', bells: 'hammer', toon: 'punchglove', nod: 'galaxyblade', book: 'galaxyblade' };

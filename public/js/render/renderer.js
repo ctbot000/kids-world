@@ -1326,6 +1326,10 @@ export class Renderer {
     this.cards.update(dt, { every: 1 / 30 });
     this.effects.update(dt);
     this.shockwaves = this.shockwaves.filter((s) => s.update(dt));
+    // (A soul weapon's swing, and a part of one up out of a golden chest.)
+    const going = this.bossFx;
+    this.bossFx = [];
+    this.bossFx = going.filter((f) => f.update(dt)).concat(this.bossFx);
     if (this.drawing) this.draw();
     else {
       this.scene.updateMatrixWorld();

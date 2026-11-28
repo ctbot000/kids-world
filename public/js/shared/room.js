@@ -140,6 +140,10 @@ const SWINGS_KEPT = 4;
 const SOUL_NEWS_MS = 1500;
 const PART_SAFE_MS = 10000;
 const GOLD_OPEN_MS = 12000;
+// Whether a blow of a weapon that writes THE END (souls.js end: Fable's) left a
+// monster so few hearts that it is popped there and then: no more than the blow
+// took. (Not one that rises again from a heap, as a beast may.)
+const writesEnd = (weapon, m, hit, blow) => Boolean(weapon?.end) && hit.hearts > 0 && !m.heap && hit.hearts <= blow;
 // Talking: a few at once, then about one a second.
 const TALK_BURST = 5;
 const TALK_PER_SEC = 1;
@@ -2106,12 +2110,13 @@ export class Room {
   // everyone told, a camp's to come back in a while — and a Gummy Bear
   // split into two Gummy Cubs where it was, keeping to the same camp. crit:
   // popped by a critical hit (crits.js), for everyone to see.
-  popMonster(p, m, now, crit = false) {
+  // end: THE END was written on it (souls.js end), for all to see.
+  popMonster(p, m, now, crit = false, end = false) {
     this.monsters.remove(m.id);
     const b = m.body;
     // (Out of it comes what it drops: loot.js.)
     const loot = this.dropLoot(m.kind, b, p, now, { hits: m.hits });
-    this.broadcast({ t: 'pop', id: m.id, by: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2), ...(loot ? { loot } : {}), ...(crit ? { crit: true } : {}) });
+    this.broadcast({ t: 'pop', id: m.id, by: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2), ...(loot ? { loot } : {}), ...(crit ? { crit: true } : {}), ...(end ? { end: true } : {}) });
     if (this.adventure?.active) this.adventure.credit(p.id, 'pops');
     // (A battle of Toon Isle may be waiting on it: isle-battles.js.)
     this.adventure?.popped(m);
@@ -2519,16 +2524,19 @@ export class Room {
     }
     const land = kindOf(m.kind).land;
     if (landed && !land) return;
+    let end = false;
     if (!landed || land !== Infinity) {
-      const hit = this.monsters.hit(m, p.id, at, now, ((landed ? land : (glove ? glove.shock : king ? 1 : weapon?.power ?? 1)) + this.figBonus(p, m)) * times, king ? (glove ? KING_PUSH + 4 : KING_PUSH) : weapon?.push, landed ? null : weapon?.key);
+      const blow = ((landed ? land : (glove ? glove.shock : king ? 1 : weapon?.power ?? 1)) + this.figBonus(p, m)) * times;
+      const hit = this.monsters.hit(m, p.id, at, now, blow, king ? (glove ? KING_PUSH + 4 : KING_PUSH) : weapon?.push, landed ? null : weapon?.key);
       if (hit.wait) return;
-      if (hit.hearts) {
+      end = !landed && writesEnd(weapon, m, hit, blow);
+      if (hit.hearts && !end) {
         if (!landed && weapon?.daze) this.monsters.daze(m, now, weapon.daze);
         this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts, ...(hit.still ? { still: true } : {}), ...(crit ? { crit: true } : {}) });
         return;
       }
     }
-    this.popMonster(p, m, now, crit);
+    this.popMonster(p, m, now, crit, end);
   }
 
   // A monster marching on a tower defense island tapped (or landed on):
@@ -2563,14 +2571,16 @@ export class Room {
       this.bopKing(p, m, now, weapon.king * times, crit);
       return;
     }
-    const hit = this.monsters.hit(m, p.id, from, now, (weapon.power + this.figBonus(p, m)) * times, weapon.push, weapon.key);
+    const blow = (weapon.power + this.figBonus(p, m)) * times;
+    const hit = this.monsters.hit(m, p.id, from, now, blow, weapon.push, weapon.key);
     if (hit.wait) return;
-    if (hit.hearts) {
+    const end = writesEnd(weapon, m, hit, blow);
+    if (hit.hearts && !end) {
       if (weapon.daze) this.monsters.daze(m, now, weapon.daze);
       this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts, ...(hit.still ? { still: true } : {}), ...(crit ? { crit: true } : {}) });
       return;
     }
-    this.popMonster(p, m, now, crit);
+    this.popMonster(p, m, now, crit, end);
   }
 
   // A Thunder Spear's stab, landing on m (shop.js thunderspear): the bolt
@@ -3208,12 +3218,13 @@ export class Room {
 
   // What someone does in a story of the Storybook, as their page says, with
   // when on the story's clock (t): a foe landed on (stomp) or bopped, a crate
-  // bopped to bits, a star picked up (or a crate's), the boss landed on while
-  // it was weak, what hurt them (a foe, what one spat, the boss, thorns) or a
-  // fall off the page. (When, as `at`.)
+  // bopped to bits, a star picked up (or a crate's), a treasure chest opened,
+  // the boss landed on while it was weak, what hurt them (a foe, what one spat,
+  // the boss, thorns) or a fall off the page. (When, as `at`.)
   bookOp(conn, p, msg) {
     const tale = this.adventure?.tale;
-    if (!tale || this.adventure.won && msg.op !== 'star') return;
+    // (Stars and treasure chests are there to be had after the boss, too.)
+    if (!tale || (this.adventure.won && msg.op !== 'star' && msg.op !== 'chest')) return;
     const now = this.now();
     if ((p.dizzyUntil ?? 0) > now) return;
     const at = { id: p.id, x: p.s[0], y: p.s[1] };
@@ -3233,6 +3244,15 @@ export class Room {
       case 'crate': {
         const c = Number.isInteger(msg.i) ? tale.crate(at, msg.i) : null;
         if (c) this.broadcast({ t: 'bx', k: 'crate', i: c.i, pid: p.id, ...(c.star ? { star: true } : {}) });
+        break;
+      }
+      // A treasure chest (by its spot) opened with a key: everyone sees it,
+      // and whoever opened it spends the key and gets what is inside.
+      case 'chest': {
+        const c = Number.isInteger(msg.i) ? tale.openChest(at, msg.i, now) : null;
+        if (!c) break;
+        if (c.gold) p.goldAt = now;
+        this.broadcast({ t: 'bx', k: 'chest', i: c.i, pid: p.id });
         break;
       }
       case 'star':

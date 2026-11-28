@@ -451,6 +451,92 @@ const PARTS = {
       ['glow', cut([...Array.from({ length: 13 }, (_, i) => [Math.cos(1.1 + i * 0.34) * 0.05, Math.sin(1.1 + i * 0.34) * 0.05]), ...Array.from({ length: 13 }, (_, i) => [0.022 + Math.cos(5.18 - i * 0.34) * 0.038, Math.sin(5.18 - i * 0.34) * 0.038])], 0.01, 0), '#fffbe6', at(0, 1.21, 0)],
     ],
   ],
+  book: [
+    // Meadow Ribbon: a bookmark's ribbon, tied in a bow under the hilt.
+    () => {
+      const tail = (s) => cut([[0, 0], [s * 0.04, -0.012], [s * 0.07, -0.13], [s * 0.095, -0.27], [s * 0.08, -0.3], [s * 0.064, -0.268], [s * 0.046, -0.292], [s * 0.04, -0.15], [s * 0.012, -0.02]], 0.012, 0.004, true);
+      const loop = (s) => cut(Array.from({ length: 18 }, (_, i) => {
+        const a = (i / 18) * TAU;
+        return [s * (0.066 + Math.cos(a) * 0.062), Math.sin(a) * 0.04 * (1 - 0.35 * Math.cos(a))];
+      }), 0.014, 0.005, true);
+      return [
+        ['metal', ball(0.034, 18, 12), '#ffd04a', at(0, -0.165, 0)],
+        ['metal', hoop(0.03, 0.008, 22, 7), '#ffd04a', at(0, -0.143, 0, 1, Math.PI / 2)],
+        ['satin', loop(1), fade('x', 0, 0.13, '#ff5d8f', '#ff8fb0'), at(0, -0.214, 0.008, 1, 0, 0, 0.3)],
+        ['satin', loop(-1), fade('x', -0.13, 0, '#ff8fb0', '#ff5d8f'), at(0, -0.214, 0.008, 1, 0, 0, -0.3)],
+        ['satin', tail(1), '#f0487c', at(0.004, -0.216, -0.004, 1, 0, 0, 0.12)],
+        ['satin', tail(-1), '#ff5d8f', at(-0.004, -0.216, -0.004, 1, 0, 0, -0.06)],
+        ['satin', ball(0.027, 14, 10), '#ffb3cb', at(0, -0.214, 0.014, [1.2, 1, 0.8])],
+      ];
+    },
+    // Harbor Map Grip: a sea map rolled up tight, bound with rope, a red cross on it.
+    () => [
+      ['matte', rod(0.034, 0.034, 0.27, 22), (x, y, z) => col.set('#f1e2b8').lerp(col2.set('#d6bb86'), 0.5 + 0.5 * Math.sin(Math.atan2(x, z) * 2 + y * 30)), at(0, -0.005, 0)],
+      ['satin', taper(Array.from({ length: 30 }, (_, i) => [Math.sin(i * 0.75) * 0.0348, -0.135 + i * 0.0093, Math.cos(i * 0.75) * 0.0348]), [0.0035], { seg: 110, round: 5 }), '#b08a50'],
+      ...[-0.112, 0.1].map((y) => ['matte', hoop(0.037, 0.0085, 24, 7), '#a8703a', at(0, y, 0, 1, Math.PI / 2)]),
+      ...[-0.14, 0.13].map((y) => ['matte', hoop(0.026, 0.009, 22, 7), '#e3cf9c', at(0, y, 0, 1, Math.PI / 2)]),
+      ...[0.785, -0.785].map((r) => ['matte', new THREE.BoxGeometry(0.03, 0.007, 0.006), '#d8343a', at(0, 0.03, 0.0345, 1, 0, 0, r)]),
+      ...Array.from({ length: 5 }, (_, i) => ['matte', ball(0.0042, 6, 4), '#3a5fb8', at(Math.sin(-0.55 + i * 0.15) * 0.0352, -0.06 + i * 0.019, Math.cos(-0.55 + i * 0.15) * 0.0352)]),
+    ],
+    // Turret Storybook Guard: a storybook lying open across the hilt, a little
+    // castle popping up out of each of its pages.
+    () => {
+      const out = [['satin', rod(0.017, 0.017, 0.165, 12), '#2f4fcf', at(0, 0.152, 0, 1, Math.PI / 2)]];
+      for (const s of [-1, 1]) {
+        const tilt = s * 0.2;
+        const on = (x, y, z) => at(s * x, 0.158 + x * 0.2 + y, z, 1, 0, 0, tilt);
+        out.push(['satin', new THREE.BoxGeometry(0.225, 0.016, 0.165), '#2f4fcf', on(0.118, 0, 0)]);
+        out.push(['matte', new THREE.BoxGeometry(0.205, 0.026, 0.15), '#fbf2dc', on(0.113, 0.02, 0)]);
+        for (let i = 0; i < 4; i++) out.push(['matte', new THREE.BoxGeometry(0.1 - (i % 2) * 0.035, 0.003, 0.009), '#7584c4', on(0.1 - (i % 2) * 0.017, 0.034, -0.05 + i * 0.033)]);
+        for (const z of [-1, 1]) out.push(['metal', new THREE.BoxGeometry(0.032, 0.022, 0.032), '#ffd04a', on(0.214, 0, z * 0.068)]);
+        // (A pop-up turret, and its flag.)
+        const tx = s * 0.17;
+        const ty = 0.158 + 0.17 * 0.2 + 0.034;
+        out.push(['matte', rod(0.027, 0.027, 0.075, 14), '#f6eee2', at(tx, ty + 0.037, 0)]);
+        out.push(['matte', new THREE.BoxGeometry(0.012, 0.022, 0.006), '#4a3a52', at(tx, ty + 0.03, 0.026)]);
+        out.push(['gloss', cone(0.037, 0.065, 14), '#e8453c', at(tx, ty + 0.107, 0)]);
+        out.push(['metal', rod(0.0025, 0.0025, 0.04, 5), '#8a6a3a', at(tx, ty + 0.155, 0)]);
+        out.push(['satin', cut([[0, 0], [0.036, 0.01], [0, 0.022]], 0.003, 0), '#ffd04a', at(tx, ty + 0.152, 0)]);
+      }
+      return out;
+    },
+    // Starry Ink Drop: a drop of the night's own ink, stars in it, set in the fold.
+    () => [
+      ['gem', lathe([[0, -0.05], [0.03, -0.04], [0.042, -0.012], [0.034, 0.02], [0.016, 0.045], [0, 0.066]], 22), fade('y', 0.15, 0.27, '#18268a', '#4f7dff', '#c2d4ff'), at(0, 0.2, 0.092, [1, 1, 0.7])],
+      ...[[0.012, 0.19, 0.122, 0.011], [-0.014, 0.178, 0.12, 0.007], [0.0, 0.222, 0.118, 0.008]].map(([x, y, z, r]) => ['glow', cut(starPts(4, r, r * 0.35), 0.002, 0), '#ffffff', at(x, y, z)]),
+      ['metal', hoop(0.047, 0.008, 26, 7), '#ffd04a', at(0, 0.196, 0.086)],
+    ],
+    // Paper Dragon Plume: a great feather off the Paper Dragon, swept up behind the nib.
+    () => {
+      const len = 0.86;
+      const lean = 0.3;
+      const way = [-Math.sin(lean), Math.cos(lean), 0];
+      return [
+        ['satin', cut(feather(len, 0.13), 0.016, 0.006, true), fade('y', 0.2, 1.02, '#2b46c8', '#6f8fff', '#ffe9b0'), at(-0.02, 0.2, -0.055, 1, 0, 0, lean)],
+        ['glow', cut(feather(len * 0.84, 0.04), 0.022, 0.002, true), '#d4e0ff', at(-0.02 + way[0] * 0.06, 0.2 + way[1] * 0.06, -0.055, 1, 0, 0, lean)],
+        ['satin', rod(0.009, 0.004, len * 0.96, 8), '#fff3d6', along(-0.02 + way[0] * len * 0.48, 0.2 + way[1] * len * 0.48, -0.043, way)],
+        ['satin', cut(feather(len * 0.6, 0.09), 0.014, 0.005, true), fade('y', 0.2, 0.72, '#1f2f8f', '#4f6fe0', '#c9d6ff'), at(-0.012, 0.2, -0.072, 1, 0, 0, lean + 0.38)],
+        ...Array.from({ length: 6 }, (_, i) => ['glow', ball(0.008, 6, 5), '#fff6d0', at(-0.02 + way[0] * (0.25 + i * 0.1) - 0.045, 0.2 + way[1] * (0.25 + i * 0.1) + 0.01, -0.035)]),
+      ];
+    },
+    // Inkwell Nib: the blade, a pen's golden nib as long as a sword, slit down
+    // the middle from a heart, its tip dipped in ink.
+    () => {
+      const half = [[0, 0.22], [0.075, 0.22], [0.112, 0.3], [0.118, 0.4], [0.1, 0.62], [0.07, 0.9], [0.038, 1.18], [0.012, 1.38], [0, 1.44]];
+      const nib = [...half, ...flip(half).reverse().slice(1, -1)];
+      const heart = Array.from({ length: 28 }, (_, i) => {
+        const t = (i / 28) * TAU;
+        return [0.032 * Math.sin(t) ** 3, 0.002 * (13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t))];
+      });
+      return [
+        ['metal', cut(nib, 0.034, 0.012), fade('y', 0.22, 1.44, '#d9901f', '#ffd04a', '#ffe680', '#ffd04a', '#5f7dff')],
+        ...[1, -1].map((z) => ['glow', new THREE.BoxGeometry(0.006, 0.68, 0.004), fade('y', 0.7, 1.4, '#c4d4ff', '#4f7dff'), at(0, 1.03, z * 0.031)]),
+        ...[1, -1].map((z) => ['glow', cut(heart, 0.004, 0), '#cfe0ff', at(0, 0.66, z * 0.031)]),
+        ...[1, -1].flatMap((z) => [1, -1].map((x) => ['metal', taper([[x * 0.05, 0.3, z * 0.03], [x * 0.085, 0.38, z * 0.03], [x * 0.07, 0.5, z * 0.03], [x * 0.04, 0.52, z * 0.03], [x * 0.045, 0.45, z * 0.03]], [0.004], { seg: 24, round: 5 }), '#b8781c'])),
+        ['metal', new THREE.BoxGeometry(0.17, 0.03, 0.05), '#d99a2a', at(0, 0.232, 0)],
+      ];
+    },
+  ],
 };
 
 // Lullaby's blade and its spine, turned a little round the pole, so that neither
@@ -661,8 +747,8 @@ export function soulBody(key, kit = gameKit()) {
 }
 
 // How far up each weapon shoots from, and how far up the emblems go round it.
-const TIPS = { star: 1.45, rainbow: 0.42, wild: 1.2, bells: 0.8, toon: 1.3, nod: 1.1 };
-const MIDDLE = { star: 0.75, rainbow: 0.42, wild: 0.75, bells: 0.8, toon: 0.85, nod: 0.95 };
+const TIPS = { star: 1.45, rainbow: 0.42, wild: 1.2, bells: 0.8, toon: 1.3, nod: 1.1, book: 1.42 };
+const MIDDLE = { star: 0.75, rainbow: 0.42, wild: 0.75, bells: 0.8, toon: 0.85, nod: 0.95, book: 0.8 };
 
 // The little emblem of each soul, going round a weapon it has been combined into.
 const EMBLEMS = {
@@ -681,6 +767,10 @@ const EMBLEMS = {
     for (let i = 18; i >= 0; i--) pts.push([0.36 + Math.cos(1.1 + i * 0.227) * 0.74, Math.sin(1.1 + i * 0.227) * 0.74]);
     return [['glow', cut(pts, 0.26, 0.08), '#d8c4ff']];
   },
+  book: () => [
+    ['glow', cut([[0, -0.55], [0.95, -0.3], [0.95, 0.78], [0, 0.5], [-0.95, 0.78], [-0.95, -0.3]], 0.24, 0.08), '#a9c0ff'],
+    ['glow', cut(starPts(4, 0.32, 0.12), 0.32, 0.04), '#fff3c4', at(0, 0.12, 0)],
+  ],
 };
 
 export function soulEmblem(key, kit = gameKit()) {
@@ -726,6 +816,7 @@ const GLOWS = {
   bells: [[0, 0.8, 0.1, 0.8]],
   toon: [[0, 1.2, 0, 0.7], [0, 0.85, 0, 0.5]],
   nod: [[0, 1.08, 0, 0.6], [0.4, 1.02, 0.2, 0.6], [-0.185, 0.79, 0, 0.4]],
+  book: [[0, 0.95, 0, 0.55], [-0.14, 0.62, -0.05, 0.42], [0, 0.2, 0.09, 0.36]],
 };
 
 // A soul weapon whole, as it is in someone's hand: its form, the emblems of the

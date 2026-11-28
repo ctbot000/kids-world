@@ -245,6 +245,7 @@ const SOUL_SLASHES = {
   wild: { color: '#a9f06a', y: 1.2, upright: true },
   bells: { color: '#ffd84d', y: 1.25, upright: true },
   nod: { color: '#c9b0ff', y: 0.95, from: -6.15, to: 0.13, secs: 0.46, tilt: -0.05, stars: true },
+  book: { color: '#9fb8ff', y: 1.05, from: -2.2, to: 1.8, secs: 0.22, tilt: -0.3 },
 };
 const SOUL_IMPACTS = {
   star: { color: '#ffe27a', stop: 135, kick: 0.028, down: 0.01, roll: 0.016, zoom: 0.042, burst: 1.55, buzz: 40, words: ['STARFALL!', 'SHING!', 'TWINKLE!'], lines: true },
@@ -253,6 +254,7 @@ const SOUL_IMPACTS = {
   bells: { color: '#ffd84d', stop: 155, kick: 0.018, down: 0.028, roll: 0.016, zoom: 0.044, burst: 1.6, buzz: 46, words: ['DONG!', 'BONG!', 'CLANG!'], thud: true, lines: true },
   toon: { color: '#ff5cb0', stop: 120, kick: 0.028, roll: 0.018, zoom: 0.04, burst: 1.6, buzz: 38, words: ['SPLAT!', 'SPLOSH!', 'SPLODGE!'], lines: true },
   nod: { color: '#c9b0ff', stop: 130, kick: 0.026, down: 0.008, roll: 0.018, zoom: 0.04, burst: 1.5, buzz: 38, words: ['NIGHTY NIGHT!', 'HUSH!', 'SWISH!'], lines: true },
+  book: { color: '#9fb8ff', stop: 125, kick: 0.026, down: 0.01, roll: 0.016, zoom: 0.04, burst: 1.5, buzz: 38, words: ['SCRIBBLE!', 'SWOOSH!', 'ONCE UPON!'], lines: true },
 };
 const slashOf = (kind = 'punch') => SLASHES[kind] ?? SOUL_SLASHES[soulWeapon(kind)?.souls[0]] ?? null;
 const impactOf = (kind) => IMPACTS[kind] ?? SOUL_IMPACTS[soulWeapon(kind)?.souls[0]] ?? IMPACTS.punch;
@@ -844,7 +846,7 @@ export class Game extends EventTarget {
         // the way they face.
         if (soulWeapon(avatar?.weaponKind)) {
           setTimeout(() => {
-            if (this.world === world) this.soulSwingFrom(avatar, false, this.nod ? 0.5 : 1);
+            if (this.world === world) this.soulSwingFrom(avatar, false, this.nod || this.book ? 0.5 : 1);
           }, lands * 1000);
         }
         if (avatar?.weaponKind === 'rainbowray') {
@@ -1991,6 +1993,8 @@ export class Game extends EventTarget {
     const mine = msg.by === this.pid;
     // The last of its hearts it lost: only you hear how many.
     if (mine && near && entry?.hearts > 0) this.emit('hit-number', { x: p.x, y: p.y, z: p.z, n: entry.hearts, crit: msg.crit === true });
+    // THE END written on it by Fable (souls.js end), for everyone to see.
+    if (msg.end === true && near) this.theEnd(p, entry);
     this.critNews(msg, here ? p : null, entry ? bodyOf(entry.kind).height : 0, entry);
     // Off the end of a swing it flies off, and goes pop as it lands (fling).
     // (The mightiest beasts are too heavy to fly anywhere: they go pop where they stand.)
@@ -2533,6 +2537,21 @@ export class Game extends EventTarget {
     this.renderer.soulSwing(spec, avatar.root, { empty, near });
     if (spec.souls[0] === 'rainbow') avatar.throwIt(RING_SECS);
     this.sound.play('soul-swing', { souls: spec.souls, near: avatar === this.players.get(this.pid)?.avatar ? 1 : 0.5 });
+  }
+
+  // A monster finished off by a weapon that writes THE END on it (souls.js end:
+  // Fable's): its last words, in gold on a ribbon of paper over it, and golden
+  // ink splashing out of it.
+  theEnd(p, entry) {
+    const top = entry ? bodyOf(entry.kind).height : 1;
+    this.emit('hit-word', { x: p.x, y: p.y, z: p.z, top: top + 0.3, text: 'THE END', color: '#ffd84d', end: true });
+    const fx = this.renderer.effects;
+    fx.sparkles(p.x, p.y + top * 0.6, p.z, 24, ['#ffd84d', '#ffe9a0', '#9fb8ff', '#ffffff']);
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      fx.add('drop', p.x, p.y + top * 0.6, p.z, { vx: Math.cos(a) * 2.6, vy: 2.5 + Math.random() * 2.5, vz: Math.sin(a) * 2.6, gravity: 10, size: 0.14 + Math.random() * 0.1, life: 0.7, color: i % 2 ? '#4f7dff' : '#ffd84d' });
+    }
+    this.sound.play('soul-end');
   }
 
   // The golden shockwave of a King Punch, whoever threw it: a ring bursting
@@ -3975,9 +3994,13 @@ export class Game extends EventTarget {
   openChest() {
     const t = this.chestAt ?? this.chestTarget;
     if (!t || !this.hasKeyFor(t)) return;
-    // (In the Land of Nod, by its spot: nod/chests-view.js.)
+    // (In the Land of Nod, by its spot: nod/chests-view.js; in a story of the
+    // Storybook, by its spot too: book/book-game.js.)
     if (t.nod !== undefined) this.send({ t: 'nod', op: 'chest', i: t.nod });
-    else this.send({ t: 'chest', at: [t.x, t.y, t.z] });
+    else if (t.book !== undefined) {
+      this.sendMove(true);
+      this.send({ t: 'book', op: 'chest', i: t.book });
+    } else this.send({ t: 'chest', at: [t.x, t.y, t.z] });
   }
 
   // One quiz for a chest key, offered (a while after, `after` ms): after a
@@ -4057,6 +4080,7 @@ export class Game extends EventTarget {
       if (this.world !== world || this.closed) return;
       this.send({ t: 'soul', op: 'part', w: got.key, i: got.i, at: [at.x, at.y, at.z].map((v) => +v.toFixed(2)), fresh: got.fresh });
       if (this.nod) this.nod.fight.safeUntil = Math.max(this.nod.fight.safeUntil, performance.now() + PART_SAFE_MS);
+      if (this.book) this.book.safeUntil = Math.max(this.book.safeUntil, performance.now() + PART_SAFE_MS);
     }, PART_RISES_MS);
     setTimeout(() => {
       if (!this.closed) this.emit('soul-part', got);

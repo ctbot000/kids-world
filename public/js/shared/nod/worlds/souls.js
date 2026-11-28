@@ -1,8 +1,8 @@
-// Where the souls of the soul weapons are fought (duel.js): six little worlds, one
-// to each (shared/souls.js), put together as the dreams of the Land of Nod are
+// Where the souls of the soul weapons are fought (duel.js): seven little worlds,
+// one to each (shared/souls.js), put together as the dreams of the Land of Nod are
 // (maker.js) — a disc of night glass, a ring, a wild hill with standing stones, a
-// great gong, a sheet of drawing paper, a bitten moon — with a circle of light let
-// into each, and nothing on it but you and its soul.
+// great gong, a sheet of drawing paper, a bitten moon, an open storybook — with a
+// circle of light let into each, and nothing on it but you and its soul.
 import { Band, Body, Crate, Dot, Loop, Plate, v3 } from '../shape.js';
 import { Maker } from '../maker.js';
 import { SOULS, soulOf } from '../../souls.js';
@@ -95,6 +95,20 @@ const MAKE = {
     const m = begun('nod', body, adrift(BITS, { skin: 'rune', look: { uKind: 5, uR: 400, uColor: '#8f84c9', uColor2: '#5a4f9a', uGlow: '#b98cff', uGlow2: '#e6e0ff' } }), 0x40d1, v3(0, 10, 6), v3(0, 10, -5));
     m.scatter('pebble', 'floor', 26, { ks: [0.4, 1], gap: 2, solid: false });
     m.scatter('spark', 'floor', 30, { ks: [0.5, 1], gap: 1.6, solid: false });
+    return m;
+  },
+  // A great storybook lying open, its pages rising from the fold in the middle,
+  // books shut and stacked round about, and more of them adrift in the sky.
+  book() {
+    const body = new Body('floor', new Crate(v3(0, 0, 0), v3(1, 0, 0), Y, 12, 0.35, 9), 0.7, {
+      cell: 0.4,
+      ripple: (x) => 0.85 * Math.min(1, Math.abs(x) / 5) ** 0.6,
+      ...floor('book', 6, 9.2, { uColor: '#f6ecd4', uColor2: '#e2d2ac' }),
+    });
+    const tomes = BITS.map(([x, y, z, r], i) => new Body(`bit${i}`, new Crate(v3(x, y, z), v3(Math.cos(i * 1.3), 0.25, Math.sin(i * 1.3)), v3(0.25 * (i - 2), 1, 0.2), r * 0.95, r * 0.24, r * 0.7), 0.3, { cell: 0.6, skin: 'rune', look: { uKind: 6, uR: 400, uColor: '#f6ecd4', uColor2: '#e2d2ac', uGlow: '#4f7dff', uGlow2: '#ffe9b0' } }));
+    const m = begun('book', body, tomes, 0xb00c, v3(0, 2, 7.5), v3(0, 2, -5));
+    for (const [i, [x, z]] of [[-10.6, -7.6], [10.6, -7.6], [-10.6, 7.6], [10.6, 7.6], [0, -8.6], [11.4, 0], [-11.4, 0]].entries()) m.put('book', m.spot('floor', v3(x, 2, z)), { k: 0.9 + (i % 3) * 0.2, keep: 1.6 });
+    m.scatter('spark', 'floor', 30, { ks: [0.5, 1], gap: 1.6, solid: false, only: (s) => s.up.y > 0.6 });
     return m;
   },
 };

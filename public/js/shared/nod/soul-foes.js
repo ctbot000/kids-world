@@ -237,6 +237,48 @@ function nocturneBegin(sim, f) {
   };
 }
 
+// ---------------------------------------------------------------- Folio, the Paper Phoenix
+
+// Round it flies over its book, flinging pages that fold up and come at you —
+// bop one right back, and down it comes — diving through the air in a blaze of
+// paper, and raining ink. Pop-ups spring out of its pages round you; paper birds
+// fly to its help; and at the last it writes THE END right across the page.
+const PAGES = { k: 'shot', near: 1, far: 60, speed: 9.5, len: 30, r: 0.48, b: 0.9, rest: 250, every: 800, back: true, look: 'page' };
+const BLAZE = { k: 'lunge', near: 1, far: 17, len: 12.5, speed: 14, w: 0.9, b: 1.2, rest: 500, every: 700, flash: true, swoop: true };
+const INK = { k: 'lob', near: 0, far: 60, windup: 760, n: 4, spread: 3.8, ms: 1000, high: 7, r: 1.6, b: 0.9, rest: 250, every: 700, each: true, look: 'ink' };
+const folio = [
+  { ...PAGES, windup: 800, n: 3, fan: 0.38, seek: 0.4 },
+  { ...BLAZE, windup: 820, open: 'spent', when: only(0) },
+  { ...INK },
+  // Pop-ups, springing up out of the page in a ring round you, then under you.
+  {
+    k: 'spots', near: 0, far: 60, windup: 1000, r: 1.6, b: 1, rest: 300, every: 700,
+    where: (sim, f, p) => ringAt(f, under(sim, f, p), 6, 3.5, sim.rng.range(0, 6)),
+    also: [{ after: 900, mv: { k: 'spots', windup: 950, r: 2.2, b: 1, where: (sim, f, p) => [under(sim, f, p)] } }],
+  },
+  { k: 'wave', near: 0, far: 60, windup: 850, n: 2, gap: 900, speed: 9, reach: 26, w: 1.1, b: 1, rest: 300, every: 700, when: from(1) },
+  { ...BLAZE, windup: 680, rest: 150, every: 250, when: from(1) },
+  { ...BLAZE, windup: 620, open: 'spent', when: from(1) },
+  { ...PAGES, windup: 820, n: 5, fan: 0.34, seek: 0.5, when: from(1) },
+  { k: 'call', near: 0, far: 60, windup: 700, kind: 'wispbook', n: 2, rest: 300, every: 700, when: (f, sim) => rageOf(f) >= 1 && helpers(f, sim) < 2 },
+  { ...INK, n: 6, spread: 4.4, windup: 700, when: from(2) },
+  // THE END, written right across the page: a line of it through where you are,
+  // and another across that.
+  {
+    k: 'spots', near: 0, far: 60, windup: 950, r: 1.5, b: 1.1, rest: 300, every: 700, when: from(2),
+    where: (sim, f, p) => {
+      const c = under(sim, f, p);
+      const round = sim.rng.range(0, 6);
+      return [c, ...ringAt(f, c, 2, 2.6, round), ...ringAt(f, c, 2, 5.2, round)];
+    },
+    also: [{ after: 800, mv: { k: 'spots', windup: 900, r: 1.5, b: 1.1, where: (sim, f, p) => {
+      const c = under(sim, f, p);
+      const round = sim.rng.range(0, 6);
+      return [c, ...ringAt(f, c, 2, 2.6, round), ...ringAt(f, c, 2, 5.2, round)];
+    } } }],
+  },
+];
+
 // ---------------------------------------------------------------- all of them
 
 const big = { boss: true, big: true, guard: 'all', hearts: 8, chips: 5, lax: 1.15, begin: soulBegin };
@@ -262,9 +304,11 @@ export const SOUL_FOES = {
   soulbells: { ...big, chips: 6, radius: 1.45, height: 3.9, speed: 1.9, style: 'come', range: [3, 7], steady: true, moves: carillon, told: 'Jump every ring of Carillon’s peal: then he is rung right out. He sticks fast when he drops, too — and cannot bear his own notes bopped back at him!' },
   soultoon: { ...big, radius: 1.05, height: 2.9, speed: 3.6, style: 'circle', range: [4, 8], moves: scrawl, told: 'Roll clear as Scrawl comes up under you, three times running: then it is stuck fast! Its paint can be bopped right back, too.' },
   soulnod: { ...big, hearts: 9, radius: 1.1, height: 2.5, speed: 5.2, style: 'fly', alt: 3, range: [6, 10], begin: nocturneBegin, moves: nocturne, told: 'Nocturne’s crescents bend round after you: bop one back, and down she comes! In the dark, watch for her eyes, and bop as they flash.' },
+  soulbook: { ...big, hearts: 9, radius: 1.1, height: 2.4, speed: 5.4, style: 'fly', alt: 2.9, range: [6, 10], moves: folio, told: 'Folio’s pages can be bopped right back at it: then down it comes! Roll clear as it dives in a blaze of paper, and after its second dive it is out of puff.' },
   wispstar: wisp('A falling star', '⭐'),
   wispwild: wisp('A wild cub', '🐺'),
   wisptoon: wisp('A blot', '🎨'),
+  wispbook: wisp('A paper bird', '🕊️'),
 };
 for (const w of SOULS) Object.assign(SOUL_FOES[`soul${w.key}`], { name: w.soul.name, icon: w.icon });
 addFrights(SOUL_FOES);
@@ -276,4 +320,5 @@ Object.assign(NOD_BOSSES, {
   soulbells: { name: 'Carillon', icon: '🔔', moves: ['Peal', 'Drop', 'Clapper'] },
   soultoon: { name: 'Scrawl', icon: '🖌️', moves: ['Off the page', 'Scribble', 'Paint'] },
   soulnod: { name: 'Nocturne', icon: '🌙', moves: ['Crescents', 'Swoop', 'The dark'] },
+  soulbook: { name: 'Folio', icon: '✒️', moves: ['Flying pages', 'Paper blaze', 'THE END'] },
 });

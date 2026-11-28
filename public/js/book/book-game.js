@@ -3,15 +3,17 @@
 // over from there): you running and jumping about its flat page (shared/book
 // hero.js), the camera alongside, its foes where the story's clock says they
 // are (foes.js), landed on or bopped, its stars to pick up, its crates to bop
-// open, its bookmarks, its boss — and friends drawn where they are, a moment
-// behind. What happens that matters to everyone, the island is told
+// open, its treasure chests to open with a key, its bookmarks, its boss — and
+// friends drawn where they are, a moment behind. What happens that matters to everyone, the island is told
 // (room.js bookOp) and tells everyone.
 import { bossSays, talkLevel } from '../boss-voice.js';
 import { ANIM } from '../render/avatar.js';
+import { CHEST_TAKE_MS } from '../render/chest-model.js';
 import { advanceTime } from '../shared/env.js';
 import { bossAt, bossSpec, unpackBoss } from '../shared/book/bosses.js';
 import { foeAt, foeBox, FOES, shotsOf, stompable } from '../shared/book/foes.js';
 import { HERO, MOVE, makeHero, overlaps, stepHero } from '../shared/book/hero.js';
+import { soulWeapon } from '../shared/souls.js';
 import { TILE } from '../shared/book/level.js';
 import { bookLevel } from '../shared/book/stories/index.js';
 
@@ -31,6 +33,10 @@ const INTERP_MS = 120;
 const FLIP_FPS = 15;
 // How far ahead of you the camera looks, the way you are going.
 const LOOK_AHEAD = 2.2;
+// This near a treasure chest (across, and up or down), you can open it.
+const CHEST_NEAR = { x: 1.15, y: 0.9 };
+// How much of its reach a soul weapon's show has on a page (its bop is a bop).
+const BOOK_SOUL_NEAR = 0.5;
 
 export class BookGame {
   // info: how the island says the story is going (shared/book/tale.js
@@ -63,9 +69,15 @@ export class BookGame {
     this.told = new Set();
     this.cam = { x: at.x, y: at.y + 3, ready: false };
     this.view?.setState(this.state());
+    // The treasure chests out, by their spots: { gold, open } each.
+    this.chests = new Map();
+    this.chestRows(info.chests, true);
   }
 
-  dispose() {}
+  dispose() {
+    if (this.g.chestTarget?.book !== undefined) this.g.chestTarget = null;
+    this.g.chestAt = null;
+  }
 
   // ------------------------------------------------ the story's clock
 
@@ -183,6 +195,7 @@ export class BookGame {
     if (ev.thorns) this.hurt('thorns', { up: 11 });
     this.meet(before, t, now);
     this.stars();
+    this.nearChest();
     this.pageHints();
     g.me.speed = Math.abs(h.vx);
     g.me.yaw = faceYaw(h.face);
@@ -319,6 +332,8 @@ export class BookGame {
     setTimeout(() => {
       if (g.book !== this || this.key !== key) return;
       this.bopLands();
+      // (A soul weapon's show, as everyone else sees it: game.js soulSwingFrom.)
+      if (avatar && soulWeapon(avatar.weaponKind)) g.soulSwingFrom(avatar, true, BOOK_SOUL_NEAR);
     }, lands * 1000);
     return null;
   }
@@ -381,6 +396,55 @@ export class BookGame {
       const s = { x: c.x + 0.5, y: c.y + 0.5 };
       if (near(s)) this.pick(1000 + k, s.x, s.y);
     });
+  }
+
+  // ------------------------------------------------ treasure chests
+
+  // Where they are, as the island says: [spot, golden, open] each. quiet: as
+  // you arrive.
+  chestRows(rows, quiet = false) {
+    const list = Array.isArray(rows) ? rows.filter((r) => Array.isArray(r) && this.level.chests[r[0]]).slice(0, 16) : [];
+    this.chests = new Map(list.map(([i, gold, open]) => [i, { gold: gold === 1, open: open === 1 || this.chests.get(i)?.open === true }]));
+    this.view?.chests(list, quiet);
+  }
+
+  // The shut one you are standing by, for the Open button (game.js useChest).
+  nearChest() {
+    const g = this.g;
+    const h = this.h;
+    let best = null;
+    let least = Infinity;
+    if (h.ground && !g.dizzy && !g.watching) {
+      for (const [i, c] of this.chests) {
+        const spot = this.level.chests[i];
+        const dx = Math.abs(spot.x - h.x);
+        if (c.open || dx > CHEST_NEAR.x || Math.abs(spot.y - h.y) > CHEST_NEAR.y || dx >= least) continue;
+        least = dx;
+        best = i;
+      }
+    }
+    const c = best === null ? null : this.chests.get(best);
+    const spot = this.level.chests[best];
+    // (Its x and z as a cell's corner, as the button has an island's chest.)
+    g.chestTarget = c ? { book: best, x: spot.x - 0.5, y: spot.y, z: -0.5, open: false, gold: c.gold } : null;
+  }
+
+  // Somebody opened one: its lid flies up, its treasure bursts out and flies to
+  // them, and if it was you, the treasure is yours.
+  chestOpened(m) {
+    const g = this.g;
+    const c = this.chests.get(m.i);
+    const spot = this.level.chests[m.i];
+    if (!c || !spot || c.open) return;
+    c.open = true;
+    this.view?.openChest(m.i);
+    const near = Math.abs(spot.x - this.h.x) < 30;
+    if (near) g.treasureBurst(spot.x, spot.y, 0, c.gold);
+    const book = this;
+    setTimeout(() => {
+      if (g.book === book) g.treasureTaken(spot.x, spot.y, 0, m.pid, c.gold);
+    }, CHEST_TAKE_MS);
+    if (m.pid === g.pid) g.chestWon(c.gold, { x: spot.x, y: spot.y + 1, z: 0 });
   }
 
   pick(i, x, y) {
@@ -568,6 +632,12 @@ export class BookGame {
         }
         break;
       }
+      case 'chests':
+        this.chestRows(msg.c);
+        break;
+      case 'chest':
+        this.chestOpened(msg);
+        break;
       case 'bosscomes':
         if (this.level.inArena(this.h.x, this.h.y)) g.emit('toast', { icon: bossSpec(this.level.boss.kind).icon, text: `Here comes ${bossSpec(this.level.boss.kind).name}!` });
         g.sound.play('rumble');

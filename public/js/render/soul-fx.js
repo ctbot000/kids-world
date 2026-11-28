@@ -1,8 +1,8 @@
 // What a soul weapon's swing looks like (shared/souls.js): a show for every soul
 // that is in it, in the island, or the sky of a dream, round whoever swung it —
 // Starfall's crescent of starlight, Prisma thrown out and back along a rainbow,
-// Wildheart's spirit wolf, Clarion's great bell, Doodle's stroke of wet paint and
-// Lullaby's moon. And the pillar of light out of a golden chest with a part of one
+// Wildheart's spirit wolf, Clarion's great bell, Doodle's stroke of wet paint,
+// Lullaby's moon and Fable's flourish of golden ink. And the pillar of light out of a golden chest with a part of one
 // in it (PartBeam).
 //
 // Each is made for its moment and gone after it: update returns false once it is
@@ -738,6 +738,111 @@ class MoonSweep extends Show {
   }
 }
 
+// ---------------------------------------------------------------- Fable
+
+const INK_FRAG = /* glsl */ `
+  varying vec2 vUv;
+  uniform float uLaid;
+  uniform float uGone;
+  uniform float uSeed;
+  uniform float uTime;
+  void main() {
+    float u = vUv.x;
+    float edge = abs(vUv.y - 0.5) * 2.0;
+    // Written from one end, as a pen goes; its edges a little ragged, as ink is.
+    float front = uLaid * 1.05;
+    if (u > front) discard;
+    float rag = vnoise(vec2(u * 34.0 + uSeed, vUv.y * 5.0));
+    if (edge > 0.94 - 0.14 * rag) discard;
+    // Dry, it goes to golden dust, from where it began.
+    float dry = vnoise(vec2(u * 10.0 - uSeed, vUv.y * 7.0)) * 0.7 + vnoise(vec2(u * 40.0, vUv.y * 20.0 + uSeed)) * 0.3;
+    if (dry < uGone * 1.3 - 0.25 + (1.0 - u) * uGone * 0.3) discard;
+    // Deep blue ink, a little lighter where it is wet at its rims, and a line of
+    // gold down the middle of it that glints as it goes.
+    vec3 ink = mix(vec3(0.05, 0.08, 0.42), vec3(0.2, 0.34, 0.95), smoothstep(0.35, 0.92, edge));
+    float spine = smoothstep(0.2, 0.04, edge);
+    float glint = smoothstep(0.6, 1.0, vnoise(vec2(u * 16.0 - uTime * 4.0, uSeed)));
+    vec3 col = mix(ink, vec3(1.0, 0.8, 0.28) * (1.1 + 0.6 * glint), spine);
+    // The wet head of it, where the nib is now.
+    col += vec3(0.6, 0.75, 1.0) * exp(-max(0.0, front - u) * 30.0) * 0.8;
+    float a = 1.0 - smoothstep(0.72, 0.94, edge);
+    gl_FragColor = vec4(col * a, a);
+    #include <colorspace_fragment>
+  }
+`;
+
+// A great flourish written in the air in front of whoever swung it, as a name is
+// signed: round, a loop in the middle of it, thick where the nib was pressed and
+// thin where it was not; drops of ink flung off its head, and golden dust as it dries.
+class InkFlourish extends Show {
+  constructor(scene, effects, frame, { reach = 4, arc = 1.9, size = 1 } = {}) {
+    super(scene, frame, 1.0);
+    this.effects = effects;
+    this.reach = reach;
+    this.arc = arc;
+    const n = 90;
+    const pos = [];
+    const uv = [];
+    const idx = [];
+    this.path = [];
+    for (let i = 0; i <= n; i++) {
+      const k = i / n;
+      const p = this.point(k);
+      const w = (0.06 + 0.34 * Math.sin(k * Math.PI) ** 0.7 * (0.75 + 0.25 * Math.sin(k * 11))) * size;
+      this.path.push(p);
+      pos.push(p.x, p.y + w, p.z, p.x, p.y - w, p.z);
+      uv.push(k, 1, k, 0);
+      if (i < n) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx);
+    this.mat = shader({ uLaid: { value: 0 }, uGone: { value: 0 }, uSeed: { value: Math.random() * 50 }, uTime: { value: 0 } }, INK_FRAG);
+    this.mesh(g, this.mat);
+    this.light = halo('#9fb8ff', 2.4, 0.4);
+    this.group.add(this.light);
+    this.flung = 0;
+    this.dusted = 0;
+    this.step(0, 0);
+  }
+
+  // Along the flourish, k of the way: round across the front, with a loop in it.
+  point(k) {
+    const a = this.arc - k * this.arc * 2;
+    const loop = Math.sin(k * Math.PI) * 0.34;
+    const curl = k * Math.PI * 2 * 1.5;
+    const r = this.reach * (0.62 + 0.3 * Math.sin(k * Math.PI)) + Math.cos(curl) * loop;
+    const y = 0.15 + Math.sin(curl) * loop * 0.9 + (0.5 - k) * 0.35;
+    return V(Math.sin(a) * r, y, Math.cos(a) * r);
+  }
+
+  step(k, dt) {
+    const laid = easeOut(clamp01(this.t / 0.3));
+    this.mat.uniforms.uLaid.value = laid;
+    this.mat.uniforms.uGone.value = clamp01((k - 0.4) / 0.6);
+    this.mat.uniforms.uTime.value = this.t;
+    const head = this.path[Math.min(this.path.length - 1, Math.round(laid * (this.path.length - 1)))];
+    this.light.position.copy(head);
+    this.light.scale.setScalar(2.4 * (1 - clamp01((k - 0.3) / 0.5)));
+    // Ink flung off the head of it as it goes.
+    while (this.flung < laid * 26) {
+      this.flung++;
+      const p = this.path[Math.round((this.flung / 26) * (this.path.length - 1))];
+      const w = this.at(p.x, p.y, p.z);
+      const v = this.way(p.x * 0.5, 1.5 + Math.random() * 2, p.z * 0.5);
+      this.effects.add('drop', w.x, w.y, w.z, { vx: v.x, vy: v.y, vz: v.z, gravity: 9, size: 0.12 + Math.random() * 0.14, life: 0.6 + Math.random() * 0.3, color: this.flung % 3 ? '#4f7dff' : '#2a3fb8', spin: 2 });
+    }
+    // Golden dust as it dries.
+    const dust = dt > 0 && k > 0.4 ? Math.round(dt * 70) : 0;
+    for (let i = 0; i < dust; i++) {
+      const p = this.path[Math.floor(Math.random() * this.path.length)];
+      const w = this.at(p.x, p.y + (Math.random() - 0.5) * 0.3, p.z);
+      this.effects.add(i % 3 ? 'sparkle' : 'star', w.x, w.y, w.z, { vy: 0.4 + Math.random() * 0.4, size: 0.1 + Math.random() * 0.1, life: 0.5 + Math.random() * 0.3, color: ['#ffe9a0', '#ffd04a', '#ffffff'][i % 3], spin: 3 });
+    }
+  }
+}
+
 // ---------------------------------------------------------------- all of them
 
 // What a swing of spec (souls.js soulWeapon) shows: one for each soul in it, at
@@ -774,6 +879,9 @@ export function soulShows(scene, effects, spec, frame, { empty = true, near = 1 
         break;
       case 'nod':
         out.push(new MoonSweep(scene, effects, frame, { reach: (arm + (spec.round ?? 3)) * near + 0.2 }));
+        break;
+      case 'book':
+        out.push(new InkFlourish(scene, effects, frame, { reach: Math.min(5.4, arm + (spec.sweep ?? 3)) * near, size }));
         break;
       default:
         break;

@@ -40,8 +40,11 @@ export function painted(parts) {
     const pos = g.attributes.position;
     const nor = g.attributes.normal;
     tmpN.getNormalMatrix(m);
-    c.set(paint ?? '#ffffff');
+    // (Paint may be a colour, or a colour for each point by where it is on its own.)
+    const each = typeof paint === 'function' ? paint : null;
+    if (!each) c.set(paint ?? '#ffffff');
     for (let i = 0; i < pos.count; i++) {
+      if (each) c.copy(each(pos.getX(i), pos.getY(i), pos.getZ(i)));
       tmpV.fromBufferAttribute(pos, i).applyMatrix4(m).toArray(position, (v + i) * 3);
       tmpV.fromBufferAttribute(nor, i).applyMatrix3(tmpN).normalize().toArray(normal, (v + i) * 3);
       color.set([c.r, c.g, c.b], (v + i) * 3);

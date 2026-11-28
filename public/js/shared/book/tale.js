@@ -6,13 +6,16 @@
 // for good; the stars each person has picked up (each picks up their own); and
 // at the end of it all its boss, who comes out once someone is on its page and
 // goes back to the start of the fight if everyone leaves. Everyone in it is in
-// it together.
+// it together. And its treasure chests, as on every island of the isle: a few
+// out at a time at spots of its own, one of them golden (the same as a dream's
+// of the Land of Nod: nod/chests.js).
 //
 // Where everything is, is the story's clock's to say (foes.js foeAt, bosses.js
 // bossAt): ms since it began, the island's; every page keeps in step with it.
 // Pages say what they stomped, bopped, broke or picked up, and when; the
 // island checks it was there to be, and tells everyone.
 import { Rng } from '../rng.js';
+import { DreamChests } from '../nod/chests.js';
 import { bossAt, bossSpec, hitBoss, newBoss, packBoss, stepBoss } from './bosses.js';
 import { FOES, foeAt, foeBox } from './foes.js';
 import { HERO } from './hero.js';
@@ -27,6 +30,8 @@ const BOSS_MS = 1600;
 const QUIET_MS = 9000;
 // The boss's last heart off, its stage is won this long after (it goes pop).
 const BEATEN_MS = 2600;
+const UP = { x: 0, y: 1, z: 0 };
+const FRONT = { x: 0, y: 0, z: 1 };
 // How far from where the island last had them a page may say someone stomped,
 // bopped or picked up something (it is a moment behind), and how far back in
 // time, or ahead.
@@ -61,6 +66,8 @@ export class Tale {
     // Where each person was last, as the island has it, and the people on the
     // boss's page.
     this.where = new Map();
+    // (Upright, every one of them: the page is flat.)
+    this.chests = new DreamChests(this.level.chests.map((c) => ({ x: c.x, y: c.y, z: 0, up: UP, dir: FRONT })), (seed ^ 0x3c6ef372) >>> 0);
     this.restore(done);
   }
 
@@ -147,6 +154,7 @@ export class Tale {
       out.fx.push({ k: 'back', f: id });
     }
     this.stepBoss(now, clock, up, out);
+    if (this.chests.step(now)) out.fx.push({ k: 'chests', c: this.chests.pack() });
     return out;
   }
 
@@ -255,6 +263,12 @@ export class Tale {
     return true;
   }
 
+  // A treasure chest (by its spot, i) opened by p, standing by it, at the
+  // island's time now: it, { i, gold }, or null when there is no shut one there.
+  openChest(p, i, now) {
+    return this.chests.open({ x: p.x, y: p.y, z: 0 }, i, now);
+  }
+
   // A stomp by p on the boss at time t: whether it hurt it (a heart off). The
   // stage is won once its last one is.
   stompBoss(p, t) {
@@ -282,6 +296,7 @@ export class Tale {
       boss: this.boss ? packBoss(this.boss) : null,
       bs: this.bossState,
       fast: this.fast,
+      chests: this.chests.pack(),
     };
   }
 

@@ -190,6 +190,18 @@ export class Maker {
     return this;
   }
 
+  // Somewhere a treasure chest may stand: column x, on the ground there (or at y).
+  chest(x, y = null) {
+    this.L.chests.push({ x: x + 0.5, y: y ?? this.top(x) });
+    return this;
+  }
+
+  // Each of these columns, a chest's (on whatever ground is there).
+  chests(...xs) {
+    for (const x of xs) this.chest(x);
+    return this;
+  }
+
   // A bookmark at column x, on the ground there: the end of a page of the story.
   mark(x) {
     this.L.marks.push({ id: this.L.marks.length + 1, x: x + 0.5, y: this.top(x) });

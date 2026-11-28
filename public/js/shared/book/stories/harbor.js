@@ -95,5 +95,7 @@ export function harbor() {
   m.scatter(['shell', 'grass', 'rock'], 0, m.L.arena.x0, { gap: 3.2 });
   m.scatter(['palm', 'hut'], 0, m.L.arena.x0, { gap: 18, back: true });
   m.scatter(['shell', 'rock'], m.L.arena.x0 + 1, m.L.arena.x1 - 1, { gap: 4 });
+  // Where its treasure chests may stand (tale.js): each [column, ground].
+  for (const [x, y] of [[29, 5], [57, 4], [65, 4], [107, 6], [133, 6], [140, 8], [156, 12], [208, 8], [225, 6]]) m.chest(x, y);
   return m.done(3);
 }

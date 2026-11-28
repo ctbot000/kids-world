@@ -521,7 +521,8 @@ const satin = {
 // ---------------------------------------------------------------- the souls' own
 
 // Where a weapon's soul is fought (shared/nod/worlds/souls.js): what its world is
-// made of (uKind: night glass, pearl, a wild hill, a gong, drawing paper, moondust),
+// made of (uKind: night glass, pearl, a wild hill, a gong, drawing paper, moondust,
+// the pages of a storybook),
 // with a great circle of light let into the top of it, a star of as many points as
 // the weapon has parts.
 const rune = {
@@ -606,7 +607,7 @@ const rune = {
       albedo = mix(albedo, vec3(0.45, 0.65, 0.95), rule * 0.6);
       rough = 0.95;
       fuzz = 0.2;
-    } else {
+    } else if (uKind < 5.5) {
       // Moondust, soft, with little pits in it.
       float big_ = nFbm(p * 0.35);
       albedo = mix(uColor2, uColor, smoothstep(0.3, 0.75, big_ * 0.7 + 0.3 * nNoise(p * 2.6)));
@@ -621,6 +622,25 @@ const rune = {
       bend += nSlope(p * 2.2, 0.1) * 0.25;
       rough = 0.9;
       fuzz = 0.6;
+    } else {
+      // A storybook's pages: rows of words, a fold down the middle (x = 0), the
+      // edges of its leaves round the sides, and its blue cover underneath.
+      float tooth = nNoise(p * 9.0);
+      float side = 1.0 - smoothstep(0.3, 0.55, abs(n.y));
+      float under = smoothstep(-0.3, -0.55, n.y);
+      albedo = mix(uColor, uColor2, smoothstep(0.3, 0.8, nFbm(p * 0.45)) * 0.45) * (0.95 + 0.06 * tooth);
+      float line = floor(p.z * 1.5);
+      float word = step(0.38, nHash(vec3(floor(p.x * 1.4 + line * 3.7), line, 2.0)));
+      float row = smoothstep(0.09, 0.0, abs(fract(p.z * 1.5) - 0.5) - 0.05);
+      float margin = step(1.0, abs(p.x)) * (1.0 - step(10.4, abs(p.x))) * step(abs(p.z), 7.8);
+      albedo = mix(albedo, vec3(0.2, 0.24, 0.46), row * word * margin * top * 0.5);
+      albedo *= 1.0 - 0.32 * exp(-abs(p.x) * 1.3) * top;
+      float leaves = 0.5 + 0.5 * sin(p.y * 120.0 + nNoise(p * 2.0) * 5.0);
+      albedo = mix(albedo, mix(vec3(0.95, 0.9, 0.78), vec3(0.78, 0.7, 0.56), leaves * 0.6), side);
+      albedo = mix(albedo, vec3(0.16, 0.24, 0.6) * (0.85 + 0.2 * nFbm(p * 0.8)), under);
+      bend += nSlope(p * 4.0, 0.06) * 0.15;
+      rough = 0.85;
+      fuzz = 0.2;
     }
     // The circle of light.
     float k = 0.0;
@@ -641,7 +661,7 @@ const rune = {
       k = min(1.0, k) * top;
     }
     albedo = mix(albedo, line_, k * 0.35);
-    glow += line_ * k * pulse * (uKind > 3.5 && uKind < 4.5 ? 0.25 : uKind > 0.5 && uKind < 1.5 ? 0.35 : 0.85);
+    glow += line_ * k * pulse * ((uKind > 3.5 && uKind < 4.5) || uKind > 5.5 ? 0.3 : uKind > 0.5 && uKind < 1.5 ? 0.35 : 0.85);
   `,
 };
 

@@ -1,7 +1,7 @@
 // The souls of the soul weapons as they look (shared/souls.js), each on its own
 // little world (shared/nod/duel.js) with the weapon it is the soul of: Astra the Star
 // Knight, Iris the Rainbow Serpent, Rowan the Wild Wolf, Carillon the Bell Giant,
-// Scrawl the Living Doodle and Nocturne the Moon Owl. Frights like the others
+// Scrawl the Living Doodle, Nocturne the Moon Owl and Folio the Paper Phoenix. Frights like the others
 // (frights.js has how each is told it is), made of something like light: its edges
 // shine.
 import * as THREE from '../../../vendor/three.module.js';
@@ -840,6 +840,115 @@ class Nocturne extends Soul {
   }
 }
 
+// ---------------------------------------------------------------- Folio
+
+// A feather of paper, folded down its middle: a long point, its quill end blunt.
+const quillGeo = (l, w) => {
+  const sh = new THREE.Shape();
+  sh.moveTo(-w * 0.3, 0);
+  sh.lineTo(w * 0.3, 0);
+  sh.lineTo(w, l * 0.42);
+  sh.lineTo(w * 0.55, l * 0.86);
+  sh.lineTo(0, l * 1.06);
+  sh.lineTo(-w * 0.55, l * 0.86);
+  sh.lineTo(-w, l * 0.42);
+  sh.closePath();
+  const g = new THREE.ExtrudeGeometry(sh, { depth: 0.016, bevelEnabled: true, bevelSize: 0.01, bevelThickness: 0.01, bevelSegments: 1 });
+  g.translate(0, 0, -0.008);
+  // (Folded: its two halves a little up from the crease.)
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) p.setZ(i, p.getZ(i) + Math.abs(p.getX(i)) * 0.35);
+  g.computeVertexNormals();
+  return g;
+};
+// Cream at the quill end, dipped in ink at the tip: along a feather's own y.
+const dipped = (l, ink = '#3d5fe0') => (...p) => c1.set('#fff6e0').lerp(b1.set(ink), Math.max(0, Math.min(1, (p[1] / l - 0.55) / 0.4)) ** 1.5);
+
+class Folio extends Soul {
+  constructor() {
+    super('book', { height: 2.4, radius: 1.1 });
+    const b = joint(this.body, 0, 0.4, 0);
+    this.bird = b;
+    this.skin(b, 'folio-body', () => sculpted(
+      [
+        { a: [0, 0.9, 0], r: 0.56, s: [0.92, 1.15, 1] },
+        { a: [0, 0.55, -0.12], r: 0.42, s: [0.9, 0.8, 1.1] },
+        { a: [0, 1.32, 0.12], b: [0, 1.72, 0.3], r: 0.26, r1: 0.2 },
+        { a: [0, 1.86, 0.34], r: 0.3, s: [0.95, 1, 1.05] },
+        { a: [0, 0.4, -0.4], b: [0, 0.2, -0.85], r: 0.22, r1: 0.1 },
+      ],
+      { k: 0.22, cell: 0.06, paint: fade(0.1, 2.1, '#f0a83a', '#fff0cc') },
+    ));
+    // Lines of words written over it, and golden ink at its heart.
+    piece(b, 'plain', Array.from({ length: 8 }, (_, i) => {
+      const y = 0.58 + i * 0.1;
+      const r = 0.515 * Math.sqrt(Math.max(0.2, 1 - ((y - 0.9) / 0.66) ** 2)) + 0.01;
+      return [rod(0.013, 0.013, 0.16 + (i % 3) * 0.08, 6), '#2f4fd8', where((i % 2) * 0.05 - 0.025, y, r * 1.04 + 0.03, 1, 0, 0, Math.PI / 2)];
+    }));
+    piece(b, 'glow', [[ball(0.1, 14, 10), '#ffd84d', where(0, 0.95, 0.5, [1, 1.2, 0.5])]]);
+    // Its head: a golden beak, eyes of light, and a crest of quills.
+    this.head = joint(b, 0, 1.86, 0.34);
+    piece(this.head, 'gloss', [[cone(0.08, 0.3, 10), '#ffc93a', where(0, -0.04, 0.38, [1, 1, 0.8], Math.PI / 2 + 0.25)]]);
+    this.eyes = this.gaze(this.head, { x: 0.15, y: 0.06, z: 0.24, r: 0.07, tall: 1.2, slope: 0.3, color: '#9fb8ff' });
+    piece(this.head, 'spirit', Array.from({ length: 5 }, (_, i) => [quillGeo(0.42 + (i % 2) * 0.12, 0.07), dipped(0.5, '#4f7dff'), along((i - 2) * 0.05, 0.18, -0.08, [(i - 2) * 0.28, 1, -0.9])]));
+    // Its wings: pages, each feather a quill dipped in ink.
+    this.wings = [-1, 1].map((side) => {
+      const w = joint(b, side * 0.42, 1.25, -0.06);
+      const inner = joint(w);
+      const rows = [];
+      for (let i = 0; i < 6; i++) rows.push([quillGeo(0.7 + i * 0.09, 0.15), dipped(0.8 + i * 0.09, i % 2 ? '#3d5fe0' : '#5a7bff'), along(side * (0.08 + i * 0.11), 0.02 + i * 0.025, 0, [side * (0.5 + i * 0.1), -0.85 + i * 0.1, -0.06])]);
+      piece(inner, 'spirit', rows);
+      const tip = joint(inner, side * 0.66, 0.18, 0);
+      const prim = [];
+      for (let i = 0; i < 7; i++) prim.push([quillGeo(1.1 - i * 0.04, 0.13), dipped(1.15 - i * 0.04, i % 2 ? '#2b46c8' : '#4f7dff'), along(side * i * 0.03, i * 0.02, 0.01 * i, [side * (0.35 + i * 0.13), -0.8 + i * 0.2, -0.04])]);
+      piece(tip, 'spirit', prim);
+      piece(tip, 'glow', prim.map(([, , m], i) => [quillGeo(0.72 - i * 0.03, 0.025), '#ffe9a8', m.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.22, 0.02))]));
+      return { w, inner, tip, s: side };
+    });
+    // Its tail: long streamers of paper, and quills.
+    this.tail = joint(b, 0, 0.3, -0.6);
+    piece(this.tail, 'spirit', [
+      ...Array.from({ length: 5 }, (_, i) => [quillGeo(1.1 + (i % 2) * 0.3, 0.12), dipped(1.3 + (i % 2) * 0.3, '#4f7dff'), along((i - 2) * 0.09, 0, 0, [(i - 2) * 0.35, -0.55, -1])]),
+      ...[-1, 1].map((sd) => [tube(0.5, 0.025, 20, 6, Math.PI * 1.3), '#ff5d8f', where(sd * 0.18, -0.35, -0.5, 1, 0.3, sd * 0.6, sd * 0.4)]),
+    ]);
+    // The quill it is the soul of, in its talons.
+    this.hold = joint(b, 0, 0.1, 0.26);
+    piece(this.hold, 'gloss', [-1, 1].flatMap((sd) => [0, 1, 2].map((i) => [cap(0.045, 0.15, 8), '#ffc93a', where(sd * 0.22 + (i - 1) * 0.07, 0, 0.05, 1, 0.5)])));
+    const quill = weaponOf('book', 1.35);
+    quill.rotation.z = -Math.PI / 2;
+    quill.position.set(-0.5, -0.04, 0.08);
+    this.hold.add(quill);
+    // And golden sparks off it, as a phoenix has fire.
+    this.plume(b, [[0, 0.3, -0.6], [0, 0.9, -0.5], [0, 1.4, -0.3]], { n: 40, size: 0.34, drift: [0, 0.3, -0.7], spread: 0.26, hot: '#fff3c4', cold: '#4f7dff', glow: 0.75, body: 0.25 });
+  }
+
+  pose(dt, s) {
+    const t = this.time;
+    const wind = s.state === 'wind' ? (s.k ?? 0) : 0;
+    const act = s.state === 'act';
+    const down = Boolean(s.open);
+    const swoop = act && (s.kind === 'lunge' || s.kind === 'charge');
+    const rate = wind ? 11 : 4.2;
+    const beat = down ? 0.3 : swoop ? -0.55 : Math.sin(t * rate) * (0.6 + wind * 0.25) + 0.1;
+    for (const { w, inner, tip, s: side } of this.wings) {
+      inner.rotation.z = ease(inner.rotation.z, side * (down ? -0.7 : 0.5 + beat * 0.8), 18, dt);
+      tip.rotation.z = ease(tip.rotation.z, side * (down ? -0.35 : 0.35 + Math.sin(t * rate - 0.7) * 0.4), 16, dt);
+      w.rotation.y = ease(w.rotation.y, side * (swoop ? 0.95 : 0.12), 10, dt);
+    }
+    this.bird.position.y = 0.4 + (down ? -0.18 : Math.sin(t * rate) * -0.09 + Math.sin(t * 1.3) * 0.08);
+    this.bird.rotation.x = ease(this.bird.rotation.x, down ? 0.3 : swoop ? 0.95 : -0.24 * wind, 10, dt);
+    this.tail.rotation.x = ease(this.tail.rotation.x, swoop ? -0.5 : Math.sin(t * 2.2) * 0.15, 8, dt);
+    this.tail.rotation.y = Math.sin(t * 1.7) * 0.2;
+    this.head.rotation.y = down ? Math.sin(t * 5) * 0.5 : Math.sin(t * 0.9) * 0.3;
+    this.head.rotation.z = down ? Math.sin(t * 6) * 0.22 : 0;
+    this.head.rotation.x = ease(this.head.rotation.x, swoop ? -0.6 : wind * -0.3, 10, dt);
+    // (Pages flung, it throws its quill hand up.)
+    this.hold.rotation.x = ease(this.hold.rotation.x, act && (s.kind === 'shot' || s.kind === 'lob') ? -0.9 : 0, 14, dt);
+    this.look(this.eyes, s);
+    this.smoke(s, down ? 0.4 : 1);
+  }
+}
+
 // ---------------------------------------------------------------- their helpers
 
 // Little ones some of them call: a spark of the same light.
@@ -873,13 +982,14 @@ class Wisp extends Fright {
   }
 }
 
-const MODELS = { star: Astra, rainbow: Iris, wild: Rowan, bells: Carillon, toon: Scrawl, nod: Nocturne };
+const MODELS = { star: Astra, rainbow: Iris, wild: Rowan, bells: Carillon, toon: Scrawl, nod: Nocturne, book: Folio };
 addFrightModels({
   ...Object.fromEntries(Object.entries(MODELS).map(([k, M]) => [`soul${k}`, M])),
   wispstar: class extends Wisp { constructor() { super('#5a7bff', '#fff3a0'); } },
   wispwild: class extends Wisp { constructor() { super('#5fb84a', '#ffd84d'); } },
   wisptoon: class extends Wisp { constructor() { super('#ff5cb0', '#ffffff'); } },
   wispnod: class extends Wisp { constructor() { super('#7a5cf0', '#ffe9a8'); } },
+  wispbook: class extends Wisp { constructor() { super('#f6ecd4', '#4f7dff'); } },
 });
 
 // A soul as a model by itself, for the stage (render/soul-shows.js): it has group,

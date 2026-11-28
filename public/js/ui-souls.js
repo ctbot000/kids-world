@@ -278,7 +278,7 @@ function fuseShow(ui, a, b, c) {
       else if (what === 'fused') {
         const all = c.souls.length === SOULS.length;
         s.write({
-          kicker: all ? '🌟 All six souls in one!' : `Combined: ${c.souls.length} souls in one!`,
+          kicker: all ? '🌟 All seven souls in one!' : `Combined: ${c.souls.length} souls in one!`,
           icon: c.icon,
           title: c.name,
           sub: all ? 'There is nothing mightier in all the isle.' : `${c.title[0].toUpperCase()}${c.title.slice(1)}.`,
@@ -566,7 +566,7 @@ export function soulForge(ui, key = '') {
       redraw = draw;
       root.append(
         h('div', { class: 'dialog-head' }, h('h2', {}, '⚒️ Soul Forge'), coins, ui.profile === p ? h('button', { class: 'chip', type: 'button', onclick: () => ui.backpackDialog() }, '🎒 Backpack') : ''),
-        h('p', { class: 'muted' }, 'Six weapons no shop sells, one for each episode of Adventure Isle, each in pieces and with a soul of its own. Find every part, put it together, beat its soul — and combine those you win.'),
+        h('p', { class: 'muted' }, 'Seven weapons no shop sells, one for each episode of Adventure Isle, each in pieces and with a soul of its own. Find every part, put it together, beat its soul — and combine those you win.'),
         tabs,
         h('div', { class: 'forge' }, view, h('div', { class: 'forge-side' }, about, act)),
         parts,

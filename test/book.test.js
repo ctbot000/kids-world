@@ -8,12 +8,14 @@ import { BOSS_KINDS, bossAt, bossSpec, hitBoss, newBoss, packBoss, phaseMs, step
 import { FOES, foeAt, foeBox, foeSpec, moverAt, shotsOf, stompable } from '../public/js/shared/book/foes.js';
 import { HERO, jumpOf, makeHero, MOVE, stepHero, thornsAt } from '../public/js/shared/book/hero.js';
 import { Level, TILE } from '../public/js/shared/book/level.js';
-import { reach } from '../public/js/shared/book/reach.js';
+import { ledges as ledgesOf, reach } from '../public/js/shared/book/reach.js';
 import { BOOK_KEYS, bookKey, bookLevel, bookTheme } from '../public/js/shared/book/stories/index.js';
 import { BACK_MS, Tale } from '../public/js/shared/book/tale.js';
 import { buildIsle } from '../public/js/shared/isle-maps.js';
 import { chapterOf, CHAPTERS, EPISODES, firstStage, stagesOf } from '../public/js/shared/isle-story.js';
+import { CHESTS_OUT } from '../public/js/shared/nod/chests.js';
 import { Rng } from '../public/js/shared/rng.js';
+import { CHEST_AGAIN_MS, CHEST_OPEN_MS } from '../public/js/shared/treasure.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { normalizeMeta } from '../public/js/shared/world.js';
 
@@ -89,6 +91,19 @@ for (const ch of book) {
       assert.equal(L.ground(Math.floor(m.x), m.y + 2), m.y, `${ch.key}: bookmark ${m.id} stands on the ground`);
     });
     assert.ok(L.marks.at(-1).x < L.arena.x0, 'the last bookmark before the boss’s page');
+    // Its treasure chests, each standing on a ledge got to, before the boss's
+    // page, with room over it, on nothing that goes (a crate) or springs, and
+    // spread along the story.
+    assert.ok(L.chests.length >= 8, `${ch.key}: chests enough for five out at once`);
+    const { at } = ledgesOf(L);
+    for (const c of L.chests) {
+      const where = `${ch.key}: chest at ${c.x},${c.y}`;
+      const id = at.get(`${Math.floor(c.x)},${c.y}`);
+      assert.ok(id !== undefined && r.seen.has(id), `${where} stands on a ledge got to`);
+      assert.ok(c.x < A.x0 - 2, `${where} is before the boss's page`);
+      assert.ok(![TILE.CRATE, TILE.SPRING].includes(L.at(Math.floor(c.x), c.y - 1)), `${where} is on solid ground`);
+    }
+    assert.ok(new Set(L.chests.map((c) => L.pageAt(c.x))).size >= L.marks.length, `${ch.key}: chests on every page before the boss's`);
   });
 
   test(`${ch.name}: its foes stand where they can, its stars and platforms are out in the open`, () => {
@@ -350,6 +365,43 @@ test('a story on the island: its bookmarks lit as anyone gets to them, foes popp
   const before = room.players.get(a.pid).hp;
   room.receive(a, { t: 'book', op: 'hurt', k: 'foe' });
   assert.equal(room.players.get(a.pid).hp, before, 'safe a moment after');
+});
+
+test('a story’s treasure chests: five out at once, one golden, opened from beside one, gone a while after and another turning up later', () => {
+  const time = { t: 1_000_000 };
+  const room = bookRoom(FIRST, time);
+  const { tale } = room.adventure;
+  const a = join(room);
+  const rows = a.last('welcome').adventure.book.chests;
+  assert.equal(rows.length, CHESTS_OUT);
+  assert.deepEqual(rows.filter((r) => r[1] === 1).length, 1, 'one golden');
+  assert.ok(rows.every(([i, , open]) => tale.level.chests[i] && open === 0));
+  const [i] = rows.find((r) => r[1] === 1);
+  const spot = tale.level.chests[i];
+  room.receive(a, { t: 'book', op: 'chest', i });
+  assert.equal(a.fx('chest').length, 0, 'too far off');
+  stay(room, time, a, spot.x + 0.6, spot.y, 100);
+  room.receive(a, { t: 'book', op: 'chest', i });
+  assert.deepEqual(a.fx('chest').map((m) => [m.i, m.pid]), [[i, a.pid]]);
+  room.receive(a, { t: 'book', op: 'chest', i });
+  assert.equal(a.fx('chest').length, 1, 'opened once');
+  // Out of a golden one may come a part of the Storybook's soul weapon, for everyone to see.
+  time.t += 2000;
+  room.receive(a, { t: 'soul', op: 'part', w: 'book', i: 5, at: [spot.x, spot.y + 1, 0] });
+  assert.deepEqual(a.all('soul').map((m) => [m.op, m.w, m.i]), [['part', 'book', 5]]);
+  // Gone a while after it was opened, and another turns up later on.
+  stay(room, time, a, spot.x + 0.6, spot.y, CHEST_OPEN_MS + 300);
+  assert.ok(a.fx('chests').some((m) => m.c.length === CHESTS_OUT - 1 && !m.c.some(([k]) => k === i)), 'the opened one gone');
+  stay(room, time, a, spot.x + 0.6, spot.y, CHEST_AGAIN_MS[1] + 500);
+  const now = a.fx('chests').at(-1).c;
+  assert.equal(now.length, CHESTS_OUT);
+  assert.equal(now.filter((r) => r[1] === 1).length, 1, 'a golden one again');
+  // And still to be had once the story is won.
+  room.adventure.won = true;
+  const [j] = now.find(([k]) => k !== i);
+  stay(room, time, a, tale.level.chests[j].x, tale.level.chests[j].y, 100);
+  room.receive(a, { t: 'book', op: 'chest', i: j });
+  assert.equal(a.fx('chest').at(-1).i, j);
 });
 
 test('the boss comes out once every bookmark is lit and someone is on its page, and its stage is won as it pops', () => {

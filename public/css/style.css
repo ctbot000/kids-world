@@ -1959,6 +1959,47 @@ body.touch.playing #joystick {
   font-size: clamp(1.45rem, 4.8vmin, 2.4rem);
 }
 
+/* THE END, written by Fable on a monster it finished off (game.js theEnd): a
+   storybook's last words, in gold, on a ribbon of paper. */
+.float-hit.end span {
+  position: relative;
+  isolation: isolate;
+  padding: 0.2em 0.85em 0.24em;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  font-size: clamp(0.95rem, 3.2vmin, 1.5rem);
+  letter-spacing: 0.05em;
+  --edge: #1f2f8f;
+  animation: end-word 0.36s cubic-bezier(0.2, 1.7, 0.4, 1) both;
+}
+
+.float-hit.end span::before,
+.float-hit.end span::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  clip-path: polygon(0 0, 100% 0, 93% 50%, 100% 100%, 0 100%, 7% 50%);
+}
+
+.float-hit.end span::before {
+  inset: -3px -5px;
+  background: #2f2140;
+}
+
+.float-hit.end span::after {
+  inset: 0;
+  background: linear-gradient(#fffaea, #efdeb4);
+}
+
+@keyframes end-word {
+  from {
+    transform: rotate(var(--tilt, 0deg)) scale(0.2, 0.05);
+  }
+  60% {
+    transform: rotate(var(--tilt, 0deg)) scale(1.12, 1.12);
+  }
+}
+
 @keyframes hit-word {
   from {
     transform: rotate(var(--tilt, 0deg)) scale(0.45);
@@ -1998,6 +2039,7 @@ body.touch.playing #joystick {
 
 @media (prefers-reduced-motion: reduce) {
   .float-hit span,
+  .float-hit.end span,
   .float-hit.crit span::before,
   .float-hit.crit span::after,
   .adv-tag.mon .bar.hit {
@@ -8251,7 +8293,7 @@ body.soul-told #toasts > :not(.sticker) {
 
 .forge-tabs {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 8px;
   margin: 10px 0 12px;
 }
@@ -8494,7 +8536,7 @@ body.soul-told #toasts > :not(.sticker) {
   }
 
   .forge-tabs {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 

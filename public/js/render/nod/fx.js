@@ -104,11 +104,18 @@ const THROWN = {
   cog: () => painted([[new THREE.CylinderGeometry(0.3, 0.3, 0.16, 20), '#e0b060', where()], ...[0, 1, 2, 3, 4, 5, 6, 7].map((i) => [new THREE.BoxGeometry(0.14, 0.15, 0.16), '#c9923e', where(Math.cos(i * 0.785) * 0.34, 0, Math.sin(i * 0.785) * 0.34, 1, 0, -i * 0.785, 0)])]),
   dark: () => painted([[new THREE.IcosahedronGeometry(0.36, 2), '#3a1f66', where()], [new THREE.IcosahedronGeometry(0.2, 1), '#c05cff', where(0.1, 0.1, 0.2)]]),
   // The weapons' souls' own (shared/nod/soul-foes.js): a star, a drop of colour, a
-  // splat of paint, a crescent moon.
+  // splat of paint, a crescent moon, a page, a drop of ink.
   star: () => painted([[starShape(0.46, 0.2), '#ffe27a', where()], [starShape(0.46, 0.2), '#ffc93d', where(0, 0, 0, 1, 0, Math.PI / 2, 0)], [new THREE.IcosahedronGeometry(0.17, 1), '#ffffff', where()]]),
   prism: () => painted([[new THREE.OctahedronGeometry(0.4, 0), ['#ff4b3e', '#ff9330', '#ffd83a', '#3fc95c', '#3a8bff', '#5a4be0', '#b45cf0'][thrownHue++ % 7], where(0, 0, 0, [0.8, 1.2, 0.8])], [new THREE.OctahedronGeometry(0.2, 0), '#ffffff', where()]]),
   paint: () => painted([[new THREE.IcosahedronGeometry(0.3, 2), ['#ff2f62', '#ffe02a', '#22cf63', '#1f9bff', '#ff7ad9'][thrownHue++ % 5], where()], ...[0, 1, 2, 3, 4].map((i) => [new THREE.IcosahedronGeometry(0.1 + (i % 2) * 0.05, 1), ['#ff2f62', '#ffe02a', '#22cf63', '#1f9bff', '#ff7ad9'][(thrownHue + i) % 5], where(Math.cos(i * 1.9) * 0.34, Math.sin(i * 2.7) * 0.34, Math.sin(i * 1.3) * 0.34)])]),
   moon: () => painted([[crescentShape(0.46), '#d8c4ff', where()], [crescentShape(0.36), '#ffffff', where(0.02, 0, 0, [1, 1, 1.4])]]),
+  // A page of a storybook folded into a dart, and a fat drop of ink.
+  page: () => painted([
+    [flatShape([[0, 0.5], [0.36, -0.36], [0, -0.16], [-0.36, -0.36]], 0.04), '#fffaea', where(0, 0, 0, 1, 0.5, 0, 0)],
+    [flatShape([[0, 0.5], [0.36, -0.36], [0, -0.16], [-0.36, -0.36]], 0.04), '#f1e2bc', where(0, 0, 0, 1, -0.5, 0, 0)],
+    ...[0, 1, 2].map((i) => [new THREE.BoxGeometry(0.16 - i * 0.03, 0.02, 0.1), '#4f7dff', where(0, -0.05 + i * 0.1, 0.1, 1, 0.5, 0, 0)]),
+  ]),
+  ink: () => painted([[new THREE.SphereGeometry(0.3, 16, 12), '#2a3fb8', where(0, -0.04, 0)], [new THREE.ConeGeometry(0.2, 0.36, 14), '#2a3fb8', where(0, 0.27, 0)], [new THREE.SphereGeometry(0.08, 10, 8), '#ffd84d', where(0.1, 0.06, 0.24)]]),
 };
 const shotMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, emissive: '#ffffff', emissiveIntensity: 0.35 });
 shotMat.onBeforeCompile = (s) => {

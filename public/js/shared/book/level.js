@@ -37,6 +37,9 @@ export class Level {
     this.movers = [];
     // The crates, by where they are: each { i, x, y, star }.
     this.crates = [];
+    // Where a treasure chest may stand (tale.js chests): each { x (its middle),
+    // y (its foot) }.
+    this.chests = [];
     // What is drawn about for show: each { kind, x, y, s, flip }.
     this.decor = [];
     // The boss's page: { x0, x1, floor, door } and the boss { kind, x, y }.

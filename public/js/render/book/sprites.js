@@ -1,8 +1,8 @@
 // The little pictures of the Storybook (paint.js cut-outs): every kind of foe
 // in each of its looks (skins, the stories' own) in a few drawings each — two
 // steps, squashed flat, and one of its own (wings up, puffed up, down in its
-// hole) — and the stars, bookmarks, platforms, springs, crates, what foes
-// spit, and the things stood about for show. Each painted into a cell px
+// hole) — and the stars, bookmarks, platforms, springs, crates, treasure
+// chests, what foes spit, and the things stood about for show. Each painted into a cell px
 // square, its foot at the cell's foot.
 import { blob, cheeks, cutout, ellipse, eyes, INK, mouth, polygon, rounded, shade, smooth, starPath } from './paint.js';
 
@@ -657,6 +657,61 @@ export function paintCrate(ctx, story, S) {
   ctx.lineTo(S - 16, S - 16);
   ctx.stroke();
   cutout(ctx, starPath(S / 2, S / 2, 14, 7), '#ffd23f', { line: 3, edge: 3, grain: 0 });
+}
+
+// A treasure chest (gold: the golden one), shut or open: a box with bands and a
+// lock, its lid domed; open, the lid thrown back and gold heaped up inside.
+export function paintChest(ctx, S, gold, open) {
+  const wood = gold ? '#ffcb3d' : '#b8723a';
+  const band = gold ? '#c96f1c' : '#f2c34c';
+  const L = S * 0.1;
+  const R = S * 0.9;
+  const w = R - L;
+  const foot = S * 0.95;
+  const rim = S * 0.6;
+  if (open) {
+    // The lid, back, its inside to see; and the treasure heaped up.
+    cutout(ctx, polygon([[L + 3, rim], [L + 8, S * 0.16], [R - 8, S * 0.16], [R - 3, rim]]), shade(wood, -0.42), { line: 4, edge: 6, top: S * 0.16, bottom: rim });
+    ctx.fillStyle = shade(band, -0.3);
+    for (const x of [L + w * 0.2, R - w * 0.2]) ctx.fillRect(x - w * 0.045, S * 0.18, w * 0.09, rim - S * 0.2);
+    cutout(ctx, ellipse(S / 2, rim + 2, w * 0.42, S * 0.14), '#ffd84d', { line: 3, edge: 0, top: rim - S * 0.14, bottom: rim + 6, ink: '#a8590c' });
+    for (const [x, y, r] of [[0.36, -0.06, 0.07], [0.52, -0.1, 0.075], [0.66, -0.05, 0.065], [0.45, 0.0, 0.06], [0.6, 0.01, 0.06]]) cutout(ctx, ellipse(S * x, rim + S * y, S * r, S * r * 0.8), '#ffe98a', { line: 2, edge: 0, grain: 0, ink: '#a8590c' });
+    cutout(ctx, starPath(S * 0.5, rim - S * 0.17, S * 0.07, S * 0.03, 4, 0), '#ffffff', { line: 0, edge: 0, grain: 0 });
+  }
+  // The box.
+  cutout(ctx, rounded(L, rim, w, foot - rim, 7), wood, { line: 4, edge: 6, top: rim, bottom: foot });
+  ctx.strokeStyle = shade(wood, -0.3);
+  ctx.lineWidth = 2.5;
+  for (const y of [rim + (foot - rim) * 0.36, rim + (foot - rim) * 0.7]) {
+    ctx.beginPath();
+    ctx.moveTo(L + 6, y);
+    ctx.lineTo(R - 6, y);
+    ctx.stroke();
+  }
+  for (const x of [L + w * 0.2, R - w * 0.2]) cutout(ctx, rounded(x - w * 0.05, rim + 2, w * 0.1, foot - rim - 4, 3), band, { line: 2, edge: 0, grain: 0 });
+  if (!open) {
+    // The lid, shut: a dome over the box.
+    cutout(ctx, (p) => {
+      p.moveTo(L, rim + 1);
+      p.ellipse(S / 2, rim + 1, w / 2, S * 0.27, 0, Math.PI, 0);
+      p.closePath();
+    }, wood, { line: 4, edge: 6, top: rim - S * 0.27, bottom: rim });
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(S / 2, rim + 1, w / 2 - 2, S * 0.27 - 2, 0, Math.PI, 0);
+    ctx.clip();
+    ctx.fillStyle = band;
+    for (const x of [L + w * 0.2, R - w * 0.2]) ctx.fillRect(x - w * 0.05, rim - S * 0.3, w * 0.1, S * 0.3);
+    ctx.restore();
+    if (gold) for (const [x, c] of [[0.34, '#ff4d6d'], [0.5, '#4fa8ff'], [0.66, '#3ecf74']]) cutout(ctx, ellipse(S * x, rim - S * 0.13, S * 0.045, S * 0.055), c, { line: 2, edge: 0, grain: 0 });
+  }
+  // The lock, with its keyhole.
+  cutout(ctx, rounded(S / 2 - S * 0.08, rim - S * 0.05, S * 0.16, S * 0.17, 4), gold ? '#fff0b0' : '#ffd84d', { line: 3, edge: 0, grain: 0, ink: '#7a4410' });
+  ctx.fillStyle = INK;
+  ctx.beginPath();
+  ctx.arc(S / 2, rim + S * 0.02, S * 0.025, 0, TAU);
+  ctx.fill();
+  ctx.fillRect(S / 2 - S * 0.012, rim + S * 0.02, S * 0.024, S * 0.06);
 }
 
 // ------------------------------------------------ for show

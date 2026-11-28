@@ -100,5 +100,7 @@ export function inkwell() {
 
   m.scatter(['blot', 'quilltuft', 'blot'], 0, m.L.arena.x0, { gap: 3.4 });
   m.scatter(['bottle', 'quill'], 0, m.L.arena.x0, { gap: 14, back: true });
+  // Where its treasure chests may stand (tale.js): each [column, ground].
+  for (const [x, y] of [[25, 5], [49, 5], [68, 5], [80, 9], [91, 7], [120, 5], [155, 6], [191, 10], [205, 10], [226, 7]]) m.chest(x, y);
   return m.done(3);
 }
