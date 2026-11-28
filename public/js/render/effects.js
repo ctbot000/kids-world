@@ -811,6 +811,20 @@ export class Effects {
     }
   }
 
+  // A firework's own burst (blocks.js FIREWORK, gone up from its stick): the
+  // same ball of stars as a freed island's, but all in the one colour the host
+  // picked — a hue on the wheel — with a few white ones in among them to catch
+  // the eye. The stars drift down slowly and fade.
+  burst(x, y, z, color) {
+    for (let i = 0; i < 36; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const up = Math.random() * 2 - 1;
+      const s = 4 + Math.random() * 3;
+      const flat = Math.sqrt(1 - up * up);
+      this.add(i % 3 ? 'star' : 'sparkle', x, y, z, { vx: Math.cos(a) * flat * s, vy: up * s, vz: Math.sin(a) * flat * s, size: 0.35 + Math.random() * 0.2, life: 1.3 + Math.random() * 0.5, gravity: 3, drag: 1.2, color: i % 9 ? color : '#ffffff' });
+    }
+  }
+
   // Little stars going round and round over the head of someone dizzy (one
   // step of it: called every frame), r round (bigger for King Grumble).
   dizzy(x, y, z, t, r = 0.38) {

@@ -743,6 +743,32 @@ export class Sound {
         this.noise(secs, { type: 'bandpass', freq: 2400, sweep: 320, q: 0.9, gain: 0.16, attack: secs * 0.8 });
         break;
       }
+      // A firework's fuse catching (shared/room.js lightFirework): a short dry
+      // fizz of sparks before the whistle of it going up (game.js fireworkLit).
+      case 'fw-fizz':
+        this.noise(0.9, { type: 'highpass', freq: 3400, gain: 0.14, attack: 0.02 });
+        this.noise(0.3, { type: 'bandpass', freq: 5000, sweep: 2600, q: 1.4, gain: 0.1, attack: 0.15 });
+        break;
+      // A firework going up (blocks.js FIREWORK): a whistle rising the whole of
+      // its flight (opts.secs), thin and shrill and ever so slightly warbly,
+      // with a hiss of the sparks under it (game.js fireworkUp).
+      case 'fw-whistle': {
+        const secs = opts.secs ?? 1.4;
+        this.tone(1400 * r(), { attack: 0.06, decay: secs, gain: 0.07, slide: 2600, slideTime: secs * 0.95, type: 'sine', vibrato: 9 });
+        this.noise(secs, { type: 'bandpass', freq: 900, sweep: 3600, q: 1.1, gain: 0.1, attack: secs * 0.7 });
+        break;
+      }
+      // A firework bursting high over the island: a soft, round bang, a little
+      // crackle in it, softer the further off it was (game.js fireworkUp), and
+      // a shower of the sparks it threw out crackling away after.
+      case 'fw-bang': {
+        const near = opts.near ?? 1;
+        this.tone(160 * r(), { decay: 0.3, gain: 0.24 * near, slide: 60, slideTime: 0.26, attack: 0.004 });
+        this.noise(0.28, { type: 'lowpass', freq: 2200, sweep: 300, gain: 0.2 * near });
+        this.noise(0.04, { type: 'highpass', freq: 2600, gain: 0.14 * near, attack: 0.001 });
+        for (let i = 0; i < 5; i++) this.noise(0.04, { at: 0.18 + i * 0.09 + Math.random() * 0.04, type: 'highpass', freq: 3000 + Math.random() * 2000, gain: 0.05 * near });
+        break;
+      }
       // A meteor landing: the deepest boom there is, with rocks raining down
       // after it. opts.near: how close, 1 right there.
       case 'kaboom': {

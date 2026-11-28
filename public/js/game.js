@@ -1086,6 +1086,8 @@ export class Game extends EventTarget {
         if (msg.kind === 'star') this.fallingStar(msg);
         else if (msg.kind === 'blast') this.blast(msg);
         else if (msg.kind === 'fuse') this.fuse(msg);
+        else if (msg.kind === 'fw-light') this.fireworkLit(msg);
+        else if (msg.kind === 'firework') this.fireworkUp(msg);
         else if (msg.kind === 'lob' && msg.pid !== this.pid) this.lobBomb(msg.x, msg.y, msg.z, msg.tx, msg.tz);
         else if (msg.kind === 'bolt') this.boltNews(msg);
         else if (msg.kind === 'meteor' && msg.pid !== this.pid) this.callMeteor(msg.tx, msg.y - 1, msg.tz, Math.atan2(msg.tx - msg.x, msg.tz - msg.z));
@@ -8099,6 +8101,38 @@ export class Game extends EventTarget {
   // a few little sparks off the top of the bomb, so it reads as about to pop.
   fuse(msg) {
     this.renderer.effects.sparkles(msg.x, msg.y, msg.z, 5, ['#ffdf5a', '#ffffff', '#ff8fc4']);
+  }
+
+  // A firework's fuse lit (shared/room.js lightFirework, tapped or swung
+  // at): a fizz and a few sparks at its fuse, the same as a bomb's, and a word
+  // to look up, so the show is not missed.
+  fireworkLit(msg) {
+    this.renderer.effects.sparkles(msg.x, msg.y, msg.z, 5, ['#ffdf5a', '#ffffff', '#ff8fc4']);
+    this.sound.play('fw-fizz');
+    this.emit('toast', { icon: '🎆', text: 'Look up! A firework is going up!' });
+  }
+
+  // A firework going up (shared/room.js stepFireworks, when its fuse burns
+  // out): a bright point with a tail of sparks climbing from where it stood —
+  // the host says where it burst, how high the point it left is (fy), how long
+  // the flight is and the one colour it will burst in — and then, at the top,
+  // a ball of stars in that colour drifting down and fading, and a soft bang
+  // for everyone on the island, softer from far off.
+  fireworkUp(msg) {
+    const fx = this.renderer.effects;
+    const t = Math.max(0.1, msg.flight / 1000);
+    const vy = (msg.y - msg.fy) / t;
+    fx.add('puff', msg.x, msg.fy, msg.z, { vy, size: 0.26, life: t, grow: 0.2, color: '#ffd23f' });
+    fx.add('sparkle', msg.x, msg.fy, msg.z, { vy, size: 0.13, life: t, color: '#ffef9a' });
+    fx.add('sparkle', msg.x, msg.fy, msg.z, { vy, vx: 0.25, size: 0.11, life: t * 0.7, color: '#ffffff', delay: t * 0.3 });
+    this.sound.play('fw-whistle', { secs: t });
+    const color = `hsl(${Math.max(0, Math.min(359, Math.floor(msg.color)))} 100% 65%)`;
+    setTimeout(() => {
+      fx.burst(msg.x, msg.y, msg.z, color);
+      fx.add('puff', msg.x, msg.y, msg.z, { size: 0.5, life: 0.5, grow: 2.2, color: '#ffffff' });
+      const d = this.me ? Math.hypot(this.me.body.x - msg.x, this.me.body.y - msg.y, this.me.body.z - msg.z) : 0;
+      this.sound.play('fw-bang', { near: Math.max(0.4, 1 - d / 160) });
+    }, t * 1000);
   }
 
   // The Bomb Rod's little bomb (shop.js bombrod), lobbed from the hand at

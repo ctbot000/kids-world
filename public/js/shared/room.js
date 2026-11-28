@@ -3735,7 +3735,7 @@ export class Room {
       if (w.get(fw.x, fw.y, fw.z) !== B.FIREWORK) continue;
       w.set(fw.x, fw.y, fw.z, B.AIR);
       this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'pick', cells: [fw.x, fw.y, fw.z, B.AIR] });
-      this.broadcast({ t: 'fx', kind: 'firework', x: fw.x + 0.5, y: fw.y + FIREWORK_HEIGHT, z: fw.z + 0.5, by: fw.by, color: fw.color, flight: FIREWORK_FLIGHT_MS });
+      this.broadcast({ t: 'fx', kind: 'firework', x: fw.x + 0.5, y: fw.y + FIREWORK_HEIGHT, z: fw.z + 0.5, fy: fw.y + 1.1, by: fw.by, color: fw.color, flight: FIREWORK_FLIGHT_MS });
       this.changed();
     }
   }
