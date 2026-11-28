@@ -5,7 +5,7 @@
 // out of the air, a roll, and once you have been brave enough often enough, a
 // Brave Burst.
 import * as THREE from '../../vendor/three.module.js';
-import { bossSays } from '../boss-voice.js';
+import { bossSays, talkLevel } from '../boss-voice.js';
 import { swingOf } from '../render/avatar.js';
 import { LaneMark, Shot, Beam, BurstDome } from '../render/nod/fx.js';
 import { makeFright } from '../render/nod/frights.js';
@@ -183,6 +183,12 @@ export class Fight {
       const come = Math.min(1, (now - f.born) / 700);
       if (g.visible) {
         m.update(stop ? 0 : dt, { state, k: wind, run, kind: a?.k ?? null, look: a?.look ?? null, open: f.open, speed: f.speed, alt: f.alt, come: come < 1 ? 1 - (1 - come) ** 3 + Math.sin(come * Math.PI) * 0.2 : 1, hearts: f.hearts, max: f.max, more: f.more, act: a });
+        // Talking (boss-voice.js): up and wider with each loud bit of its words.
+        const talk = f.spec.boss ? talkLevel(this.g, f.kind) : 0;
+        if (talk > 0 || f.talking) {
+          g.scale.set(1 + 0.06 * talk, 1 + 0.12 * talk, 1 + 0.06 * talk);
+          f.talking = talk > 0;
+        }
         this.nod.blob(m.shadow, { x: f.x + f.up.x * f.alt, y: f.y + f.up.y * f.alt, z: f.z + f.up.z * f.alt }, f.up, f.body);
       } else m.shadow.visible = false;
       flashModel(g, now - f.struckAt < 120);
@@ -1237,7 +1243,7 @@ export class Fight {
     if (f.spec.boss) {
       g.sound.play('nod-bosspop');
       g.renderer.shake(0.8);
-      bossSays(g, f.kind, 'after');
+      bossSays(g, f.kind, 'after', '', { at: add(f, f.up, f.alt + f.spec.height + 0.9) });
       this.domes.push(new BurstDome(this.scene, c, 14, '#ffe27a', 1400));
     }
     // What it drops, on the ground of its body (shared/loot.js).

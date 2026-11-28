@@ -2,6 +2,7 @@
 // hotbar, the toy box, talking and emotes, name tags and speech bubbles,
 // settings, stickers, the ranking, help, logging in and full screen. Big
 // buttons, pictures first, few words.
+import { speaking } from './boss-voice.js';
 import * as B from './shared/blocks.js';
 import { ARCADE_GAMES, FACES as CARD_FACES } from './shared/arcade.js';
 import { BLACK, GAMES as BOARD_GAMES, gameOf, lessonsOf, NO_MOVE, placeName, WHITE } from './shared/go.js';
@@ -307,12 +308,6 @@ const RANKING_WORLDS = [
 // ⭐N, with the level said aloud on a hover.
 const levelTag = (look) => (look?.level ? h('span', { class: 'tag-level', title: `Level ${look.level}` }, `⭐${look.level} `) : null);
 
-// No more than four things told at a time: the oldest goes, but never a line
-// still being said (speech).
-function trimToasts() {
-  const box = $('toasts');
-  while (box.children.length > 4) ([...box.children].find((e) => !e.classList.contains('speech')) ?? box.firstElementChild).remove();
-}
 
 export class UI {
   constructor({ profile, isle = null, sound, atlas, input }) {
@@ -429,18 +424,8 @@ export class UI {
     const el = h('div', { class: `toast ${kind}` }, h('span', { class: 'icon' }, icon), h('span', {}, text));
     el.told = { what: [icon, text, kind], at: performance.now() };
     $('toasts').append(el);
-    trimToasts();
+    while ($('toasts').children.length > 4) $('toasts').firstElementChild.remove();
     setTimeout(() => el.remove(), 4100);
-  }
-
-  // A boss saying something out loud (boss-voice.js): its words at the top,
-  // under its name in its own colour, for as long as they take to say.
-  speech({ who, name, icon, color, text, secs }) {
-    const el = h('div', { class: 'toast speech', style: `--who:${color};animation-duration:${(secs + 0.9).toFixed(2)}s`, 'data-who': who }, h('span', { class: 'speaker' }, `${icon} ${name}`), h('span', { class: 'said' }, `“${text}”`));
-    // (First, over whatever else is being told, and kept till it is said.)
-    $('toasts').prepend(el);
-    trimToasts();
-    setTimeout(() => el.remove(), (secs + 1) * 1000);
   }
 
   // A reward for something you did, over where you did it: a popped
@@ -4122,7 +4107,6 @@ export class UI {
     });
     on('undo', () => this.buildToolbar());
     on('toast', (e) => this.toast(e.detail.icon, e.detail.text));
-    on('speech', (e) => this.speech(e.detail));
     on('reward', (e) => this.reward(e.detail));
     // What a popped monster dropped, come to you (game.js lootShown), and the
     // bricks one marching on a tower defense island was worth.
@@ -4177,6 +4161,8 @@ export class UI {
     this.advTags.clear();
     for (const f of this.floats.values()) f.el.remove();
     this.floats.clear();
+    this.bossSpeech?.remove();
+    this.bossSpeech = null;
     $('chatlog').replaceChildren();
     this.closeModal();
   }
@@ -8851,6 +8837,40 @@ export class UI {
   // On Adventure Isle: over each camp near you, how its flag is going (or
   // what to do there), and over the lair's boss (the chapter's), its hearts
   // (or its bubble); over any other monster, its hearts.
+  // A boss saying something (boss-voice.js speaking): its words in a speech
+  // bubble over its head, over its name tag, its name on the bubble in its
+  // own colour, following it about as the tags do, and over anything else
+  // being told. Its head off the top of the screen, the bubble stays just in
+  // it, over the boss; the boss behind you, at the top.
+  bossBubble(g, r) {
+    const s = speaking(g);
+    const key = s ? `${s.who}|${s.when}|${s.start}` : '';
+    if (this.bossSpeech?.dataset.key !== key) {
+      this.bossSpeech?.remove();
+      this.bossSpeech = null;
+      if (!s) return;
+      const el = h('div', { class: 'boss-bubble', style: `--who:${s.color}`, 'data-who': s.who }, h('div', { class: 'bubble boss' }, h('span', { class: 'speaker' }, `${s.icon} ${s.name}`), h('span', { class: 'said' }, s.text)));
+      el.dataset.key = key;
+      // (Over everything else told just then: its own layer, over the toasts.)
+      document.body.append(el);
+      this.bossSpeech = el;
+    }
+    if (!s) return;
+    const el = this.bossSpeech;
+    const w = r.canvas.clientWidth;
+    const ht = r.canvas.clientHeight;
+    // (In front of the camera, its head on the screen or just off it: kept on
+    // the screen, over where it is. Behind you: at the top.)
+    const cam = r.camera;
+    const ahead = s.p && cam.getWorldDirection(new cam.position.constructor()).dot(new cam.position.constructor(s.p.x, s.p.y, s.p.z).sub(cam.position)) > 0;
+    const scr = ahead ? r.project(s.p.x, s.p.y, s.p.z) : null;
+    const on = Boolean(scr) && scr.x > 0 && scr.x < w && scr.y > 0 && scr.y < ht;
+    // (Never up under the top bar.)
+    const top = el.firstElementChild.offsetHeight + 52 + 74;
+    el.classList.toggle('edge', !on);
+    el.style.transform = scr ? `translate(${Math.max(w * 0.16, Math.min(w * 0.84, scr.x))}px, ${Math.max(top, Math.min(ht - 90, scr.y))}px) translate(-50%, calc(-100% - 52px))` : `translate(${w / 2}px, 96px) translate(-50%, 0)`;
+  }
+
   adventureTags(g, r) {
     const seen = new Set();
     const adv = g.adventure;
@@ -9093,6 +9113,7 @@ export class UI {
     this.rideButton(g, r);
     this.defendButton(g, r);
     this.adventureTags(g, r);
+    this.bossBubble(g, r);
     // The floats (a reward, a blow's word): each up out of the world where it
     // happened and gone, a second or so on.
     for (const [key, f] of this.floats) {

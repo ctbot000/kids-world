@@ -38,7 +38,7 @@ import { cleanStage, HELP_REACH } from './shared/adventure.js';
 import { chapterOf, ticketOf, ticketsHeld, tokensBack, toldKey } from './shared/isle-story.js';
 import { questBeaten, questFrame, questFx, readQuests, readRow } from './isle-quests-view.js';
 import { battleFrame, battleFx, battleWon, fogNews, fogSeen, readBattleRow, readBattles, readFog } from './isle-battles-view.js';
-import { bossSays } from './boss-voice.js';
+import { bossHeard, bossSays, bossVoiceFrame, talkLevel } from './boss-voice.js';
 import { NodGame } from './nod/nod-game.js';
 import { BookGame } from './book/book-game.js';
 import { bossSpec as bookBossSpec } from './shared/book/bosses.js';
@@ -996,6 +996,10 @@ export class Game extends EventTarget {
         break;
       case 'won':
         this.islandWon(msg);
+        break;
+      // A boss starting its first words on a friend's page (boss-voice.js).
+      case 'bossays':
+        bossHeard(this, msg);
         break;
       case 'next':
         this.setNextStage(msg);
@@ -3329,6 +3333,16 @@ export class Game extends EventTarget {
         m.group.scale.setScalar(entry.grown);
       }
       this.posePounce(entry, m, s.state, stopped ? 0 : dt);
+      // Talking (boss-voice.js): up and wider with each loud bit of its words.
+      const talk = talkLevel(this, entry.kind);
+      if (talk > 0 || entry.talking) {
+        if (!entry.posed && entry.kind !== 'king' && entry.baseScale) m.group.scale.copy(entry.baseScale);
+        if (talk > 0) {
+          m.group.scale.set(m.group.scale.x * (1 + 0.06 * talk), m.group.scale.y * (1 + 0.12 * talk), m.group.scale.z * (1 + 0.06 * talk));
+          m.group.position.y += 0.15 * talk;
+        }
+        entry.talking = talk > 0;
+      }
       const flash = flashOn((entry.flashUntil ?? 0) - now);
       if (flash || entry.flashed) flashModel(m.group, flash);
       entry.flashed = flash;
@@ -3840,7 +3854,7 @@ export class Game extends EventTarget {
     const boss = this.bossInfo();
     // The boss popped, after its battle (a fright of the Land of Nod says its
     // as it goes: nod/fight.js).
-    if (msg.hero && !adv?.nod) bossSays(this, boss.kind, 'after');
+    if (msg.hero && !adv?.nod) bossSays(this, boss.kind, 'after', '', { at: Number.isFinite(msg.x) && Number.isFinite(msg.y) && Number.isFinite(msg.z) ? { x: msg.x, y: msg.y + (boss.body?.height ?? 2) + 1.1, z: msg.z } : null });
     const quests = Boolean(adv?.quests);
     const battles = Boolean(adv?.battles);
     const nod = Boolean(adv?.nod);
@@ -4193,16 +4207,10 @@ export class Game extends EventTarget {
       // or Toon Isle's battles' sparks and glints.)
       if (adv.quests) questFrame(this, now);
       if (adv.battles) battleFrame(this, now);
-      // Come along after the boss's bubble popped: it says what it had to
-      // say as you come near it.
-      if (!adv.shield && !adv.won && adv.camps.size && now >= (this.bossNearAt ?? 0)) {
-        this.bossNearAt = now + 500;
-        const boss = this.bossInfo();
-        for (const e of this.monsters.values()) {
-          const p = e.model.group.position;
-          if (e.kind === boss.kind && this.near(p.x, p.y, p.z, 40)) bossSays(this, boss.kind, 'before');
-        }
-      }
+      // Come along after the boss's bubble popped: it has something to say
+      // as soon as you see it (boss-voice.js).
+      if (!adv.shield && !adv.won && adv.camps.size) bossSays(this, this.bossInfo().kind, 'before');
+      bossVoiceFrame(this, now);
     }
     while (this.fireworks.length && this.fireworks[0].at <= now) {
       const f = this.fireworks.shift();
@@ -9175,6 +9183,14 @@ export class Game extends EventTarget {
       if (m.group.visible) {
         const ground = this.renderer.groundUnder(s.x, s.y, s.z);
         m.update(dt, state, moving, ground === null ? 9 : s.y - ground);
+        // Jinx talking (boss-voice.js): up and wider with his words.
+        const talk = c.type === 'magpie' ? talkLevel(this, 'jinx') : 0;
+        if (talk > 0 || c.talking) {
+          const base = (c.talkBase ??= m.group.scale.clone());
+          m.group.scale.set(base.x * (1 + 0.08 * talk), base.y * (1 + 0.16 * talk), base.z * (1 + 0.08 * talk));
+          m.group.position.y += 0.12 * talk;
+          c.talking = talk > 0;
+        }
         this.renderer.placeShadow(m.shadow, s.x, s.y, s.z, 1);
         m.shadow.visible = m.shadow.visible && m.hasShadow;
       } else {

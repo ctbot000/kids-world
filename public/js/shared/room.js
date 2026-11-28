@@ -42,6 +42,7 @@ import { FIG_HEARTS, isMonsterGashapon, kindsOfFigures } from './gashapon.js';
 import { cleanDishFood, DISH_MAX, isDish } from './dish.js';
 import { CHEST_REACH, isGoldChest } from './treasure.js';
 import { isBeast } from './beasts.js';
+import { BOSS_LINES } from './boss-lines.js';
 import { isBoss } from './bosses.js';
 import { ARM_REACH, BOP_SLACK, bopGap, BUMP_HP, GHOST_FIRE, hpAfterBump, hpBack, isHeavy, KING_PUSH, KING_REACH, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, SPORES, STOMP } from './monsters.js';
 import { BOSS_LOOT_MS, HEART_HP, HELP_MS, Loot, lootOf, lootSpots, nodLootSpots, packLoot, TAKE_SLACK } from './loot.js';
@@ -589,6 +590,11 @@ export class Room {
         break;
       case 'emote':
         if (EMOTE_KEYS.includes(msg.e)) this.broadcast({ t: 'emote', pid, e: msg.e });
+        break;
+      // A boss on the isle starting to say its first words, as someone there
+      // sees it (boss-voice.js): everyone else near it sees it say them too.
+      case 'bossays':
+        if (this.adventure && typeof msg.who === 'string' && Object.hasOwn(BOSS_LINES, msg.who) && msg.when === 'before' && typeof msg.where === 'string' && msg.where.length <= 12) this.broadcast({ t: 'bossays', who: msg.who, when: msg.when, where: msg.where, by: pid }, conn);
         break;
       // A hula hoop spun round the waist (critters.js hoop), and dropped:
       // everyone's copy of the island draws the hoop at their friend's waist,

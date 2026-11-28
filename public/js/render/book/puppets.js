@@ -77,8 +77,8 @@ export class Puppet {
   }
 
   // Each frame, as the boss's moves say it is now (bossAt: pose); null for
-  // not about.
-  update(dt, pose) {
+  // not about. talk: how much it is talking just now, 0 to 1 (boss-voice.js).
+  update(dt, pose, talk = 0) {
     this.time += dt;
     const m = this.mesh;
     if (!pose || pose.hide) {
@@ -165,6 +165,10 @@ export class Puppet {
       y += k * 2.5;
       alpha = 1 - Math.max(0, k - 0.7) / 0.3;
     }
+    // Talking: up and wider with each loud bit of its words.
+    sx *= 1 + 0.06 * talk;
+    sy *= 1 + 0.12 * talk;
+    y += 0.12 * talk;
     m.position.set(x, y, 0.15);
     m.rotation.z = rot;
     m.scale.set(sp.w * sx * (face < 0 ? -1 : 1), sp.h * sy, 1);

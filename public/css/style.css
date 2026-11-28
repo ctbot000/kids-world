@@ -1621,6 +1621,43 @@ body.touch.playing #joystick {
   font-size: 0.95rem;
 }
 
+/* A boss saying something (ui.js bossBubble): a bigger bubble than a
+   player's, over its head and its name tag, its name on the bubble in its
+   own colour; with nowhere to point (the boss off the screen), no tail. */
+.boss-bubble {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 31;
+  pointer-events: none;
+}
+
+.bubble.boss {
+  max-width: min(78vw, 340px);
+  padding: 18px 18px 10px;
+  border: 3px solid var(--who, white);
+  font-size: 1.15rem;
+  overflow-wrap: normal;
+}
+
+.bubble.boss .speaker {
+  position: absolute;
+  top: -15px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 12px;
+  border-radius: 999px;
+  background: var(--who, white);
+  color: #2a1e3a;
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.boss-bubble.edge .bubble::after {
+  display: none;
+}
+
 .bubble::after {
   content: '';
   position: absolute;
@@ -2281,35 +2318,6 @@ body.touch.playing #joystick {
 
 .toast.warn {
   background: #ffe3e3;
-}
-
-/* A boss saying something out loud (ui.js speech): its words under its name,
-   in its own colour, on the dark, as the films show what is said. */
-.toast.speech {
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  margin-top: 14px;
-  padding: 18px 22px 12px;
-  position: relative;
-  background: rgba(24, 18, 40, 0.86);
-  border: 3px solid var(--who, #ffffff);
-  color: #fffaf0;
-  font-size: 1.15rem;
-  text-align: center;
-}
-
-.toast.speech .speaker {
-  position: absolute;
-  top: -15px;
-  left: 18px;
-  padding: 3px 12px;
-  border-radius: 999px;
-  background: var(--who, #ffffff);
-  color: #2a1e3a;
-  font-size: 0.85rem;
-  font-weight: 700;
-  white-space: nowrap;
 }
 
 /* Invitations to a friend's island, over everything but the loading screen,

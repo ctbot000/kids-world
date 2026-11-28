@@ -125,6 +125,15 @@ export class Sound {
     const g = this.ctx.createGain();
     g.gain.value = this.sfxLevel * VOICE_GAIN;
     src.connect(g).connect(this.master);
+    // (Listened to, for how loud it is just now: voiceLevel.)
+    if (!this.meter) {
+      this.meter = Object.assign(this.ctx.createAnalyser(), { fftSize: 512 });
+      // (Kept running by leading somewhere, at no loudness at all.)
+      const none = this.ctx.createGain();
+      none.gain.value = 0;
+      this.meter.connect(none).connect(this.ctx.destination);
+    }
+    src.connect(this.meter);
     this.talking = (this.talking ?? 0) + 1;
     this.setLevels({});
     src.onended = () => {
@@ -133,6 +142,16 @@ export class Sound {
     };
     src.start();
     return buf.duration;
+  }
+
+  // How loud the words being said are just now (say), about 0 to 1.
+  voiceLevel() {
+    if (!this.meter || !this.talking) return 0;
+    const a = (this.meterBuf ??= new Float32Array(this.meter.fftSize));
+    this.meter.getFloatTimeDomainData(a);
+    let sum = 0;
+    for (const v of a) sum += v * v;
+    return Math.min(1, Math.sqrt(sum / a.length) * 5);
   }
 
   // The music quiet while something else plays (a live show on a TV), or

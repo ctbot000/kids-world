@@ -664,3 +664,20 @@ test('the server lists its public adventure island and anyone can come and conqu
   assert.equal(listed.find((i) => i.code === isle.code).players, 1, 'the conquered one waits for its player');
   ws.close();
 });
+
+// A boss starting its first words on one page, as its player sees it
+// (boss-voice.js): the island tells everyone else, so that whoever is near it
+// sees it talk too — and passes on nothing but a real boss's first words.
+test('a boss’s first words, seen on one page, are told to everyone else on the isle', () => {
+  const { rooms } = isle();
+  const [entry] = [...rooms.values()];
+  const room = entry.room;
+  const a = join(room, 'Happy Panda');
+  const b = join(room, 'Brave Fox');
+  const told = () => b.inbox.filter((m) => m.t === 'bossays');
+  room.receive(a, { t: 'bossays', who: 'clawbeard', when: 'before', where: '' });
+  assert.deepEqual(told().at(-1), { t: 'bossays', who: 'clawbeard', when: 'before', where: '', by: a.pid });
+  assert.equal(a.inbox.filter((m) => m.t === 'bossays').length, 0, 'not back to whoever saw it');
+  for (const bad of [{ who: 'nobody', when: 'before', where: '' }, { who: 'clawbeard', when: 'after', where: '' }, { who: 'clawbeard', when: 'before', where: 'x'.repeat(13) }, { who: 'toString', when: 'before', where: '' }, { who: 1, when: 'before', where: '' }]) room.receive(a, { t: 'bossays', ...bad });
+  assert.equal(told().length, 1);
+});

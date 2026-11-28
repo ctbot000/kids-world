@@ -384,7 +384,7 @@ export class BookView {
     const b = state.boss;
     const on = b && (state.bossState === 'on' || b.phase === 'beaten');
     const pose = on ? bossAt(b, t, this.level.arena) : null;
-    this.puppet.update(1 / 60, pose);
+    this.puppet.update(1 / 60, pose, state.talk ?? 0);
     if (this.flood) {
       const f = pose?.flood ?? 0;
       this.flood.visible = f > 0.02;

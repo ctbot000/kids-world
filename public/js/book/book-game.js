@@ -6,7 +6,7 @@
 // open, its bookmarks, its boss — and friends drawn where they are, a moment
 // behind. What happens that matters to everyone, the island is told
 // (room.js bookOp) and tells everyone.
-import { bossSays } from '../boss-voice.js';
+import { bossSays, talkLevel } from '../boss-voice.js';
 import { ANIM } from '../render/avatar.js';
 import { advanceTime } from '../shared/env.js';
 import { bossAt, bossSpec, unpackBoss } from '../shared/book/bosses.js';
@@ -137,7 +137,7 @@ export class BookGame {
 
   // What the picture needs to know of it all (render/book/view.js).
   state(t = this.clock()) {
-    return { t, fast: this.fast, gone: this.gone, popping: this.popping, broken: this.broken, got: this.got, lit: this.lit, boss: this.boss, bossState: this.bossState, cam: this.cam };
+    return { t, fast: this.fast, gone: this.gone, popping: this.popping, broken: this.broken, got: this.got, lit: this.lit, boss: this.boss, bossState: this.bossState, cam: this.cam, talk: this.boss ? talkLevel(this.g, this.boss.kind) : 0 };
   }
 
   // What the keys (or the thumb) say: left and right, jump, down, run.
