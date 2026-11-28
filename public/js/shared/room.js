@@ -450,11 +450,12 @@ export class Room {
       // or built over) stops it.
       if (after === B.BOMB) this.bombs.set(k, { x, y, z, by: this.bombPlacer ?? 0, at: this.now() + this.between(BOMB_FUSE_MS), next: this.now() });
       else if (before === B.BOMB) this.bombs.delete(k);
-      // A firework put down (blocks.js FIREWORK) waits unlit until someone
-      // lights it (lightFirework); one taken away goes with its block, so undo
-      // of an unlit one leaves nothing to rise. Once launched, the entry is
-      // gone before the block is, and its flight carries on to its burst.
-      if (after === B.FIREWORK) this.fireworks.delete(k);
+      // A firework taken away (picked up, undone, or built over) goes with
+      // its block, so undo of an unlit one leaves nothing to rise. One put
+      // down waits unlit until someone lights it (lightFirework); when it
+      // launches, the entry is dropped first and the flight told, so it does
+      // not matter that the block goes a moment later.
+      if (before === B.FIREWORK && after !== B.FIREWORK) this.fireworks.delete(k);
       // Water or ice put down on a volcano island is not there to stay.
       if (volcano) {
         if (after === B.WATER) this.melts.set(k, { x, y, z, at: this.now() + this.between(BOIL_MS), to: B.AIR });
@@ -754,6 +755,12 @@ export class Room {
       // faces, a few steps off, and pops at once.
       case 'bomb':
         this.rodBlast(p, msg);
+        break;
+      // A firework tapped or swung at to light it (blocks.js FIREWORK): its
+      // fuse fizzles for everyone, then up it goes to burst over the island
+      // (lightFirework, stepFireworks).
+      case 'firework':
+        this.lightFirework(p, msg);
         break;
       case 'potion':
         this.drank(p);
@@ -1791,6 +1798,7 @@ export class Room {
     this.farm(now);
     this.nature(now);
     this.stepBombs(now);
+    this.stepFireworks(now);
     this.stepRodBombs(now);
     this.stepVolcano(now);
   }
@@ -3656,6 +3664,49 @@ export class Room {
       for (let i = 0; i < plan.cells.length; i += 4) w.set(plan.cells[i], plan.cells[i + 1], plan.cells[i + 2], plan.cells[i + 3]);
       this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'pick', cells: plan.cells });
       this.broadcast({ t: 'fx', kind: 'blast', x: bomb.x + 0.5, y: bomb.y + 0.5, z: bomb.z + 0.5, by: bomb.by, gems: plan.collected });
+      this.changed();
+    }
+  }
+
+  // A firework lit (blocks.js FIREWORK, tapped or swung at): its fuse
+  // fizzles for everyone where it stands, and the island takes it from there —
+  // when it goes off, the flight and burst are told to everyone
+  // (stepFireworks). Only one standing right there can light it, and only
+  // once: a second tap at a burning fuse does nothing.
+  lightFirework(p, msg) {
+    if (!Array.isArray(msg.at) || !msg.at.every(Number.isInteger)) return;
+    if (Math.hypot(p.s[0] - msg.at[0] - 0.5, p.s[2] - msg.at[2] - 0.5) > REACH + 1 || Math.abs(p.s[1] - msg.at[1]) > 4) return;
+    const w = this.world;
+    if (w.get(...msg.at) !== B.FIREWORK) return;
+    const k = w.index(...msg.at);
+    if (this.fireworks.has(k)) return;
+    const now = this.now();
+    // One colour for the burst, picked now and sent with it, so everyone on
+    // the island sees the same one: a hue on the wheel.
+    this.fireworks.set(k, { x: msg.at[0], y: msg.at[1], z: msg.at[2], by: p.id, at: now + this.between(FIREWORK_FUSE_MS), next: now, color: Math.floor(this.random() * 360) });
+    this.broadcast({ t: 'fx', kind: 'fw-light', x: msg.at[0] + 0.5, y: msg.at[1] + 1.1, z: msg.at[2] + 0.5, by: p.id });
+  }
+
+  // Fireworks lit (blocks.js FIREWORK): while the fuse burns its spark
+  // fizzles for everyone as a bomb's does; then the block goes as an edit by
+  // the island itself — a pick of that one cell, so it digs nothing and harms
+  // nothing built, planted, furnished or anyone — and the rocket's flight and
+  // burst are told, high over where it stood.
+  stepFireworks(now) {
+    const w = this.world;
+    for (const [k, fw] of [...this.fireworks]) {
+      if (fw.at > now) {
+        if (fw.next > now) continue;
+        fw.next = now + BOMB_SPARK_MS;
+        if (w.get(fw.x, fw.y, fw.z) === B.FIREWORK) this.broadcast({ t: 'fx', kind: 'fuse', x: fw.x + 0.5, y: fw.y + 1.1, z: fw.z + 0.5 });
+        continue;
+      }
+      this.fireworks.delete(k);
+      // Picked up or built over before it went off: nothing to rise.
+      if (w.get(fw.x, fw.y, fw.z) !== B.FIREWORK) continue;
+      w.set(fw.x, fw.y, fw.z, B.AIR);
+      this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'pick', cells: [fw.x, fw.y, fw.z, B.AIR] });
+      this.broadcast({ t: 'fx', kind: 'firework', x: fw.x + 0.5, y: fw.y + FIREWORK_HEIGHT, z: fw.z + 0.5, by: fw.by, color: fw.color, flight: FIREWORK_FLIGHT_MS });
       this.changed();
     }
   }
