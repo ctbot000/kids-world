@@ -354,8 +354,9 @@ export class Profile extends EventTarget {
 
   // ------------------------------------------------ soul weapons (souls.js)
 
-  // A golden chest opened on an island of the isle (place: souls.js placeOf):
-  // the part it holds for you, of its episode's weapon (key), now yours —
+  // A golden chest opened on an island of the isle (place: souls.js placeOf), or
+  // one of its wooden ones (souls.js woodOf): the part it holds for you, of its
+  // episode's weapon (key), now yours —
   // { key, i, fresh, spare, have (how many of it you have now), found (how many
   // of its parts) } — or null when it holds none for you. (Counted once it is seen,
   // partSeen: its sticker would give it away.)

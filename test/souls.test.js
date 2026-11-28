@@ -1,6 +1,7 @@
 // The soul weapons of Adventure Isle (shared/souls.js): seven no shop sells, one for
-// each episode of its story, in pieces in the golden chests of its stages. Which
-// part a chest holds, and never a whole weapon out of one game; putting one together
+// each episode of its story, in pieces in the golden chests of its stages (and very
+// rarely in a wooden one). Which part a chest holds, and never a whole weapon out of
+// one game; putting one together
 // and beating its soul, alone, on a world of its own (nod/duel.js); combining them
 // and taking them apart; and what each does at the host, and in the hand.
 import assert from 'node:assert/strict';
@@ -168,6 +169,73 @@ test('the last part is never in the one game that had all the rest, and nobody i
   for (let n = 1; n <= 200; n++) assert.ok([6, 7].includes(S.drawPart(unlucky, 'star', place(3, 1), dice(n * 7919)).i));
   S.takePart(unlucky, 'star', 6, place(3, 1));
   assert.equal(unlucky.dupes.star, undefined, 'and it counts from the start again');
+});
+
+test('very rarely a wooden chest holds a part too: one on an island at most, over and above its golden chest’s, under the same rules', () => {
+  // One chest in fifty, about.
+  assert.ok(S.WOOD_PART_CHANCE <= 1 / 25, 'very rarely');
+  const rand = dice(11);
+  let lucky = 0;
+  for (let n = 0; n < 20000; n++) if (S.woodPartRoll(rand)) lucky++;
+  assert.ok(Math.abs(lucky / 20000 - S.WOOD_PART_CHANCE) < 0.005, `${lucky} in 20000`);
+  // As sure as a test needs it, as for critical hits.
+  const luck = globalThis.kidsWorldLuck;
+  try {
+    globalThis.kidsWorldLuck = 0;
+    assert.ok(![0, 0.001, 0.5].some((r) => S.woodPartRoll(() => r)));
+    globalThis.kidsWorldLuck = 1;
+    assert.ok([0, 0.5, 0.999].every((r) => S.woodPartRoll(() => r)));
+  } finally {
+    if (luck === undefined) delete globalThis.kidsWorldLuck;
+    else globalThis.kidsWorldLuck = luck;
+  }
+  // Over and above the golden chest's, which waits for them still; and no more
+  // out of that island's wooden ones.
+  const souls = S.emptySouls();
+  const wood = S.woodOf(place(1, 20));
+  assert.equal(wood, '1/1:w20');
+  assert.equal(S.woodOf(S.placeOf({ code: '123456', stage: 3 })), 'c123456:w3');
+  const got = S.drawPart(souls, 'wild', wood, rand);
+  assert.ok(got.fresh && !got.spare);
+  S.takePart(souls, 'wild', got.i, wood);
+  assert.ok(S.partWaits(souls, 'wild', place(1, 20)), 'the golden chest has its part still');
+  assert.equal(S.drawPart(souls, 'wild', wood, rand), null, 'one wooden chest’s an island');
+  assert.ok(S.partWaits(souls, 'wild', S.woodOf(place(1, 21))) && S.partWaits(souls, 'wild', S.woodOf(place(2, 20))));
+  S.takePart(souls, 'wild', S.drawPart(souls, 'wild', place(1, 20), rand).i, place(1, 20));
+  assert.ok(!S.partWaits(souls, 'wild', place(1, 20)) && !S.partWaits(souls, 'wild', wood));
+  // Kept so, at the keeper and for a guest.
+  assert.deepEqual(S.cleanSouls(souls).got.wild, [wood, place(1, 20)]);
+  assert.deepEqual(S.addSouls(S.emptySouls(), souls).got.wild, [wood, place(1, 20)]);
+  // Of its game: the last part is never in a wooden chest of the one game that
+  // had all the rest either, and one out of another game counts as that game.
+  const last = S.emptySouls();
+  last.parts.toon = [1, 1, 1, 1, 1, 0];
+  last.got.toon = [place(4, 30), S.woodOf(place(4, 30)), place(4, 31), place(4, 32), place(4, 33)];
+  for (let n = 1; n <= 300; n++) assert.notEqual(S.drawPart(last, 'toon', S.woodOf(place(4, 34)), dice(n * 7919)).i, 5);
+  last.got.toon = [S.woodOf(place(3, 32)), place(4, 30), place(4, 31), place(4, 32), place(4, 33)];
+  let found = 0;
+  for (let n = 1; n <= 300; n++) if (S.drawPart(last, 'toon', place(4, 34), dice(n * 7919)).i === 5) found++;
+  assert.ok(found > 0, 'two games, with the wooden chest’s');
+  // Over whole games, even for the luckiest, a part out of a wooden chest on every
+  // island as well: never a whole weapon out of one.
+  for (const w of S.SOULS) {
+    const stages = stagesOf(w.episode);
+    for (let seed = 1; seed <= 60; seed++) {
+      const souls = S.emptySouls();
+      const rand = dice(seed * 104729 + w.episode);
+      let game = 0;
+      while (!S.canForge(souls, w.key)) {
+        game++;
+        for (let stage = 1; stage <= stages && !S.canForge(souls, w.key); stage++) {
+          for (const at of [S.woodOf(place(game, stage)), place(game, stage)]) {
+            const got = S.drawPart(souls, w.key, at, rand);
+            if (got) S.takePart(souls, w.key, got.i, at);
+          }
+        }
+      }
+      assert.ok(game >= 2, `${w.name}: never out of one game`);
+    }
+  }
 });
 
 test('a part to spare melts into coins, and never the last one the weapon wants', () => {
@@ -423,7 +491,7 @@ test('Fable writes THE END on a monster it leaves with no more hearts than one m
   assert.ok(S.soulWeapon(key(S.idOf(['star', 'book']))).end);
 });
 
-test('a part out of a golden chest is for whoever opened it, for everyone there to see; nothing touches them as they look', () => {
+test('a part out of a chest is for whoever opened it, for everyone there to see; nothing touches them as they look', () => {
   const time = { t: 1_000_000 };
   const room = new Room({ code: '717171', adventure: true, shared: true, stage: 1, seed: 9, now: () => time.t });
   const join = (name) => {
@@ -458,6 +526,14 @@ test('a part out of a golden chest is for whoever opened it, for everyone there 
   time.t += 2000;
   room.receive(a, { t: 'soul', op: 'part', w: 'star', i: 3, at: p.s.slice(0, 3) });
   assert.equal(said().length, 1, 'one a chest');
+  // Very rarely one comes out of a wooden chest too.
+  const wood = room.adventure.chests.list.find((o) => !o.gold && !o.openedAt);
+  p.s = [wood.x + 0.5, wood.y, wood.z + 1.5, 0, 0, 0];
+  room.receive(a, { t: 'chest', at: [wood.x, wood.y, wood.z] });
+  assert.ok(wood.openedAt > 0);
+  time.t += 3000;
+  room.receive(a, { t: 'soul', op: 'part', w: 'star', i: 4, at: [wood.x + 0.5, wood.y + 0.5, wood.z + 0.5] });
+  assert.deepEqual(said().map(({ op, pid, i }) => [op, pid, i]), [['part', a.pid, 2], ['part', a.pid, 4]]);
   // What is done with them at the forge is told too, not too often.
   time.t += 2000;
   room.receive(a, { t: 'soul', op: 'forged', w: 'star' });
@@ -471,7 +547,7 @@ test('a part out of a golden chest is for whoever opened it, for everyone there 
     time.t += 2000;
     room.receive(a, { t: 'soul', ...bad });
   }
-  assert.deepEqual(said().slice(1).map((m) => [m.op, m.w ?? m.key]), [['forged', 'star'], ['won', 'star'], ['fused', 'soul:star+nod']]);
+  assert.deepEqual(said().slice(2).map((m) => [m.op, m.w ?? m.key]), [['forged', 'star'], ['won', 'star'], ['fused', 'soul:star+nod']]);
 });
 
 // ---------------------------------------------------------------- the souls

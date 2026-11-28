@@ -59,7 +59,8 @@ const skip = CHROME ? false : 'Chrome not found; set CHROME_PATH';
 
 // No swing is a critical hit (crits.js) on the islands of the server here, nor
 // on those in the pages (openPlayer), unless a test says otherwise: a blow
-// takes just what the test counts on it taking.
+// takes just what the test counts on it taking. Nor, in the pages, does a
+// wooden chest hold a part of a soul weapon (souls.js woodPartRoll).
 globalThis.kidsWorldLuck = 0;
 
 // E2E_SHARD=k/n runs every nth test, from the kth on (counting from 0), so
@@ -148,7 +149,8 @@ async function openPlayer(url, profile = {}, init = null) {
   // And in a hurry: the seconds a player never notices, before the keeper is first called,
   // between saves and between asking for a list again, are a tenth as long (see hurry.js).
   await page.evaluateOnNewDocument(() => (window.kidsWorldHurry = true));
-  // And never a critical hit on an island in the page, unless init says so.
+  // And never a critical hit on an island in the page, nor a soul weapon's part in
+  // a wooden chest, unless init says so.
   await page.evaluateOnNewDocument(() => (window.kidsWorldLuck = 0));
   if (init) await page.evaluateOnNewDocument(init);
   // These players have seen every update too, unless profile.seenNews says
@@ -9628,7 +9630,7 @@ test('treasure chest keys on Adventure Isle come only from a quiz after a camp i
 
 // Soul weapons (shared/souls.js, ui-souls.js): the golden chest on an island of the
 // isle has a part of its episode's, risen out of it and then shown over the whole
-// screen; with every part, the Soul Forge puts it together and its soul wakes; faced,
+// screen (and very rarely a wooden chest has one too); with every part, the Soul Forge puts it together and its soul wakes; faced,
 // alone, on a world of its own, it is beaten there — and the weapon is in your hand,
 // back on the isle you came from.
 test('a part of a soul weapon out of a golden chest, the weapon put together at the Soul Forge, its soul faced and beaten, and back to the isle with it', { skip }, async () => {
@@ -9662,18 +9664,19 @@ test('a part of a soul weapon out of a golden chest, the weapon put together at 
     // (It may be past a gate still shut.)
     room.adventure.stepSneaks = () => [];
     const gold = room.adventure.chests.list.find((o) => !o.openedAt && o.gold);
+    const wood = room.adventure.chests.list.find((o) => !o.openedAt && !o.gold);
     for (const o of [...room.critters.list]) {
-      if (Math.hypot(o.x - gold.x, o.z - gold.z) < 16) {
+      if ([gold, wood].some((k) => Math.hypot(o.x - k.x, o.z - k.z) < 16)) {
         room.critters.remove(o.id);
         room.broadcast({ t: 'cdel', id: o.id, by: 0 });
       }
     }
-    const standBy = () =>
+    const standBy = (k = gold) =>
       page.evaluate((k) => {
         const kw = window.kidsWorld;
         Object.assign(kw.game.me.body, { x: k.x + 0.5, y: k.y + 0.2, z: k.z - 0.9, vx: 0, vy: 0, vz: 0, flying: false });
         kw.game.sendMove(true);
-      }, { x: gold.x, y: gold.y, z: gold.z });
+      }, { x: k.x, y: k.y, z: k.z });
     // Locked, it says there is a part of Starfall in it; so does the island card.
     await standBy();
     await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('🔒 Locked'));
@@ -9694,6 +9697,33 @@ test('a part of a soul weapon out of a golden chest, the weapon put together at 
     assert.deepEqual(await souls(() => [window.kidsWorld.ui.modalOpen, window.kidsWorld.input.enabled, window.kidsWorld.renderer.drawing]), [true, false, false], 'nothing else meanwhile');
     const told = heard.filter((m) => m.t === 'soul');
     assert.deepEqual(told.map(({ op, w, i: n }) => [op, w, n]), [['part', 'star', i]], 'friends see it too');
+    await press('OK');
+    await until(page, () => !document.querySelector('.soul-show') && window.kidsWorld.input.enabled && window.kidsWorld.renderer.drawing);
+    // Very rarely a wooden chest has one too, over and above the golden chest's
+    // (here, as luck has it).
+    const had = await souls(() => {
+      window.kidsWorldLuck = 1;
+      window.kidsWorld.isle.data.keys = 1;
+      return [...window.kidsWorld.isle.data.gear.souls.parts.star];
+    });
+    await standBy(wood);
+    await until(page, () => document.getElementById('ride').textContent.includes('🗝️ Open'));
+    await page.keyboard.press('KeyQ');
+    await until(page, () => window.kidsWorld.isle.data.gear.souls.got.star?.some((p) => p.includes(':w')));
+    const j = await souls((had) => {
+      window.kidsWorldLuck = 0;
+      return window.kidsWorld.isle.data.gear.souls.parts.star.findIndex((n, k) => n > had[k]);
+    }, had);
+    await until(page, () => window.kidsWorld.isle.data.stats.parts === 2);
+    await skipTo(SOULS[0].parts[j].name);
+    assert.deepEqual(
+      heard.filter((m) => m.t === 'soul').map(({ op, w, i: n }) => [op, w, n]),
+      [
+        ['part', 'star', i],
+        ['part', 'star', j],
+      ],
+      'friends see that too',
+    );
     await press('OK');
     await until(page, () => !document.querySelector('.soul-show') && window.kidsWorld.input.enabled && window.kidsWorld.renderer.drawing);
 

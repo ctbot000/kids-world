@@ -5,7 +5,8 @@
 // its episode's stages (treasure.js): a golden chest holds one for whoever opens
 // it — any of them, so now and then one they have already — but only the first
 // golden chest they open on each island (a stage of one game), so it takes going
-// through the episode more than once to find them all (drawPart). With every part
+// through the episode more than once to find them all (drawPart). Very rarely a
+// wooden chest holds one too, over and above (woodPartRoll). With every part
 // found, the Soul Forge puts them together (ui-souls.js) — and then its soul wakes,
 // which must be beaten, alone, on a little world of its own (nod/duel.js), before
 // the weapon is yours (won). It never wears out.
@@ -347,7 +348,7 @@ export const listed = (list) => (list.length < 2 ? (list[0] ?? '') : `${list.sli
 // (placeOf), the last ones.
 export const emptySouls = () => ({ parts: {}, made: [], held: [], pick: '', dupes: {}, got: {} });
 
-const isPlace = (p) => typeof p === 'string' && /^[a-z0-9/]{1,24}:\d{1,4}$/.test(p);
+const isPlace = (p) => typeof p === 'string' && /^[a-z0-9/]{1,24}:w?\d{1,4}$/.test(p);
 
 export function cleanSouls(raw) {
   const p = raw && typeof raw === 'object' ? raw : {};
@@ -415,7 +416,7 @@ export const wantsParts = (souls, key) => !ownsSoul(souls, key) && !isMade(souls
 export const anySouls = (souls) => Boolean(souls && (souls.held.length || souls.made.length || Object.keys(souls.parts).length));
 export const ownedCount = (souls) => (souls?.held ?? []).reduce((n, id) => n + (soulsIn(id)?.length ?? 0), 0);
 
-// ------------------------------------------------ parts out of golden chests
+// ------------------------------------------------ parts out of chests
 
 // The island a golden chest is on, as it is remembered by: which of the isle's
 // games it is (server/adventure.js: its run, or the island's code with none said)
@@ -423,16 +424,30 @@ export const ownedCount = (souls) => (souls?.held ?? []).reduce((n, id) => n + (
 export const placeOf = ({ run = 0, journey = 1, stage = 1, code = '' }) => `${run > 0 ? `${run}/${journey}` : `c${String(code).replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 12)}`}:${stage}`;
 const gameOf = (place) => place.slice(0, place.lastIndexOf(':'));
 
+// A wooden chest holds a part too, very rarely: one in fifty (WOOD_PART_CHANCE),
+// and only one of an island's — over and above the part in its golden chest,
+// which still waits for them. Such a part is remembered by its island marked as a
+// wooden chest's (woodOf: '2/1:w20'), of the same game. A test that needs to know
+// sets globalThis.kidsWorldLuck to the chance it wants (0: never, 1: always), as
+// for critical hits (crits.js).
+export const WOOD_PART_CHANCE = 1 / 50;
+export const woodOf = (place) => place.replace(/:(\d+)$/, ':w$1');
+export function woodPartRoll(rand = Math.random) {
+  const chance = typeof globalThis.kidsWorldLuck === 'number' ? globalThis.kidsWorldLuck : WOOD_PART_CHANCE;
+  return rand() < chance;
+}
+
 // Whether the golden chests of an island hold a part for them still (one each
-// island), of the weapon of its episode.
+// island), of the weapon of its episode; or, by woodOf(place), its wooden ones.
 export const partWaits = (souls, key, place) => Boolean(soulOf(key)) && !(souls?.got?.[key] ?? []).includes(place);
 
-// The part a golden chest on an island (place) holds for someone, of the weapon
-// with this key, or null when it holds none for them (any more): { i (which part),
-// fresh (one they had none of), spare (they have no need of it: the weapon is made
-// already) }. Any of them is as likely as another — but they never get ones they
-// have for ever (UNLUCKY), and the last they lack is never in the golden chests of
-// the one game that had all the rest: an episode is always gone through twice.
+// The part a golden chest on an island (place) holds for someone — or one of its
+// wooden chests, by woodOf(place) — of the weapon with this key, or null when it
+// holds none for them (any more): { i (which part), fresh (one they had none of),
+// spare (they have no need of it: the weapon is made already) }. Any of them is as
+// likely as another — but they never get ones they have for ever (UNLUCKY), and
+// the last they lack is never in the chests of the one game that had all the
+// rest: an episode is always gone through twice.
 export function drawPart(souls, key, place, rand = Math.random) {
   const w = soulOf(key);
   if (!w || !partWaits(souls, key, place)) return null;
@@ -538,5 +553,5 @@ export const pickedSoul = (souls) => (souls?.pick && souls.held.includes(souls.p
 // Where a weapon's parts are found, in words.
 export function whereFound(w) {
   const ep = episodeOf(w.episode);
-  return `in the golden chests of Episode ${ep.n}, ${ep.title}: one on each of its ${stagesOf(ep.n)} stages, each time you go through it`;
+  return `in the golden chests of Episode ${ep.n}, ${ep.title}: one on each of its ${stagesOf(ep.n)} stages, each time you go through it — and, very rarely, in a wooden chest too`;
 }

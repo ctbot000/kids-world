@@ -40,7 +40,7 @@ import { SPLASH_COOL_MS, VolcanoSim } from './volcano.js';
 import { underTent } from './tents.js';
 import { FIG_HEARTS, isMonsterGashapon, kindsOfFigures } from './gashapon.js';
 import { cleanDishFood, DISH_MAX, isDish } from './dish.js';
-import { CHEST_REACH, isGoldChest } from './treasure.js';
+import { CHEST_REACH } from './treasure.js';
 import { isBeast } from './beasts.js';
 import { BOSS_LINES } from './boss-lines.js';
 import { isBoss } from './bosses.js';
@@ -135,11 +135,12 @@ const WOLF_MS = 300;
 // bops of each (an arrow can land after the next swing has gone).
 const SWINGS_KEPT = 4;
 // What someone has come by of soul weapons is told no oftener than this. A part
-// comes out of a golden chest opened no longer ago than that (GOLD_OPEN_MS), and
-// nothing touches them for a while as they look at it.
+// comes out of a chest (a golden one, or very rarely a wooden one) opened no
+// longer ago than that (PART_OPENED_MS), and nothing touches them for a while as
+// they look at it.
 const SOUL_NEWS_MS = 1500;
 const PART_SAFE_MS = 10000;
-const GOLD_OPEN_MS = 12000;
+const PART_OPENED_MS = 12000;
 // Whether a blow of a weapon that writes THE END (souls.js end: Fable's) left a
 // monster so few hearts that it is popped there and then: no more than the blow
 // took. (Not one that rises again from a heap, as a beast may.)
@@ -3251,7 +3252,7 @@ export class Room {
       case 'chest': {
         const c = Number.isInteger(msg.i) ? tale.openChest(at, msg.i, now) : null;
         if (!c) break;
-        if (c.gold) p.goldAt = now;
+        p.chestAt = now;
         this.broadcast({ t: 'bx', k: 'chest', i: c.i, pid: p.id });
         break;
       }
@@ -3378,8 +3379,10 @@ export class Room {
       case 'chest': {
         // (Whoever the island says opened it spends the key: chestOp.)
         const chest = Number.isInteger(msg.i) ? dream.chests.open(at, msg.i, now) : null;
-        if (chest?.gold) p.goldAt = now;
-        if (chest) this.broadcast({ t: 'nx', k: 'chest', pid: p.id, i: chest.i });
+        if (chest) {
+          p.chestAt = now;
+          this.broadcast({ t: 'nx', k: 'chest', pid: p.id, i: chest.i });
+        }
         break;
       }
       default:
@@ -3453,10 +3456,9 @@ export class Room {
     if (!this.adventure?.chests || !this.shared || !Array.isArray(msg.at) || msg.at.length !== 3 || !msg.at.every(Number.isInteger)) return;
     const [x, y, z] = msg.at;
     if (Math.hypot(p.s[0] - x - 0.5, p.s[2] - z - 0.5) > CHEST_REACH || Math.abs(p.s[1] - y) > 3) return;
-    const gold = isGoldChest(this.world.get(x, y, z));
     const cells = this.adventure.chests.open(this.world, x, y, z, this.now());
     if (!cells) return;
-    if (gold) p.goldAt = this.now();
+    p.chestAt = this.now();
     // Who opened it first, while it is still shut where everyone is, so
     // each page knows which kind it was and plays its opening from the
     // start (render/chest-model.js); then the chest open.
@@ -3466,9 +3468,9 @@ export class Room {
   }
 
   // What someone on the isle has come by of soul weapons (souls.js), for everyone
-  // there to see: a part risen out of a golden chest — and nothing touches them
-  // for a while, as they look at it — a weapon put together, its soul beaten, or
-  // two combined.
+  // there to see: a part risen out of a chest they opened — and nothing touches
+  // them for a while, as they look at it — a weapon put together, its soul beaten,
+  // or two combined.
   soulOp(p, msg) {
     if (!this.shared || !this.adventure || this.adventure.duel) return;
     const now = this.now();
@@ -3476,8 +3478,8 @@ export class Room {
     p.soulAt = now;
     const w = soulOf(msg.w);
     if (msg.op === 'part') {
-      if (!w?.parts[Number.isInteger(msg.i) ? msg.i : -1] || now - (p.goldAt ?? -Infinity) > GOLD_OPEN_MS) return;
-      p.goldAt = -Infinity;
+      if (!w?.parts[Number.isInteger(msg.i) ? msg.i : -1] || now - (p.chestAt ?? -Infinity) > PART_OPENED_MS) return;
+      p.chestAt = -Infinity;
       const near = Array.isArray(msg.at) && msg.at.length === 3 && msg.at.every(finite) && Math.hypot(msg.at[0] - p.s[0], msg.at[1] - p.s[1], msg.at[2] - p.s[2]) < 9;
       const at = (near ? msg.at : p.s.slice(0, 3)).map((v) => +v.toFixed(2));
       p.safeUntil = Math.max(p.safeUntil ?? 0, now + PART_SAFE_MS);

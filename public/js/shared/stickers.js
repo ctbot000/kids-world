@@ -108,7 +108,7 @@ export const STICKERS = [
   { key: 'monster-figure', icon: '👾', name: 'Monster Catcher', text: 'Get a monster figure out of a Monster Gashapon on Adventure Isle', test: (s) => s.monsterfigs >= 1 },
   { key: 'chest-hunter', icon: '🗝️', name: 'Chest Hunter', text: 'Open 10 treasure chests on Adventure Isle', test: (s) => s.chests >= 10, goal: 10, of: 'chests' },
   { key: 'great-thief', icon: '👑', name: 'Great Thief', text: 'Open 1,000 treasure chests on Adventure Isle', test: (s) => s.chests >= 1000, goal: 1000, of: 'chests' },
-  { key: 'soul-part', icon: '🧩', name: 'A Piece of Legend', text: 'Find a part of a soul weapon in a golden chest on Adventure Isle', test: (s) => s.parts >= 1 },
+  { key: 'soul-part', icon: '🧩', name: 'A Piece of Legend', text: 'Find a part of a soul weapon in a treasure chest on Adventure Isle', test: (s) => s.parts >= 1 },
   { key: 'soul-smith', icon: '⚒️', name: 'Soul Smith', text: 'Put a soul weapon together at the Soul Forge', test: (s) => s.forged >= 1 },
   { key: 'soul-keeper', icon: '👻', name: 'Soul Keeper', text: 'Beat the soul of a weapon to make it yours', test: (s) => s.souls >= 1 },
   { key: 'soul-fusion', icon: '💫', name: 'Two Souls in One', text: 'Combine two soul weapons into one', test: (s) => s.soulmax >= 2 },

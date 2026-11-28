@@ -35,7 +35,7 @@ const gently = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').mat
 // The stage and what is played on it, loaded once; null where it cannot be had.
 let staging = null;
 const loadStage = () => (staging ??= Promise.all([import('./render/soul-stage.js'), import('./render/soul-shows.js')]).then(([a, b]) => ({ ...a, ...b })).catch(() => null));
-// Ready for a show that may be about to come (a golden chest opened).
+// Ready for a show about to come (a chest opened with a part in it).
 export const soulStageSoon = () => void loadStage();
 
 // ---------------------------------------------------------------- the screen
@@ -183,7 +183,7 @@ function dots(w, counts, at = -1) {
 
 // ---------------------------------------------------------------- what is shown
 
-// A part out of a golden chest (game.js 'soul-part').
+// A part out of a chest (game.js 'soul-part').
 export function soulPartShow(ui, got) {
   const w = soulOf(got?.key);
   const part = w?.parts[got.i];

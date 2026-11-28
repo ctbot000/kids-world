@@ -73,7 +73,7 @@ import { doorOpen, escapeHouse, puzzleNear, roomAt } from './shared/escape.js';
 import { underTent } from './shared/tents.js';
 import { applyCells, buildEdit, doorEdit, drillEdit, harvestEdit, hillEdit, mowEdit, paintEdit, paintVanEdit, pickEdit, REACH, stampEdit, waterEdit } from './shared/tools.js';
 import { makeQuiz, quizCoins, QUIZ_LEVELS, quizProgress, WIN_OFFER_MS } from './shared/quiz.js';
-import { partWaits, placeOf, soulOf, soulOfEpisode, soulWeapon } from './shared/souls.js';
+import { partWaits, placeOf, soulOf, soulOfEpisode, soulWeapon, woodOf, woodPartRoll } from './shared/souls.js';
 import { chestNear, chestTreasure, isGoldChest } from './shared/treasure.js';
 import { CHEST_RATTLE_MS, CHEST_TAKE_MS, CHEST_TAKE_SECS, openingChest } from './render/chest-model.js';
 import { CANDLE_TOP, SLICES, SONG_MS, SURPRISES, balloonColors, balloonSpots, candleSpot, isBalloons, partyNear, presentCoins } from './shared/party.js';
@@ -273,8 +273,8 @@ function soulTakes(spec, hit, x, z) {
 }
 // Prisma is out of the hand this long, thrown (render/soul-fx.js RingFlight).
 const RING_SECS = 0.78;
-// A part of a soul weapon found in a golden chest comes up out of it after the rest
-// of its treasure, and is shown to whoever found it once everyone there has seen it.
+// A part of a soul weapon found in a chest comes up out of it after the rest of its
+// treasure, and is shown to whoever found it once everyone there has seen it.
 const PART_RISES_MS = 3000;
 const PART_SHOW_MS = 5900;
 // Nothing in a dream touches whoever is looking at the part they found.
@@ -4044,14 +4044,14 @@ export class Game extends EventTarget {
   chestWon(gold, at) {
     this.profile.useKey(gold);
     const got = chestTreasure(Math.random, this.adventure?.story.level ?? 1, gold);
-    if (gold) this.partFound(at);
+    const part = this.partFound(at, gold);
     this.profile.earn(got.coins);
     if (got.potion) got.potion = this.profile.findPotion();
     if (got.diamond) this.profile.addToBasket('diamond', 1);
     this.profile.count('chests');
     this.emit('reward', { ...at, xp: XP_FOR.chests.xp });
     // What was inside, shown once the lid is up (ui.js treasurePop).
-    setTimeout(() => this.emit('treasure', { ...got, gold }), TREASURE_SHOW_MS);
+    setTimeout(() => this.emit('treasure', { ...got, gold, part }), TREASURE_SHOW_MS);
   }
 
   // ------------------------------------------------ soul weapons
@@ -4067,13 +4067,15 @@ export class Game extends EventTarget {
     return { w, place, waits: partWaits(this.profile.data.gear.souls, w.key, place) };
   }
 
-  // A golden chest opened by you, with a part of a soul weapon in it, if it holds
-  // one for you: everyone near sees it rise out of the chest, and then you are
-  // shown it (ui-souls.js).
-  partFound(at) {
+  // A chest opened by you, with a part of a soul weapon in it if it holds one for
+  // you — the golden chest of each island does, and very rarely one of its wooden
+  // ones too (souls.js woodPartRoll): everyone near sees it rise out of the chest,
+  // and then you are shown it (ui-souls.js). Whether there was one.
+  partFound(at, gold) {
     const here = this.soulHere();
-    const got = here?.waits ? this.profile.findPart(here.w.key, here.place) : null;
-    if (!got) return;
+    const place = !here ? '' : gold ? here.place : woodPartRoll() ? woodOf(here.place) : '';
+    const got = place ? this.profile.findPart(here.w.key, place) : null;
+    if (!got) return false;
     const world = this.world;
     setTimeout(() => {
       this.profile.partSeen();
@@ -4085,10 +4087,11 @@ export class Game extends EventTarget {
     setTimeout(() => {
       if (!this.closed) this.emit('soul-part', got);
     }, PART_SHOW_MS);
+    return true;
   }
 
   // What someone here has come by, as the island tells it: a part risen out of a
-  // golden chest, a weapon put together, its soul beaten, or two combined.
+  // chest, a weapon put together, its soul beaten, or two combined.
   soulNews(msg) {
     const p = this.players.get(msg.pid);
     const mine = msg.pid === this.pid;
