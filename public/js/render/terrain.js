@@ -428,7 +428,7 @@ function studShape(segments = 12) {
 
 // A model's turn about y to face the way a furniture block does (its
 // `front`, numbered as RAIL_DIRS: 0 +x, 1 +z, 2 -x, 3 -z), from facing -z.
-const FACING = [-Math.PI / 2, Math.PI, Math.PI / 2, 0];
+export const FACING = [-Math.PI / 2, Math.PI, Math.PI / 2, 0];
 
 // A finish for a model on an island drawn as the real thing (real.js), from
 // a toy's: no gloss, its colour, metal dull (with no sky reflected in it, a

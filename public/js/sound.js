@@ -993,6 +993,17 @@ export class Sound {
           this.tone(150 * r(), { at: i * 0.14, decay: 0.08, gain: 0.14, slide: 80, slideTime: 0.06, attack: 0.002 });
         }
         break;
+      case 'gotcha':
+        // A fake golden chest found out (a Golden Mimic): its lid bursting
+        // up with a whoop, a jingle of fool's gold, then a big clop-clop.
+        this.noise(0.14, { type: 'bandpass', freq: 500, sweep: 2600, q: 1.5, gain: 0.16 });
+        this.tone(NOTE(62), { decay: 0.24, gain: 0.09, slide: NOTE(86), slideTime: 0.18, type: 'square' });
+        [88, 93, 91, 96, 100].forEach((n, i) => this.tone(NOTE(n), { at: 0.1 + i * 0.05, decay: 0.14, gain: 0.05, type: 'triangle' }));
+        for (let i = 0; i < 2; i++) {
+          this.noise(0.035, { at: 0.36 + i * 0.13, type: 'bandpass', freq: 800, q: 2, gain: 0.34 });
+          this.tone(120, { at: 0.36 + i * 0.13, decay: 0.09, gain: 0.16, slide: 65, slideTime: 0.07, attack: 0.002 });
+        }
+        break;
       case 'chant':
         // A Grumble Wizard muttering his magic: strange little notes going up.
         [71, 75, 78, 83, 87].forEach((n, i) => this.tone(NOTE(n) * r(), { at: i * 0.08, decay: 0.3, gain: 0.05, type: 'triangle', vibrato: 12 }));

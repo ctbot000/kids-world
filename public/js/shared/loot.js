@@ -21,7 +21,7 @@
 // The island works out what drops and where each thing comes down (lootOf,
 // lootSpots), and keeps what is lying about (Loot), never saved; each page
 // draws it (loot-view.js).
-import { BEASTS } from './beasts.js';
+import { BEASTS, GOLD_MIMIC } from './beasts.js';
 import * as B from './blocks.js';
 import { isBoss } from './bosses.js';
 import { KINDS } from './monsters.js';
@@ -106,10 +106,12 @@ export function lootOf(kind, rand = Math.random, { level = 1, march = false, nod
   const out = coinPieces(coins);
   if (tier.heart && rand() < tier.heart) out.push({ k: 'heart', n: 1 });
   if (tier.potion && rand() < Math.min(1, tier.potion * luck)) out.push({ k: 'potion', n: 1 });
-  // A Mimic is a treasure chest: there is always a jewel in it.
-  const jewels = tier.jewels ?? (kind === 'mimic' && beast ? 1 : rand() < Math.min(1, tier.jewel * luck) ? 1 : 0);
+  // A Mimic is a treasure chest: there is always a jewel in it; and a Golden
+  // Mimic was a golden chest (treasure.js), so two, and a diamond as in one.
+  const gold = kind === GOLD_MIMIC && beast;
+  const jewels = tier.jewels ?? (gold ? 2 : kind === 'mimic' && beast ? 1 : rand() < Math.min(1, tier.jewel * luck) ? 1 : 0);
   for (let i = 0; i < jewels; i++) out.push({ k: pickJewel(rand), n: 1 });
-  if (tier.diamond && rand() < Math.min(1, tier.diamond * luck)) out.push({ k: 'diamond', n: 1 });
+  if (gold || (tier.diamond && rand() < Math.min(1, tier.diamond * luck))) out.push({ k: 'diamond', n: 1 });
   return out;
 }
 
@@ -121,7 +123,7 @@ export function dropsOf(kind) {
   const tier = TIERS[tierOf(kind)];
   const beast = BEASTS[kind];
   const coins = tier === TIERS.boss ? [bossCoins(1), bossCoins(10)] : beast ? [beast.coins, beast.coins] : tier.coins;
-  return { coins, heart: tier.heart ?? 0, potion: tier.potion ?? 0, jewel: tier.jewels || kind === 'mimic' ? 1 : (tier.jewel ?? 0) };
+  return { coins, heart: tier.heart ?? 0, potion: tier.potion ?? 0, jewel: tier.jewels || kind === 'mimic' || kind === GOLD_MIMIC ? 1 : (tier.jewel ?? 0) };
 }
 
 function pickJewel(rand) {

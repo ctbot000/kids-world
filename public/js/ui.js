@@ -35,7 +35,7 @@ import { COUNT_MS, lapTime, ordinal, RACE_MS } from './shared/race.js';
 import { PASSCODE_LENGTH, randomPasscode } from './shared/listing.js';
 import { bodyOf, maxHp } from './shared/monsters.js';
 import { isBoss } from './shared/bosses.js';
-import { isBeast } from './shared/beasts.js';
+import { isBeast, isMimic } from './shared/beasts.js';
 import { towerTop } from './shared/defense.js';
 import { OLYMPIADS, QUIZ_LEVELS, quizCoins, quizProgress, SCHOOLS } from './shared/quiz.js';
 import { LEARNT_AFTER } from './shared/quizbook.js';
@@ -4057,6 +4057,8 @@ export class UI {
     on('arcade-open', () => this.arcadeDialog());
     on('gasha-open', () => this.gashaDialog());
     on('chest-open', () => this.chestDialog());
+    // The chest it was for turned out a Golden Mimic (game.js mimicNews).
+    on('chest-gone', () => this.modalOpen && $('modal').querySelector('.chest-locked') && this.closeModal());
     on('gasha-gone', () => this.gashaShow?.());
     on('piano-open', () => this.pianoDialog());
     // Off the bench (bumped, sent home, or the piano picked up): its keyboard goes.
@@ -8642,7 +8644,7 @@ export class UI {
     this.openModal(
       (root) => {
         root.append(
-          h('div', { class: 'chest-pic', 'aria-hidden': 'true' }, t.gold ? '👑🔒' : '🧰🔒'),
+          h('div', { class: 'chest-pic chest-locked', 'aria-hidden': 'true' }, t.gold ? '👑🔒' : '🧰🔒'),
           h('h2', {}, t.gold ? '🔒 The golden chest!' : '🔒 A treasure chest!'),
           h('p', {}, t.gold ? 'It is locked, and only a 👑 golden key opens it. Win a whole stage with your friends, then answer its quiz right for a golden key.' : `It is locked, and it takes a 🔑 key. ${this.keyWords().how}, then answer its quiz right for a key.`),
           t.gold ? soulChestLine(this, g) : '',
@@ -8976,7 +8978,7 @@ export class UI {
         const max = Math.max(1, e.max ?? 1);
         const hearts = Math.max(0, Math.min(max, e.hearts ?? max));
         // (A Mimic not found out yet: only a treasure chest, with no bar over it.)
-        if (e.kind === 'mimic' && hearts === max && e.snaps.at(-1)?.state === 'idle') continue;
+        if (isMimic(e.kind) && hearts === max && e.snaps.at(-1)?.state === 'idle') continue;
         const top = isBoss(e.kind) ? (e.model.height ?? 1.8) + 1.1 : isBeast(e.kind) ? e.model.height + 0.3 : bodyOf(e.kind).height + 0.3;
         // Hearts just lost stay on the bar in white a moment, and drain away.
         tag(`mon-${e.id}`, p.x, p.y + top, p.z, `${hearts}|${max}`, () => {

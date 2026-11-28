@@ -12,9 +12,10 @@ import { after, afterEach, before, test as eachTest } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PeerServer } from 'peer';
 import puppeteer from 'puppeteer-core';
-import { ARCADE_BLOB, ARCADE_PAIRS, BROADCAST_STATION, CANDY_CANE, CHALKBOARD, CLOTH, COMPUTER, CROP_STAGES, DRAWING_BOARD, ESCAPE_BUTTONS_ON, FARMLAND, GASHAPON, GO_BOARD, GRAND_PIANO, MONSTER_GASHAPON, LEAVES, RETRO_TV, ROBOT_KIT, STOVE, STUDY_DESK, TALL_GRASS, TREE_PART, TRINKET, TULIP, WATER, WATERING_CAN, WET_FARMLAND } from '../public/js/shared/blocks.js';
+import { ARCADE_BLOB, ARCADE_PAIRS, BLOCKS, BROADCAST_STATION, CANDY_CANE, CHALKBOARD, CLOTH, COMPUTER, CROP_STAGES, DRAWING_BOARD, ESCAPE_BUTTONS_ON, FARMLAND, GASHAPON, GO_BOARD, GRAND_PIANO, MONSTER_GASHAPON, LEAVES, RETRO_TV, ROBOT_KIT, STOVE, STUDY_DESK, TALL_GRASS, TREE_PART, TRINKET, TULIP, WATER, WATERING_CAN, WET_FARMLAND } from '../public/js/shared/blocks.js';
 import { GASHA_PRICE, MONSTER_FIGURES, MONSTER_PRICE, TOYS } from '../public/js/shared/gashapon.js';
 import { BEASTS } from '../public/js/shared/beasts.js';
+import { FRONT_YAW } from '../public/js/shared/treasure.js';
 import { BUMP_HP } from '../public/js/shared/monsters.js';
 import { KEYS as PIANO_KEYS, songOf } from '../public/js/shared/piano.js';
 import { CHANNELS } from '../public/js/shared/tv.js';
@@ -9625,6 +9626,88 @@ test('treasure chest keys on Adventure Isle come only from a quiz after a camp i
   assert.ok(gold.coins >= before.coins + 28, 'a golden treasure');
   assert.equal(gold.diamonds, before.diamonds + 1, 'and a diamond');
   await until(page, () => document.getElementById('treasure-pop').textContent.includes('Golden treasure'));
+  await page.browserContext().close();
+});
+
+// A fake golden chest (shared/treasure.js) in a real page: the very block a
+// golden chest is, until you come up beside it. Then a Golden Mimic stands
+// just where it stood, facing as it did, its lid coming up, heard and told
+// of, a bar over it — and the chest's window, up for it as you came, gone.
+test('a fake golden chest on Adventure Isle is a golden chest on the page until you come up beside it, and then a Golden Mimic after you', { skip }, async () => {
+  const page = await openPlayer(base, { name: 'Keen Owl' });
+  const pageErrors = [];
+  page.on('pageerror', (e) => pageErrors.push(e.message));
+  await clickButton(page, '⚔️ Adventure');
+  await clickButton(page, 'Adventure Isle');
+  await inGame(page);
+  await until(page, () => window.kidsWorld.game?.profile === window.kidsWorld.isle);
+  const room = server.publicAdventure.room;
+  const adv = room.adventure;
+  for (const p of room.players.values()) p.safeUntil = Infinity;
+  adv.stepSneaks = () => [];
+  // (One found out already by a player of another test: a fresh one put down.)
+  for (const m of room.monsters.list.filter((o) => o.kind === 'goldmimic')) room.monsters.remove(m.id);
+  if (!adv.chests.list.some((o) => o.fake)) {
+    const out = [];
+    adv.chests.putFake(room.world, adv.camps, out);
+    room.natureEdit(out.flat());
+  }
+  const fake = adv.chests.list.find((o) => o.fake);
+  assert.ok(fake, 'a fake golden chest about the isle');
+  for (const o of [...room.critters.list]) {
+    if (Math.hypot(o.x - fake.x, o.z - fake.z) < 16) {
+      room.critters.remove(o.id);
+      room.broadcast({ t: 'cdel', id: o.id, by: 0 });
+    }
+  }
+  const id = room.world.get(fake.x, fake.y, fake.z);
+  const at = { x: fake.x, y: fake.y, z: fake.z, id };
+  // On the page, a golden chest's own block, and nothing else there.
+  await until(page, (k) => window.kidsWorld.game.world.get(k.x, k.y, k.z) === k.id, at);
+  assert.equal(await page.evaluate(() => [...window.kidsWorld.game.monsters.values()].filter((e) => e.kind === 'goldmimic').length), 0);
+  // What it says and sounds, and where it is first drawn; and the chest's
+  // window up for it, as for a golden chest by someone with no golden key.
+  await page.evaluate((k) => {
+    const g = window.kidsWorld.game;
+    window.seen = { toasts: [], sounds: [], first: null };
+    const emit = g.emit.bind(g);
+    g.emit = (name, detail) => {
+      if (name === 'toast') window.seen.toasts.push(detail.text);
+      return emit(name, detail);
+    };
+    const play = g.sound.play.bind(g.sound);
+    g.sound.play = (name, opts) => {
+      window.seen.sounds.push(name);
+      return play(name, opts);
+    };
+    const look = () => {
+      const e = [...g.monsters.values()].find((o) => o.kind === 'goldmimic');
+      if (e && !window.seen.first) window.seen.first = { id: e.id, ...e.snaps[0] };
+      if (!window.seen.first) requestAnimationFrame(look);
+    };
+    requestAnimationFrame(look);
+    g.chestAt = { x: k.x, y: k.y, z: k.z, open: false, gold: true };
+    g.emit('chest-open');
+  }, at);
+  await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal .chest-locked'));
+  // Up beside it: a Golden Mimic where it stood, facing as it did.
+  await page.evaluate((k) => {
+    const kw = window.kidsWorld;
+    Object.assign(kw.game.me.body, { x: k.x + 0.5, y: k.y + 0.2, z: k.z + 0.5 - 2, vx: 0, vy: 0, vz: 0, flying: false });
+    kw.game.sendMove(true);
+  }, at);
+  await until(page, () => window.seen.first);
+  const first = await page.evaluate(() => window.seen.first);
+  assert.deepEqual([first.x, first.y, first.z], [fake.x + 0.5, fake.y, fake.z + 0.5], 'just where the chest was');
+  assert.ok(Math.abs(first.yaw - FRONT_YAW[BLOCKS[id].front]) < 0.01, `facing as it did: ${first.yaw}`);
+  await until(page, (k) => window.kidsWorld.game.world.get(k.x, k.y, k.z) === 0, at);
+  await until(page, () => document.getElementById('modal').hidden);
+  await until(page, (mid) => window.kidsWorld.game.monsters.get(mid)?.model.open > 0.3 && window.kidsWorld.ui.advTags.has(`mon-${mid}`), first.id);
+  await until(page, () => window.seen.toasts.some((t) => t.includes('Golden Mimic')));
+  assert.ok(await page.evaluate(() => window.seen.sounds.includes('gotcha')), 'heard');
+  // (Gone again, so nothing bites anyone in the tests after.)
+  for (const m of room.monsters.list.filter((o) => o.kind === 'goldmimic')) room.monsters.remove(m.id);
+  assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });
 

@@ -1719,7 +1719,7 @@ export class Room {
     if (this.adventure?.perched) this.adventure.stepPerch(this.world, now, [...where].map(([id, w]) => ({ id, ...w })));
     // So do its treasure chests: put down, and gone a while after they open.
     if (this.adventure && this.shared && !dream && !tale) {
-      const cells = this.adventure.stepChests(this.world, now).flat();
+      const cells = this.adventure.stepChests(this.world, now, this.monsters).flat();
       if (cells.length) {
         this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'nature', cells });
         this.changed();
@@ -1885,6 +1885,9 @@ export class Room {
         // Nobody gets round a gate that is still shut (adventure.js
         // stepSneaks): whoever has, by sea or over a wall, goes back.
         for (const pid of adv.stepSneaks(this.world, now, people)) this.sendBack(this.players.get(pid), now);
+        // A fake golden chest somebody came up beside (treasure.js): a
+        // Golden Mimic, after them.
+        if (adv.fakesHere) for (const { chest, person } of adv.chests.fakesWoken(people)) this.springFake(chest, person);
       }
     }
     // (And on Toon Isle the Storm Gang goes for its beacons too: isle-battles.js.)
@@ -3456,6 +3459,12 @@ export class Room {
     if (!this.adventure?.chests || !this.shared || !Array.isArray(msg.at) || msg.at.length !== 3 || !msg.at.every(Number.isInteger)) return;
     const [x, y, z] = msg.at;
     if (Math.hypot(p.s[0] - x - 0.5, p.s[2] - z - 0.5) > CHEST_REACH || Math.abs(p.s[1] - y) > 3) return;
+    // A fake golden chest (treasure.js): a Golden Mimic, and the key kept.
+    const fake = this.adventure.chests.fakeAt(x, y, z);
+    if (fake) {
+      if (this.adventure.active && p.online) this.springFake(fake, { id: p.id, x: p.s[0], y: p.s[1], z: p.s[2] });
+      return;
+    }
     const cells = this.adventure.chests.open(this.world, x, y, z, this.now());
     if (!cells) return;
     p.chestAt = this.now();
@@ -3464,6 +3473,21 @@ export class Room {
     // start (render/chest-model.js); then the chest open.
     this.broadcast({ t: 'chest', x, y, z, by: p.id });
     this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'nature', cells });
+    this.changed();
+  }
+
+  // A fake golden chest found out by person (beside it, or trying a golden
+  // key in it): a Golden Mimic where it stood, after them (adventure.js
+  // springFake). Everyone is told ({ t: 'mimic', id, x, y, z, by }) with the
+  // monster already there, before the chest goes, so it never blinks out
+  // between the two on anyone's page.
+  springFake(chest, person) {
+    const sprung = this.adventure.springFake(this.world, chest, person, this.monsters, this.online);
+    if (!sprung) return;
+    this.broadcast({ t: 'mon', m: this.monsters.pack() });
+    this.monstersSent = true;
+    this.broadcast({ t: 'mimic', id: sprung.monster.id, x: chest.x, y: chest.y, z: chest.z, by: person.id });
+    this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'nature', cells: sprung.cells });
     this.changed();
   }
 
@@ -3544,6 +3568,11 @@ export class Room {
       const loot = m === king ? this.dropLoot(m.kind, b, p, now, { everyone: true }) : null;
       this.broadcast({ t: 'pop', id: m.id, by: m === king ? p.id : 0, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2), ...(loot ? { loot } : {}) });
     }
+    // And a fake golden chest still shut up as one (treasure.js): pop, with
+    // the rest of the monsters.
+    const fakes = adv.chests?.dropFakes(this.world) ?? [];
+    for (const [x, y, z] of fakes) this.broadcast({ t: 'pop', id: 0, by: 0, x: x + 0.5, y, z: z + 0.5 });
+    if (fakes.length) this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'nature', cells: fakes.flat() });
     const castle = adv.castle;
     if (castle) this.ungloom(castle);
     this.openGates(adv.openGates());

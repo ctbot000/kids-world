@@ -81,7 +81,8 @@
 // Thunderhawk, the Mimic, the Grumble Oak, the Grumble Wizard, the Swamp Hydra,
 // the Cyclops and Rumble Rex. Now and then one comes out among the others,
 // oftener at night, and on Adventure Isle each chapter's camps have them as
-// champions.
+// champions. (And the Golden Mimic, only ever out of a fake golden chest on
+// Adventure Isle: treasure.js.)
 //
 // On a tower defense island (defense.js) they march along the road from
 // their gate to the Star Stone instead, bumping nobody on the way.
@@ -385,7 +386,7 @@ const LAND_PAD = 0.9;
 
 // New states and kinds go on the end: the wire sends the index.
 export const MONSTER_STATES = ['idle', 'hop', 'chase', 'giggle', 'stomp', 'dazed', 'breathe', 'dig', 'puff', 'rear', 'charge', 'hurl', 'leap', 'heap', 'howl', 'blink', 'crouch', 'pounce'];
-export const MONSTER_KINDS = ['blob', 'king', 'big', 'spiky', 'mosquito', 'spider', 'knight', 'golem', 'ghost', 'mole', 'queen', 'snapper', 'shroom', 'yeti', 'gummy', 'cub', 'clawbeard', 'puffcap', 'frostfang', 'gumbo', 'bogmaw', 'moltok', 'rattle', 'stinger', 'wolf', 'hawk', 'mimic', 'oak', 'wizard', 'hydra', 'cyclops', 'rex', 'scarabold', 'glimmershell', 'baronboo', 'sprocket', 'nimbus', 'dotty', 'bushytail', 'bumble', 'blendalot', 'inkwell', 'mochi', 'grizzle', 'mummy', 'fox', 'boar', 'ironclaw', 'bramblepaw', 'gnasher', 'curlhorn', 'murk', 'nest', 'bluster'];
+export const MONSTER_KINDS = ['blob', 'king', 'big', 'spiky', 'mosquito', 'spider', 'knight', 'golem', 'ghost', 'mole', 'queen', 'snapper', 'shroom', 'yeti', 'gummy', 'cub', 'clawbeard', 'puffcap', 'frostfang', 'gumbo', 'bogmaw', 'moltok', 'rattle', 'stinger', 'wolf', 'hawk', 'mimic', 'oak', 'wizard', 'hydra', 'cyclops', 'rex', 'scarabold', 'glimmershell', 'baronboo', 'sprocket', 'nimbus', 'dotty', 'bushytail', 'bumble', 'blendalot', 'inkwell', 'mochi', 'grizzle', 'mummy', 'fox', 'boar', 'ironclaw', 'bramblepaw', 'gnasher', 'curlhorn', 'murk', 'nest', 'bluster', 'goldmimic'];
 
 export const bodyOf = (kind) => BOSSES[kind]?.body ?? BEASTS[kind]?.body ?? ({ big: BIG_BODY, spiky: SPIKY_BODY, mosquito: MOSQUITO_BODY, spider: SPIDER_BODY, knight: KNIGHT_BODY, golem: GOLEM_BODY, ghost: GHOST_BODY, mole: MOLE_BODY, queen: QUEEN_BODY, snapper: SNAPPER_BODY, shroom: SHROOM_BODY, yeti: YETI_BODY, gummy: GUMMY_BODY, cub: CUB_BODY, mummy: MUMMY_BODY, fox: FOX_BODY, nest: NEST_BODY })[kind] ?? MONSTER_BODY;
 // Whether Mr. Mole is under the ground, from his state as the wire sends
