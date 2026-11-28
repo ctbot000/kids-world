@@ -45,11 +45,11 @@
 // hunts and, at the very end, Baron Bluster himself (isle-battles.js). Each
 // battle won lights a lamp on its Sky Lantern by where everyone arrives, and
 // every one won wins the stage.
-import { BEASTS, isBeast } from './beasts.js';
+import { BEASTS, GOLD_MIMIC, isBeast } from './beasts.js';
 import * as B from './blocks.js';
 import { standHeight } from './critters.js';
 import { BOSSES, breathMove, isBoss, planOf } from './bosses.js';
-import { bodyOf, BUMP_HP, campDistance, DAZED_HIT, GHOST_FIRE, kindOf, SAFE_RADIUS } from './monsters.js';
+import { bodyOf, BUMP_HP, campDistance, DAZED_HIT, GHOST_FIRE, kindOf, MAX_MONSTERS, SAFE_RADIUS } from './monsters.js';
 import { bodyOverlapsSolid, MOVE } from './physics.js';
 import { MONSTER_LOG } from './stickers.js';
 import { isMonsterGashapon, MONSTER_GASHA } from './gashapon.js';
@@ -154,6 +154,14 @@ export const stageKing = (base, stage) => Math.round(base * Math.min(STAGE_KING,
 // How much sooner a boss's moves come on a stage, against stage 1's: a
 // fortieth sooner each stage, up to a third (monsters.js gapOf).
 export const stageGap = (stage) => Math.max(2 / 3, 1 - (cleanStage(stage) - 1) / 40);
+// The hearts of a beast out on its own on the isle (a camp's champion, a
+// Golden Mimic): young on the first stages (half its own on stage 1, a tenth
+// more each stage), full grown from the sixth, and three tenths more for each
+// friend on the island past the first, up to eight.
+export const grownHearts = (kind, level, players = 1) => {
+  const grown = Math.min(1, 0.4 + 0.1 * level);
+  return Math.max(3, Math.round(kindOf(kind).hearts * grown * (1 + 0.3 * (Math.min(8, Math.max(1, players)) - 1))));
+};
 
 // ------------------------------------------------ the higher stages' dangers
 
@@ -645,9 +653,33 @@ export class AdventureSim {
   }
 
   // The treasure chests, now and then: the cells that changed, [x, y, z,
-  // id] each.
-  stepChests(world, now) {
-    return this.chests.step(world, now, { stage: this.level, camps: this.camps });
+  // id] each. monsters: the island's (MonsterSim), for whether a Golden
+  // Mimic is about already.
+  stepChests(world, now, monsters = null) {
+    const lurking = Boolean(monsters?.list.some((m) => m.kind === GOLD_MIMIC));
+    return this.chests.step(world, now, { stage: this.level, camps: this.camps, fakes: this.fakesHere, lurking });
+  }
+
+  // Whether a fake golden chest lies among the island's chests (treasure.js)
+  // while it is not yet free: wherever monsters are about, but the Wild Isle,
+  // where every creature is a real one.
+  get fakesHere() {
+    return !this.won && !this.quests && !this.dream && !this.tale && !this.story.episode.real;
+  }
+
+  // A fake golden chest (treasure.js) found out by person (one of the
+  // people, as the monsters see them): no chest any more, but a Golden Mimic
+  // where it stood, facing the way it did, after them at once. As young on
+  // the first stages and as much tougher with friends as a champion is.
+  // Returns { monster, cells } (cells: the chest gone, an edit) for the room
+  // to show everyone, or null while there is no room for one more monster.
+  springFake(world, chest, person, monsters, players = 1) {
+    if (monsters.roaming >= MAX_MONSTERS) return null;
+    const { cells, yaw } = this.chests.unmask(world, chest);
+    const m = monsters.add(world, chest.x + 0.5, chest.y, chest.z + 0.5, { kind: GOLD_MIMIC });
+    m.hearts = m.max = grownHearts(GOLD_MIMIC, this.level, players);
+    Object.assign(m, { yaw, target: person.id, state: 'chase', gapScale: stageGap(this.level) });
+    return { monster: m, cells };
   }
 
   // Whether there is anything left to free (or a challenge to beat).
@@ -1007,9 +1039,7 @@ export class AdventureSim {
     const m = monsters.add(world, spot.x, spot.y, spot.z, { camp: c.id, kind });
     if (m) {
       m.champion = true;
-      const grown = Math.min(1, 0.4 + 0.1 * this.level);
-      m.hearts = Math.max(3, Math.round(kindOf(kind).hearts * grown * (1 + 0.3 * (Math.min(8, Math.max(1, players)) - 1))));
-      m.max = m.hearts;
+      m.hearts = m.max = grownHearts(kind, this.level, players);
     }
     return m;
   }
@@ -1351,7 +1381,8 @@ export class AdventureSim {
     if (this.tale) this.tale.restore(this.tale.all.map((n) => n.id));
     this.king = noKing();
     const gone = [];
-    for (const m of [...monsters.list]) if (m.camp) gone.push(monsters.remove(m.id));
+    // (A Golden Mimic, of no camp, goes with them.)
+    for (const m of [...monsters.list]) if (m.camp || m.kind === GOLD_MIMIC) gone.push(monsters.remove(m.id));
     return gone;
   }
 

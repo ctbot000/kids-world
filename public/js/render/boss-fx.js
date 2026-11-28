@@ -315,6 +315,23 @@ export function thrownMesh(what) {
   } else if (what === 'lava') {
     g.add(mesh(ROCK, toon('#3b3438'), 0, 0, 0, 0.34));
     g.add(mesh(sphere(1, 10, 8), toon('#ff7a1a', { emissive: 1 }), 0, 0, 0, 0.3));
+  } else if (what === 'coin') {
+    // Fool's gold, out of a Golden Mimic: a big gold coin, spinning, a
+    // grumpy face stamped on it.
+    const gold = toon('#ffcc33', { emissive: 0.35 });
+    const rim = toon('#e0a21c', { emissive: 0.25 });
+    const dark = toon('#241d2b');
+    g.add(mesh(cylinder(0.3, 0.3, 0.07, 22), gold, 0, 0, 0).rotateX(Math.PI / 2));
+    g.add(mesh(torus(0.29, 0.03), rim, 0, 0, 0));
+    for (const side of [-1, 1]) {
+      g.add(mesh(sphere(1, 8, 6), dark, side * 0.09, 0.06, 0.04, 0.035, 0.045, 0.02));
+      g.add(mesh(sphere(1, 8, 6), dark, side * 0.09, 0.06, -0.04, 0.035, 0.045, 0.02));
+      const brow = mesh(sphere(1, 6, 4), rim, side * 0.09, 0.14, 0.04, 0.07, 0.018, 0.02);
+      brow.rotation.z = side * 0.5;
+      g.add(brow);
+    }
+    g.add(mesh(sphere(1, 8, 6), dark, 0, -0.09, 0.04, 0.1, 0.02, 0.02));
+    g.add(mesh(sphere(1, 8, 6), dark, 0, -0.09, -0.04, 0.1, 0.02, 0.02));
   } else {
     // A grumble bomb: round and purple, with a fuse and a spark.
     g.add(mesh(sphere(1, 16, 12), toon('#4b2f73'), 0, 0, 0, 0.34));
@@ -403,8 +420,10 @@ export class Thrown {
   // spores, a puff of smoke and sparks.
   burst([x, y, z]) {
     const fx = this.effects;
-    const colors = { coconut: ['#7a4a26', '#e9dcc0', '#ffffff'], pod: ['#e6f28a', '#c9e46a', '#f4f7c0'], snowball: ['#ffffff', '#dfeefc', '#bfe8ff'], gumdrop: ['#ff5aa5', '#ffd23f', '#5fd36a'], mud: ['#6b4a2b', '#4f3620', '#8a6a48'], lava: ['#ff7a1a', '#ffd84d', '#3b3438'], bomb: ['#ffd84d', '#ff8fc4', '#b18cff'], boulder: ['#8d929c', '#a2a7b0', '#6d727c'], bone: ['#f3ead2', '#d9ccab', '#ffffff'], venom: ['#a6e04a', '#d6ff5a', '#6f9440'], bolt: ['#ffffff', '#ffe14d', '#59c7ff'], star: ['#ffe14d', '#ffffff', '#ffb13b'], root: ['#6b4a2f', '#8a6a48', '#4f3620'], sandball: ['#e8c77a', '#cfa95a', '#fff1c4'], crystal: ['#b98cff', '#7fe8ff', '#ffffff'], pumpkin: ['#ff8a1f', '#ffe14d', '#4f7a2a'], gear: ['#9aa3ad', '#4a5260', '#ffd75a'], berry: ['#e3342b', '#ff8fa8', '#35a852'], acorn: ['#d9a35c', '#7a4a26', '#f6e3c0'], honey: ['#ffb21f', '#ffd93d', '#fff1b8'], banana: ['#ffd93d', '#fff1b8', '#5a3a1c'], ink: ['#1c2440', '#3a4a7a', '#0e1224'], ricecake: ['#fbf7ee', '#ffffff', '#5fa84a'], smudge: ['#8b9099', '#c9ced6', '#5d626c'] }[this.what] ?? ['#ffffff'];
+    const colors = { coconut: ['#7a4a26', '#e9dcc0', '#ffffff'], pod: ['#e6f28a', '#c9e46a', '#f4f7c0'], snowball: ['#ffffff', '#dfeefc', '#bfe8ff'], gumdrop: ['#ff5aa5', '#ffd23f', '#5fd36a'], mud: ['#6b4a2b', '#4f3620', '#8a6a48'], lava: ['#ff7a1a', '#ffd84d', '#3b3438'], bomb: ['#ffd84d', '#ff8fc4', '#b18cff'], boulder: ['#8d929c', '#a2a7b0', '#6d727c'], bone: ['#f3ead2', '#d9ccab', '#ffffff'], venom: ['#a6e04a', '#d6ff5a', '#6f9440'], bolt: ['#ffffff', '#ffe14d', '#59c7ff'], star: ['#ffe14d', '#ffffff', '#ffb13b'], root: ['#6b4a2f', '#8a6a48', '#4f3620'], sandball: ['#e8c77a', '#cfa95a', '#fff1c4'], crystal: ['#b98cff', '#7fe8ff', '#ffffff'], pumpkin: ['#ff8a1f', '#ffe14d', '#4f7a2a'], gear: ['#9aa3ad', '#4a5260', '#ffd75a'], berry: ['#e3342b', '#ff8fa8', '#35a852'], acorn: ['#d9a35c', '#7a4a26', '#f6e3c0'], honey: ['#ffb21f', '#ffd93d', '#fff1b8'], banana: ['#ffd93d', '#fff1b8', '#5a3a1c'], ink: ['#1c2440', '#3a4a7a', '#0e1224'], ricecake: ['#fbf7ee', '#ffffff', '#5fa84a'], smudge: ['#8b9099', '#c9ced6', '#5d626c'], coin: ['#ffcc33', '#fff3a0', '#e0a21c'] }[this.what] ?? ['#ffffff'];
     if (this.what === 'pod') fx.spores(x, y, z, 1.6);
+    // (Fool's gold, glinting as it goes to nothing.)
+    if (this.what === 'coin') fx.sparkles(x, y + 0.4, z, 10, ['#ffd84d', '#fff3a0', '#ffffff']);
     for (let i = 0; i < 14; i++) {
       const a = (i / 14) * Math.PI * 2;
       const s = 2 + Math.random() * 2.5;

@@ -307,6 +307,17 @@ const easeOutBack = (t) => {
   return 1 + (c + 1) * (t - 1) ** 3 + c * (t - 1) ** 2;
 };
 
+// A shut chest's parts apart, for something that only looks like one (a
+// Golden Mimic: gold-mimic-model.js), in the materials given: its box, its
+// lid on its hinge (turned about x to open it) and its padlock, each a group,
+// and its measures. Laid out as a chest is, its front to -z.
+export function chestPieces(materials, gold = true) {
+  const s = chestShapes(gold);
+  const lid = meshes(s.lid, materials);
+  lid.position.set(0, H, R);
+  return { box: meshes(s.body, materials), lid, lock: meshes(s.lock, materials), size: { w: W, d: D, h: H, r: R } };
+}
+
 // A whole chest in the materials given (chestMaterials): kind is its
 // block's `real` ('treasure-chest', 'gold-chest' or either's '-open'), and
 // cell where it stands, [x, y, z, block], to play its opening by.

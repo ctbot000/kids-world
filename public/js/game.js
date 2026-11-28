@@ -49,7 +49,7 @@ import { CRIT_TIMES } from './shared/crits.js';
 import { NOD_BOSSES } from './shared/nod/bosses.js';
 import { duelStory } from './shared/nod/duel.js';
 import { isNodKey } from './shared/nod/worlds/index.js';
-import { BEASTS, isBeast } from './shared/beasts.js';
+import { BEASTS, GOLD_MIMIC, isBeast, isMimic } from './shared/beasts.js';
 import { isBoss, planOf } from './shared/bosses.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
 import { XP_FOR } from './shared/levels.js';
@@ -305,7 +305,7 @@ const FLING_SPIN = 2.6;
 // higher than the last, and from the third on says how many.
 const CHAIN_MS = 1500;
 // What a blow sounds on, for those not made of jelly (sound.js whack).
-const HIT_ON = { knight: 'metal', golem: 'stone', moltok: 'stone', rattle: 'stone', stinger: 'metal', mimic: 'metal', oak: 'stone' };
+const HIT_ON = { knight: 'metal', golem: 'stone', moltok: 'stone', rattle: 'stone', stinger: 'metal', mimic: 'metal', goldmimic: 'metal', oak: 'stone' };
 // How much more than HIT_MS apart bops are sent.
 const BOP_SPACING = 120;
 // How high round a kid's middle a hula hoop goes, above their feet (a
@@ -335,6 +335,7 @@ const TOUGH_TOLD = {
   wolf: { icon: '🐺', text: 'A Shadow Wolf! Wolves hunt in twos, nearly as quick as you run. Get out of the red ring when one crouches to pounce — and hurt, it howls for another!' },
   hawk: { icon: '🦅', text: 'A Thunderhawk! It calls lightning down on the red rings, so run out of them. It is out of reach up there: bop it when it swoops down at you.' },
   mimic: { icon: '🎁', text: 'A Mimic! That was no treasure chest! Bop it or jump on it: it is full of coins.' },
+  goldmimic: { icon: '👑', text: 'A Golden Mimic! That golden chest was a fake! Bop it or jump on it, and run out of the red rings where it spits its fool’s gold. It is stuffed with treasure — and your golden key is still yours.' },
   oak: { icon: '🌳', text: 'A Grumble Oak! Very slow, but its roots burst up out of the ground on the red rings. It hates fire: a Lava Blade or a dragon’s breath does twice the harm.' },
   wizard: { icon: '🧙', text: 'A Grumble Wizard! Run out of the red rings where his stars fall. Bop him and he blinks away, so keep after him — or bop him from afar.' },
   hydra: { icon: '🐍', text: 'A Swamp Hydra, with three heads! When they reach forward together, get out of the way of their venom. Nobody can jump that high: bop it!' },
@@ -374,7 +375,7 @@ const TOUGH_TOLD = {
 };
 // What each thing a boss throws looks like coming down (see bossFx), and
 // the sound of it.
-const THROWN_SOUND = { coconut: 'whack', pod: 'blow', snowball: 'splat', gumdrop: 'boing', mud: 'splash', lava: 'boom', bomb: 'boom', boulder: 'boom', bone: 'whack', venom: 'splat', bolt: 'zap', star: 'blink', root: 'creak', sandball: 'splat', crystal: 'ding', pumpkin: 'whack', gear: 'clack', berry: 'splat', acorn: 'whack', honey: 'splat', banana: 'boing', ink: 'splat', ricecake: 'boing', smudge: 'splat', nut: 'whack', rock: 'boom', stick: 'creak', pinecone: 'whack', fog: 'blow' };
+const THROWN_SOUND = { coconut: 'whack', pod: 'blow', snowball: 'splat', gumdrop: 'boing', mud: 'splash', lava: 'boom', bomb: 'boom', boulder: 'boom', bone: 'whack', venom: 'splat', bolt: 'zap', star: 'blink', root: 'creak', sandball: 'splat', crystal: 'ding', pumpkin: 'whack', gear: 'clack', berry: 'splat', acorn: 'whack', honey: 'splat', banana: 'boing', ink: 'splat', ricecake: 'boing', smudge: 'splat', nut: 'whack', rock: 'boom', stick: 'creak', pinecone: 'whack', fog: 'blow', coin: 'tink' };
 // What a Swamp Hydra breathes (and anything else that is no fire).
 const VENOM_COLORS = ['#d6ff5a', '#a6e04a', '#7fb83a', '#c9f06a', '#5d8f2e'];
 // Big Sprocket's steam.
@@ -383,7 +384,7 @@ const STEAM_COLORS = ['#ffffff', '#eef2f6', '#d8e0e8', '#f6f9fc', '#c8d2dc'];
 // about (see shared/volcano.js).
 const LAVA_COLORS = ['#ff7a26', '#ffb13d', '#ff5a1f', '#ffd23f', '#e8481c'];
 // What each beast says as it comes at you.
-const BEAST_SOUND = { rattle: 'rattle', stinger: 'hiss', wolf: 'growl', hawk: 'caw', mimic: 'chomp', oak: 'bellow', wizard: 'chant', hydra: 'hiss', cyclops: 'bellow', rex: 'roar' };
+const BEAST_SOUND = { rattle: 'rattle', stinger: 'hiss', wolf: 'growl', hawk: 'caw', mimic: 'chomp', goldmimic: 'chomp', oak: 'bellow', wizard: 'chant', hydra: 'hiss', cyclops: 'bellow', rex: 'roar' };
 // How long after the isle's last stage is won its ending film starts (ui.js).
 const ENDING_AFTER_MS = 3500;
 // A stage won: everyone's results come up this long after (once the news
@@ -939,6 +940,9 @@ export class Game extends EventTarget {
         break;
       case 'chest':
         this.chestNews(msg);
+        break;
+      case 'mimic':
+        this.mimicNews(msg);
         break;
       // What someone here has come by of soul weapons (souls.js).
       case 'soul':
@@ -1781,8 +1785,9 @@ export class Game extends EventTarget {
         this.monsters.set(m.id, entry);
         if (this.near(m.x, m.y, m.z, 40)) this.renderer.effects.dust(m.x, m.y, m.z);
       }
-      // A Mimic is nothing but a treasure chest until it opens up.
-      const hidden = m.kind === 'mimic' && m.state === 'idle' && m.hearts === m.max;
+      // A Mimic is nothing but a treasure chest until it opens up (and a
+      // Golden Mimic a golden one).
+      const hidden = isMimic(m.kind) && m.state === 'idle' && m.hearts === m.max;
       // The first tough one near you this time: what it is.
       const told = TOUGH_TOLD[m.kind];
       if (told && !hidden && !this.toldKinds?.has(m.kind) && this.near(m.x, m.y, m.z, 30)) {
@@ -2049,7 +2054,7 @@ export class Game extends EventTarget {
       if (beast) {
         this.profile.count('beasts');
         if (!loot) this.profile.earn(beast.coins);
-        if (entry.kind === 'mimic' && near) fx.sparkles(p.x, p.y + 0.8, p.z, 40, ['#ffd84d', '#ffcc33', '#ffffff']);
+        if (isMimic(entry.kind) && near) fx.sparkles(p.x, p.y + 0.8, p.z, entry.kind === GOLD_MIMIC ? 70 : 40, ['#ffd84d', '#ffcc33', '#ffffff']);
       }
       if (first && !boss) this.emit('toast', { icon: '👾', text: 'Pop! Jump on a monster to pop it at once, or walk up to it and bop it until it pops.' });
       // The first time something drops for you: what to do with it.
@@ -4038,6 +4043,27 @@ export class Game extends EventTarget {
     // The treasure taken out of it, flying to whoever opened it.
     setTimeout(() => this.treasureTaken(x + 0.5, y, z + 0.5, msg.by, gold), CHEST_TAKE_MS);
     if (msg.by === this.pid) this.chestWon(gold, { x: x + 0.5, y: y + 1, z: z + 0.5 });
+  }
+
+  // A fake golden chest found out (shared/treasure.js), as the island tells
+  // of it: a Golden Mimic where it stood (already among the monsters), its
+  // lid bursting up in a spray of gold for everyone near; and the chest's
+  // window, if it was up for that chest, gone — there is no chest there now.
+  mimicNews(msg) {
+    const { x, y, z } = msg;
+    if (![x, y, z].every(Number.isInteger)) return;
+    const at = this.chestAt ?? this.chestTarget;
+    if (at && at.nod === undefined && at.book === undefined && at.x === x && at.y === y && at.z === z) {
+      this.chestTarget = null;
+      this.chestAt = null;
+      this.emit('chest-gone');
+    }
+    if (!this.near(x + 0.5, y, z + 0.5, 40)) return;
+    const fx = this.renderer.effects;
+    this.sound.play('gotcha');
+    fx.sparkles(x + 0.5, y + 0.7, z + 0.5, 50, ['#ffd84d', '#ffcc33', '#fff3a0', '#ffffff']);
+    fx.dust(x + 0.5, y, z + 0.5);
+    if (msg.by === this.pid) this.renderer.shake(0.25);
   }
 
   // A chest opened by you: your key is spent, and the treasure is yours.

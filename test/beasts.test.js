@@ -4,12 +4,14 @@
 // a Thunderhawk stays out of reach and calls lightning; a Mimic is a chest until
 // you are near; a Grumble Oak bursts its roots out of the ground and hates fire; a
 // Grumble Wizard rains stars, blinks away and calls blobs; a Swamp Hydra breathes
-// venom; a Cyclops throws boulders; Rumble Rex charges, stomps and roars.
+// venom; a Cyclops throws boulders; Rumble Rex charges, stomps and roars. And
+// the Golden Mimic, only ever a fake golden chest found out (treasure.test.js),
+// which is the golden chest to the hair until then.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as THREE from '../public/vendor/three.module.js';
 import { AdventureSim, MONSTER_BOOK, monsterStats, toughGuards } from '../public/js/shared/adventure.js';
-import { BEASTS, beastsOfTier, isBeast, SCATTER, weakTo } from '../public/js/shared/beasts.js';
+import { BEASTS, beastsOfTier, isBeast, isMimic, SCATTER, weakTo } from '../public/js/shared/beasts.js';
 import * as B from '../public/js/shared/blocks.js';
 import { LEAK, waveOf, WAVES } from '../public/js/shared/defense.js';
 import { MONSTER_FIGURES } from '../public/js/shared/gashapon.js';
@@ -20,8 +22,11 @@ import { ARM_REACH, BOP_SLACK, bodyOf, BUMP_HP, HIT_MS, isHeavy, KINDS, kindOf, 
 import { MOVE } from '../public/js/shared/physics.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { STAT_KEYS, STICKERS } from '../public/js/shared/stickers.js';
+import { FRONT_YAW } from '../public/js/shared/treasure.js';
 import { World } from '../public/js/shared/world.js';
 import { makeBeast } from '../public/js/render/beasts.js';
+import { chestMaterials, chestModel } from '../public/js/render/chest-model.js';
+import { FACING } from '../public/js/render/terrain.js';
 import { shownBox } from '../public/js/render/monster-figures.js';
 
 const KINDS_NEW = ['rattle', 'stinger', 'wolf', 'hawk', 'mimic', 'oak', 'wizard', 'hydra', 'cyclops', 'rex'];
@@ -80,7 +85,7 @@ test('the beasts go on the end of the kinds and states, each tougher than most, 
   assert.deepEqual(MONSTER_KINDS.slice(22, 22 + KINDS_NEW.length), KINDS_NEW, 'new kinds go on the end: the wire sends the index');
   assert.equal(MONSTER_KINDS.indexOf('moltok'), 21, 'the old ones where they were');
   assert.deepEqual(MONSTER_STATES.slice(13, 16), ['heap', 'howl', 'blink'], 'where they were (newer states after them)');
-  assert.deepEqual(Object.keys(BEASTS).sort(), [...KINDS_NEW, 'boar'].sort(), 'and the Wild Isle’s own boar');
+  assert.deepEqual(Object.keys(BEASTS).sort(), [...KINDS_NEW, 'boar', 'goldmimic'].sort(), 'and the Wild Isle’s own boar, and the Golden Mimic out of a fake golden chest');
   for (const kind of KINDS_NEW) {
     const k = kindOf(kind);
     assert.equal(k, BEASTS[kind], 'monsters.js takes it in');
@@ -330,6 +335,66 @@ test('a Mimic sits shut and still until someone comes near, and then it bites; l
   room.receive(a, { t: 'bop', id: m.id });
   assert.equal(m.target, a.pid);
   assert.ok(BEASTS.mimic.coins >= BEASTS.rex.coins, 'and it pays');
+});
+
+test('a Golden Mimic goes on the end of the kinds, is in the collection, and never comes out by itself, only out of a fake golden chest', () => {
+  assert.equal(MONSTER_KINDS.indexOf('goldmimic'), MONSTER_KINDS.indexOf('bluster') + 1, 'new kinds go on the end: the wire sends the index');
+  const k = kindOf('goldmimic');
+  assert.equal(k, BEASTS.goldmimic, 'monsters.js takes it in');
+  assert.ok(isBeast('goldmimic') && isMimic('goldmimic') && isMimic('mimic') && !isMimic('rex'));
+  assert.ok(k.shut && k.fake, 'shut up as a chest, and only ever a fake one');
+  assert.ok(k.cross.run < MOVE.run && k.move.run < MOVE.run, 'never as quick as you run');
+  assert.ok(k.hearts > BEASTS.mimic.hearts && k.coins > BEASTS.mimic.coins, 'tougher than a Mimic, and it pays more');
+  assert.equal(bodyOf('goldmimic'), k.body);
+  for (const mv of k.moves) assert.ok(mv.windup >= 500 && mv.from >= 0 && mv.from <= 2, `its ${mv.move} shows before it comes`);
+  assert.ok(![...beastsOfTier(1), ...beastsOfTier(2)].includes('goldmimic'));
+  const sim = new MonsterSim(3);
+  for (let i = 0; i < 4000; i++) assert.notEqual(sim.pickKind(i % 2 === 0, ['sunny', 'volcano', 'desert'][i % 3]), 'goldmimic', 'never out by itself');
+  const book = MONSTER_BOOK.find((b) => b.kind === 'goldmimic');
+  assert.ok(book?.name === 'Golden Mimic' && book.icon === k.icon);
+  assert.equal(monsterStats('goldmimic').hp, k.hearts);
+  assert.ok(STAT_KEYS.includes('seengoldmimic') && STAT_KEYS.includes('popgoldmimic'));
+});
+
+test('a Golden Mimic’s model, shut, is the golden chest it was to the hair, facing the way it did; awake, it opens up, grows and stands on its feet', () => {
+  const run = (m, state, secs = 1) => {
+    for (let t = 0; t < secs; t += 0.05) m.update(0.05, state, 0, false);
+  };
+  const near = (a, b, what) => {
+    for (const k of ['min', 'max']) for (const c of ['x', 'y', 'z']) assert.ok(Math.abs(a[k][c] - b[k][c]) < 1e-6, `${what}: ${k}.${c} ${a[k][c]} against ${b[k][c]}`);
+  };
+  const materials = chestMaterials();
+  // As render/terrain.js stands a golden chest's block in its cell, and as a
+  // page stands the monster there (game.js updateMonsters), each way round.
+  for (let front = 0; front < 4; front++) {
+    const chest = chestModel(materials, 'gold-chest');
+    chest.position.set(20.5, 11, 30.5);
+    chest.rotation.y = FACING[front];
+    const m = makeBeast('goldmimic', 'sunny');
+    m.group.position.set(20.5, 11, 30.5);
+    m.group.rotation.y = FRONT_YAW[front];
+    run(m, 'idle', 0.5);
+    near(shownBox(m.group), shownBox(chest), `facing ${front}`);
+  }
+  const m = makeBeast('goldmimic', 'sunny');
+  m.time = 0;
+  run(m, 'idle', 0.5);
+  const shut = shownBox(m.group);
+  run(m, 'chase');
+  assert.ok(m.lid.rotation.x > 0.3, 'its lid up');
+  assert.ok(m.feet[0].visible && m.tongue.visible && !m.lock.visible, 'on its feet, its tongue out, its padlock gone');
+  assert.ok(Math.abs(m.body.scale.y - 1.3) < 0.05, `grown: ${m.body.scale.y}`);
+  assert.ok(shownBox(m.group).max.y > shut.max.y * 1.5);
+  run(m, 'hurl', 0.3);
+  assert.ok(m.spit.visible, 'fool’s gold in its mouth');
+  run(m, 'giggle');
+  assert.ok(m.lid.rotation.x > 0.9, 'wide open');
+  // Lost, it is a golden chest again, no bigger (but now and then it peeks).
+  m.time = 0;
+  run(m, 'idle', 2);
+  assert.equal(m.lift, 0);
+  assert.equal(m.body.scale.y, 1);
+  assert.ok(m.lock.visible && !m.feet[0].visible);
 });
 
 test('a Grumble Oak drives its roots up under you, walks slower than anything, and fire does it twice the harm', () => {
@@ -592,7 +657,7 @@ test('from the fourth wave of a tower defense island beasts march among the blob
 test('each one’s model stands on the ground facing +z, goes through every state with no trouble, and glows at night', () => {
   const v = new THREE.Vector3();
   for (const theme of ['sunny', 'snowy', 'candy', 'volcano', 'flat', undefined]) {
-    for (const kind of KINDS_NEW) {
+    for (const kind of [...KINDS_NEW, 'goldmimic']) {
       const m = makeBeast(kind, theme);
       assert.ok(m.group && m.body && m.shadow, kind);
       assert.ok(m.height >= bodyOf(kind).height * 0.9, `${kind} is as tall as it is`);
@@ -618,7 +683,7 @@ test('each one’s model stands on the ground facing +z, goes through every stat
     }
   }
   // Standing still, each stands on the ground, and most of it above it.
-  for (const kind of KINDS_NEW) {
+  for (const kind of [...KINDS_NEW, 'goldmimic']) {
     const m = makeBeast(kind, 'sunny');
     m.update(0, 'idle', 0, false);
     m.group.updateMatrixWorld(true);

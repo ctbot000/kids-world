@@ -15,6 +15,11 @@
 // - Wild Boar 🐗, on the Wild Isle only (wild): it lowers its head and charges.
 // - Mimic 🎁: a treasure chest, shut and still, until someone comes near. Then
 //   it bites. It is full of coins.
+// - Golden Mimic 👑: a golden chest that is no such thing, among an island's
+//   chests on Adventure Isle and looking just like the real one (treasure.js),
+//   until someone comes up beside it. Then it bites and leaps, and cross, it
+//   spits fool's gold. It never comes out anywhere else (fake): only out of a
+//   chest. It is stuffed with treasure, a diamond always (loot.js).
 // - Grumble Oak 🌳, a walking tree, very slow: its roots burst up out of the
 //   ground under you, and it hates fire most of all.
 // - Grumble Wizard 🧙: he rains falling stars round you, blinks away when he is
@@ -45,7 +50,8 @@
 // them, if not as near as for the others (monsters.js NOTICE). march: how fast
 // along a tower defense road, marchHearts how many blobs' hearts it has there.
 // weak: what does it double harm (shop.js keys, and 'fire' for a dragon's breath).
-// coins: what popping one pays.
+// coins: what popping one pays. wild: the Wild Isle's own; fake: only ever a
+// fake golden chest's (treasure.js): neither ever comes out by itself.
 //
 // Their tables are in the same terms as monsters.js KINDS, which takes them in.
 export const SCATTER = 4;
@@ -179,6 +185,31 @@ export const BEASTS = {
     gap: [3200, 2600, 2000],
     moves: [{ move: 'leap', from: 0, windup: 500, reach: 2.4, jump: 9, near: 2.5, far: 8, bumps: 2, daze: 900 }],
   },
+  goldmimic: {
+    icon: '👑',
+    name: 'Golden Mimic',
+    tier: 1,
+    fake: true,
+    // As big as a golden chest, shut (render/gold-mimic-model.js); up on its
+    // feet with its lid open, bigger.
+    body: { radius: 0.5, height: 0.8 },
+    hearts: 20,
+    bump: 2,
+    land: 3,
+    stagger: 0.6,
+    shut: true,
+    notice: 4.5,
+    move: { walk: 2, run: 4.8, jump: 8 },
+    cross: { walk: 2, run: 6.4, jump: 8 },
+    march: 2.5,
+    marchHearts: 3,
+    coins: 30,
+    gap: [3000, 2500, 2000],
+    moves: [
+      { move: 'leap', from: 0, windup: 500, reach: 2.4, jump: 9, near: 2.5, far: 8, bumps: 2, daze: 900 },
+      { move: 'hurl', from: 1, windup: 800, what: 'coin', count: 2, scatter: 2, reach: 1.8, ms: 1000, far: 14, bumps: 1 },
+    ],
+  },
   oak: {
     icon: '🌳',
     name: 'Grumble Oak',
@@ -294,8 +325,13 @@ export const BEASTS = {
 };
 
 export const isBeast = (kind) => Object.hasOwn(BEASTS, kind);
-// (The Wild Isle's own, wild, never come out anywhere else.)
-export const beastsOfTier = (tier) => Object.keys(BEASTS).filter((kind) => BEASTS[kind].tier === tier && !BEASTS[kind].wild);
+// (The Wild Isle's own, wild, never come out anywhere else, nor a Golden
+// Mimic anywhere but out of a fake golden chest.)
+export const beastsOfTier = (tier) => Object.keys(BEASTS).filter((kind) => BEASTS[kind].tier === tier && !BEASTS[kind].wild && !BEASTS[kind].fake);
+// The Golden Mimic's kind, and whether a kind is shut up as a treasure chest
+// until it is found out (a Mimic, or a Golden Mimic).
+export const GOLD_MIMIC = 'goldmimic';
+export const isMimic = (kind) => kind === 'mimic' || kind === GOLD_MIMIC;
 // How much harder than usual a blow of this (a shop.js key, or 'fire') lands on
 // one of these.
 export const weakTo = (kind, what) => (what && BEASTS[kind]?.weak?.includes(what) ? 2 : 1);
